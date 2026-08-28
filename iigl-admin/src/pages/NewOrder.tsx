@@ -21,7 +21,7 @@ import RemoveIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Notice, PageHead, Panel } from '../components/ui';
+import { Notice, Panel } from '../components/ui';
 import type { Category } from '../lib/api';
 
 interface Item {
@@ -123,11 +123,6 @@ export default function NewOrder() {
 
   return (
     <>
-      <PageHead
-        title="Collect a new order"
-        subtitle="What the customer is leaving, and how to reach them when it is ready."
-      />
-
       {err && <Notice kind="error">{err}</Notice>}
       {found && <Notice kind="ok">{found}</Notice>}
 

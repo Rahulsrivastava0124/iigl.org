@@ -16,7 +16,7 @@ import AddIcon from '@mui/icons-material/AddOutlined';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Dialog, IconAction, Notice, PageHead, Panel, RowActions, TableFrame, money } from '../components/ui';
+import { Dialog, IconAction, Notice, Panel, RowActions, TableFrame, money } from '../components/ui';
 import type { Category, Lab, Price } from '../lib/api';
 import EditIcon from '@mui/icons-material/EditOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
@@ -100,41 +100,38 @@ export default function Pricing() {
 
   return (
     <>
-      <PageHead
-        title="Pricing"
-        subtitle="A certificate is priced by the band its carat weight falls into. A laboratory band wins over the standard one."
-        action={
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() =>
-              setForm({ ...BLANK, open: true, category_id: String(cats[0]?.id ?? '') })
-            }
-          >
-            Add band
-          </Button>
-        }
-      />
-
       {msg && <Notice kind="ok">{msg}</Notice>}
       {err && <Notice kind="error">{err}</Notice>}
 
       <Panel
+        title="Pricing"
         actions={
-          <TextField
-            select
-            label="Rates for"
-            value={scope}
-            onChange={(e) => setScope(e.target.value)}
-            sx={{ minWidth: 250 }}
-          >
-            <MenuItem value="standard">Standard (all laboratories)</MenuItem>
-            {(labs.data?.data ?? []).map((l) => (
-              <MenuItem key={l.id} value={l.id}>
-                {l.fullname}
-              </MenuItem>
-            ))}
-          </TextField>
+          <>
+            <TextField
+              select
+              label="Rates for"
+              value={scope}
+              onChange={(e) => setScope(e.target.value)}
+              sx={{ minWidth: 0, flex: '1 1 250px', maxWidth: 250 }}
+            >
+              <MenuItem value="standard">Standard (all laboratories)</MenuItem>
+              {(labs.data?.data ?? []).map((l) => (
+                <MenuItem key={l.id} value={l.id}>
+                  {l.fullname}
+                </MenuItem>
+              ))}
+            </TextField>
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() =>
+                setForm({ ...BLANK, open: true, category_id: String(cats[0]?.id ?? '') })
+              }
+            >
+              Add band
+            </Button>
+          </>
         }
       >
         <TableFrame loading={prices.loading} error={prices.error} empty={rows.length === 0}>

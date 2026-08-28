@@ -20,8 +20,8 @@ import AddIcon from '@mui/icons-material/AddOutlined';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Dialog, IconAction, Notice, PageHead, Panel, RowActions, TableFrame, YesNo } from '../components/ui';
-import type { Attribute, Subcategory } from '../lib/api';
+import { Dialog, IconAction, Notice, Panel, RowActions, TableFrame, YesNo } from '../components/ui';
+import type { Attribute, Category, Subcategory } from '../lib/api';
 import EditIcon from '@mui/icons-material/EditOutlined';
 import ValuesIcon from '@mui/icons-material/ListAltOutlined';
 import RetireIcon from '@mui/icons-material/Inventory2Outlined';
@@ -44,9 +44,20 @@ const BLANK = {
 };
 
 export default function Attributes() {
+  const categories = useFetch<{ data: Category[] }>('/catalog/categories');
+  const cats = categories.data?.data ?? [];
+  const [catId, setCatId] = useState<string>('');
+
+  // Every subcategory is fetched once and narrowed here rather than refetched
+  // per category: the list is short, and filtering in place keeps the two
+  // selects in step without a request between picking a category and seeing
+  // the subcategories under it.
   const subcategories = useFetch<{ data: Subcategory[] }>('/catalog/subcategories');
-  const subs = subcategories.data?.data ?? [];
+  const allSubs = subcategories.data?.data ?? [];
   const [subId, setSubId] = useState<string>('');
+
+  const chosenCat = catId || (cats[0] ? String(cats[0].id) : '');
+  const subs = allSubs.filter((s) => String(s.category_id) === chosenCat);
 
   const chosen = subId || (subs[0] ? String(subs[0].id) : '');
   const attributes = useFetch<{ data: Attribute[] }>(
@@ -136,6 +147,52 @@ export default function Attributes() {
     }
   };
 
+  /**
+   * Category narrows the subcategory list, and the subcategory is what the
+   * attributes hang off. Changing either clears the chosen subcategory or
+   * attribute below it, so the page cannot go on showing something from the
+   * branch just left.
+   */
+  const filters = (
+    <>
+      <TextField
+        select
+        label="Category"
+        value={chosenCat}
+        onChange={(e) => {
+          setCatId(e.target.value);
+          setSubId('');
+          setValuesFor(null);
+        }}
+        sx={{ minWidth: 0, flex: '1 1 150px' }}
+        disabled={cats.length === 0}
+      >
+        {cats.map((c) => (
+          <MenuItem key={c.id} value={c.id}>
+            {c.name}
+          </MenuItem>
+        ))}
+      </TextField>
+      <TextField
+        select
+        label="Subcategory"
+        value={chosen}
+        onChange={(e) => {
+          setSubId(e.target.value);
+          setValuesFor(null);
+        }}
+        sx={{ minWidth: 0, flex: '1 1 150px' }}
+        disabled={subs.length === 0}
+      >
+        {subs.map((s) => (
+          <MenuItem key={s.id} value={s.id}>
+            {s.name}
+          </MenuItem>
+        ))}
+      </TextField>
+    </>
+  );
+
   const check = (key: keyof typeof BLANK, label: string) => (
     <FormControlLabel
       control={
@@ -152,50 +209,15 @@ export default function Attributes() {
 
   return (
     <>
-      <PageHead
-        title={valuesMode ? 'Attribute values' : 'Attributes'}
-        subtitle={
-          valuesMode
-            ? 'The choices a gemologist picks from when filling in an attribute.'
-            : 'The fields that make up a certificate, and the order they print in.'
-        }
-        action={
-          !valuesMode && (
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              disabled={!chosen}
-              onClick={() => setForm({ ...BLANK, open: true })}
-            >
-              Add attribute
-            </Button>
-          )
-        }
-      />
-
       {msg && <Notice kind="ok">{msg}</Notice>}
       {err && <Notice kind="error">{err}</Notice>}
 
       {valuesMode ? (
         <Panel
+          title="Attribute values"
           actions={
-            <Stack direction="row" spacing={1}>
-              <TextField
-                select
-                label="Subcategory"
-                value={chosen}
-                onChange={(e) => {
-                  setSubId(e.target.value);
-                  setValuesFor(null);
-                }}
-                sx={{ minWidth: 200 }}
-              >
-                {subs.map((s) => (
-                  <MenuItem key={s.id} value={s.id}>
-                    {s.name}
-                  </MenuItem>
-                ))}
-              </TextField>
+            <Stack direction="row" spacing={1} sx={{ minWidth: 0 }}>
+              {filters}
               <TextField
                 select
                 label="Attribute"
@@ -203,7 +225,7 @@ export default function Attributes() {
                 onChange={(e) =>
                   setValuesFor(rows.find((a) => String(a.id) === e.target.value) ?? null)
                 }
-                sx={{ minWidth: 200 }}
+                sx={{ minWidth: 0, flex: '1 1 150px' }}
                 disabled={rows.length === 0}
               >
                 {rows.map((a) => (
@@ -259,20 +281,20 @@ export default function Attributes() {
         </Panel>
       ) : (
       <Panel
+        title="Attributes"
         actions={
-          <TextField
-            select
-            label="Subcategory"
-            value={chosen}
-            onChange={(e) => setSubId(e.target.value)}
-            sx={{ minWidth: 220 }}
-          >
-            {subs.map((s) => (
-              <MenuItem key={s.id} value={s.id}>
-                {s.name}
-              </MenuItem>
-            ))}
-          </TextField>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+            {filters}
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<AddIcon />}
+              disabled={!chosen}
+              onClick={() => setForm({ ...BLANK, open: true })}
+            >
+              Add attribute
+            </Button>
+          </Stack>
         }
       >
         <TableFrame loading={attributes.loading} error={attributes.error} empty={rows.length === 0}>

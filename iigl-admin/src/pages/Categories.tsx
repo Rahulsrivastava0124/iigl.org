@@ -15,7 +15,7 @@ import AddIcon from '@mui/icons-material/AddOutlined';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Dialog, IconAction, Notice, PageHead, Panel, RowActions, TableFrame } from '../components/ui';
+import { Dialog, IconAction, Notice, Panel, RowActions, TableFrame } from '../components/ui';
 import type { Category, Subcategory } from '../lib/api';
 import EditIcon from '@mui/icons-material/EditOutlined';
 
@@ -99,15 +99,6 @@ export default function Categories() {
 
   return (
     <>
-      <PageHead
-        title={showSubs ? 'Subcategories' : 'Categories'}
-        subtitle={
-          showSubs
-            ? 'The divisions within a category. A certificate is built from a subcategory.'
-            : 'What the laboratory tests, and how each item is described.'
-        }
-      />
-
       {msg && <Notice kind="ok">{msg}</Notice>}
       {err && <Notice kind="error">{err}</Notice>}
 
@@ -162,6 +153,7 @@ export default function Categories() {
 
       {showSubs && (
       <Panel
+        title="Subcategories"
         actions={
           <Button
             size="small"

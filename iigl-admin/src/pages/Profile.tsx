@@ -3,7 +3,7 @@ import { Button, Grid, Stack, TextField, Typography } from '@mui/material';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import { Notice, PageHead, Panel } from '../components/ui';
+import { Notice, Panel } from '../components/ui';
 import FileField from '../components/FileField';
 import { ROLE_NAMES } from '../lib/portal';
 
@@ -119,22 +119,20 @@ export default function Profile() {
 
   return (
     <>
-      <PageHead
-        title="Your profile"
-        subtitle={
-          a
-            ? `${ROLE_NAMES[a.role_id] ?? 'Account'} · ${a.mobile}${a.empid ? ` · ${a.empid}` : ''}`
-            : 'Loading…'
-        }
-      />
-
       {msg && <Notice kind="ok">{msg}</Notice>}
       {err && <Notice kind="error">{err}</Notice>}
 
       <Panel
         title="Details"
+        // Which account this is: the breadcrumb says "Your profile" but not
+        // whose role or number, and that is the part worth having on screen.
+        count={
+          a
+            ? `${ROLE_NAMES[a.role_id] ?? 'Account'} · ${a.mobile}${a.empid ? ` · ${a.empid}` : ''}`
+            : 'Loading…'
+        }
         actions={
-          <Button variant="contained" disabled={busy || !a} onClick={save}>
+          <Button size="small" variant="contained" disabled={busy || !a} onClick={save}>
             {busy ? 'Saving…' : 'Save'}
           </Button>
         }

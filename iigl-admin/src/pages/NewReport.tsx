@@ -18,7 +18,7 @@ import {
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Notice, PageHead, Panel, StateChip, TableFrame, remainingState } from '../components/ui';
+import { Notice, Panel, StateChip, TableFrame, remainingState } from '../components/ui';
 import FileField from '../components/FileField';
 import type { Attribute, Order, Paged, Subcategory } from '../lib/api';
 
@@ -139,21 +139,24 @@ export default function NewReport() {
 
   return (
     <>
-      <PageHead
-        title="Issue a certificate"
-        subtitle="A certificate belongs to an order item, so the order comes first."
-        action={
-          <Button onClick={() => navigate('/reports')}>Back to certificates</Button>
-        }
-      />
-
-      <Stepper activeStep={step} sx={{ mb: 3, maxWidth: 620 }}>
-        {STEPS.map((s) => (
-          <Step key={s}>
-            <StepLabel>{s}</StepLabel>
-          </Step>
-        ))}
-      </Stepper>
+      {/* The stepper carries the way out now that the page has no heading: it
+          is the one row present at every step. */}
+      <Stack
+        direction="row"
+        spacing={2}
+        sx={{ mb: 3, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}
+      >
+        <Stepper activeStep={step} sx={{ flex: 1, minWidth: 320, maxWidth: 620 }}>
+          {STEPS.map((s) => (
+            <Step key={s}>
+              <StepLabel>{s}</StepLabel>
+            </Step>
+          ))}
+        </Stepper>
+        <Button size="small" onClick={() => navigate('/reports')}>
+          Back to certificates
+        </Button>
+      </Stack>
 
       {done && <Notice kind="ok">{done}</Notice>}
       {err && <Notice kind="error">{err}</Notice>}

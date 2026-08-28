@@ -16,7 +16,7 @@ import { useFetch } from '../lib/useFetch';
 import { usePermissions } from '../lib/permissions';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import { Dialog, IconAction, Notice, PageHead, Pager, Panel, RowActions, TableFrame, YesNo } from '../components/ui';
+import { Dialog, IconAction, Notice, Pager, Panel, RowActions, TableFrame, YesNo } from '../components/ui';
 import type { Lab, Paged } from '../lib/api';
 import { isAdmin } from '../lib/portal';
 import EditIcon from '@mui/icons-material/EditOutlined';
@@ -153,22 +153,25 @@ export default function Staff() {
 
   return (
     <>
-      <PageHead
+      {msg && <Notice kind="ok">{msg}</Notice>}
+      {err && <Notice kind="error">{err}</Notice>}
+
+      <Panel
         title="Staff"
-        subtitle={data ? `${data.meta.total.toLocaleString()} currently working` : 'Loading…'}
-        action={
+        count={data ? `${data.meta.total.toLocaleString()} currently working` : 'Loading…'}
+        actions={
           mayAdd && (
-            <Button variant="contained" startIcon={<AddIcon />} onClick={() => setAdding(true)}>
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setAdding(true)}
+            >
               Add account
             </Button>
           )
         }
-      />
-
-      {msg && <Notice kind="ok">{msg}</Notice>}
-      {err && <Notice kind="error">{err}</Notice>}
-
-      <Panel>
+      >
         <TableFrame loading={loading} error={error} empty={rows.length === 0}>
           <Table size="small" stickyHeader>
             <TableHead>

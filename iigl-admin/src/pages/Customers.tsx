@@ -10,7 +10,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useFetch } from '../lib/useFetch';
-import { PageHead, Pager, Panel, TableFrame } from '../components/ui';
+import { Pager, Panel, TableFrame } from '../components/ui';
 import type { Paged } from '../lib/api';
 
 type Tab = 'registered' | 'unregistered' | 'verifiers';
@@ -83,13 +83,6 @@ export default function Customers() {
 
   return (
     <>
-      <PageHead
-        title="Customers"
-        subtitle={
-          source.data ? `${source.data.meta.total.toLocaleString()} people` : current.note
-        }
-      />
-
       <Tabs
         value={current.id}
         onChange={(_, v) => setTab(v)}
@@ -100,7 +93,7 @@ export default function Customers() {
         ))}
       </Tabs>
 
-      <Panel>
+      <Panel title="Customers" count={source.data ? `${source.data.meta.total.toLocaleString()} people` : 'Loading…'}>
         <TableFrame loading={source.loading} error={source.error} empty={rows.length === 0}>
           <Table size="small" stickyHeader>
             <TableHead>

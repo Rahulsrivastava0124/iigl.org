@@ -19,6 +19,7 @@ import {
 } from '@mui/material';
 import type { SvgIconProps } from '@mui/material';
 import type { PageMeta } from '../lib/api';
+import { BRAND, TONE } from '../lib/theme';
 
 /**
  * A message about a state, coloured by what the state is.
@@ -66,9 +67,29 @@ export function remainingState(left: number): { tone: Tone; label: string } {
     : { tone: 'settled', label: 'none' };
 }
 
-/** One chip. Every status column in the panel renders through this. */
+/**
+ * One chip. Every status column in the panel renders through this.
+ *
+ * Filled rather than outlined: a status column is scanned down rather than
+ * read across, and a solid badge holds its colour at a glance where a hairline
+ * outline on white does not. The colours come from TONE — including `plain`,
+ * which Material UI would otherwise render as its own undefined grey.
+ */
 export function StateChip({ tone, label }: { tone: Tone; label: string }) {
-  return <Chip size="small" variant="outlined" color={TONE_COLOUR[tone]} label={label} />;
+  const colour = TONE[tone];
+  return (
+    <Chip
+      size="small"
+      label={label}
+      sx={{
+        bgcolor: colour.main,
+        color: colour.on,
+        fontWeight: 600,
+        letterSpacing: '0.01em',
+        borderRadius: 1,
+      }}
+    />
+  );
 }
 
 /** transactions.status: 0 pending, 1 approved, 2 declined. */
@@ -117,36 +138,15 @@ export function Notice({
   );
 }
 
-export function PageHead({
-  title,
-  subtitle,
-  action,
-}: {
-  title: string;
-  subtitle?: ReactNode;
-  action?: ReactNode;
-}) {
-  return (
-    <Stack
-      direction="row"
-     
-     
-     
-      spacing={2}
-      sx={{ alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', mb: 2.5 }}
-    >
-      <Box>
-        <Typography variant="h1">{title}</Typography>
-        {subtitle && (
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
-            {subtitle}
-          </Typography>
-        )}
-      </Box>
-      {action}
-    </Stack>
-  );
-}
+/*
+ * There is no PageHead.
+ *
+ * A screen used to open with its own title and description above the panel,
+ * which said again what the breadcrumb in the top bar had already said, and
+ * cost a block of height on every page to do it. The trail names the screen;
+ * the panel header carries the record count, the filters and the one button
+ * that acts on the whole list.
+ */
 
 /**
  * A figure on a card. One implementation: the dashboard and the order totals
@@ -158,6 +158,8 @@ export function Tile({
   note,
   accent,
   tone,
+  fill,
+  icon: Icon,
 }: {
   label: string;
   value: string;
@@ -166,59 +168,149 @@ export function Tile({
   accent?: boolean;
   /** Draws the figure in the colour of the state it reports. */
   tone?: Tone;
+  /**
+   * Tints the whole card instead of the figure. `brand` is the navy, used for
+   * a figure that simply counts; a tone is used where the number itself is a
+   * state — money owed, something waiting on a decision. Left unset the card
+   * stays white, which is what the totals inside a page want.
+   *
+   * The tint is the pale end of the colour, not the full one: a dashboard is a
+   * dozen of these at once, and a dozen saturated cards leaves nothing for the
+   * figures themselves to stand out against. The colour carries on the number
+   * and the icon, which is where the meaning is.
+   */
+  fill?: Tone | 'brand';
+  /** Says what the figure counts, so a group can be read without the labels. */
+  icon?: ComponentType<SvgIconProps>;
 }) {
+  const tint = fill
+    ? fill === 'brand'
+      ? { main: BRAND.navy, soft: BRAND.navyWash }
+      : TONE[fill]
+    : null;
+
   return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
-      <Typography variant="overline" color="text.secondary" sx={{ display: 'block' }}>
-        {label}
-      </Typography>
-      <Typography
-        className="tabular"
-        sx={{
-          fontSize: 22,
-          fontWeight: 600,
-          letterSpacing: '-0.02em',
-          color: tone && tone !== 'plain'
-            ? `${TONE_COLOUR[tone]}.main`
-            : accent
-              ? 'primary.main'
-              : 'text.primary',
-        }}
-      >
-        {value}
-        {note && (
-          <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 0.75 }}>
-            {note}
-          </Typography>
-        )}
-      </Typography>
+    <Paper
+      variant="outlined"
+      sx={{
+        p: 2,
+        height: '100%',
+        display: 'flex',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        gap: 1.5,
+        ...(tint && { bgcolor: tint.soft, borderColor: tint.soft }),
+      }}
+    >
+      <Box sx={{ minWidth: 0 }}>
+        <Typography variant="overline" color="text.secondary" sx={{ display: 'block' }}>
+          {label}
+        </Typography>
+        <Typography
+          className="tabular"
+          sx={{
+            fontSize: 22,
+            fontWeight: 600,
+            letterSpacing: '-0.02em',
+            color: tint
+              ? tint.main
+              : tone && tone !== 'plain'
+                ? `${TONE_COLOUR[tone]}.main`
+                : accent
+                  ? 'primary.main'
+                  : 'text.primary',
+          }}
+        >
+          {value}
+          {note && (
+            <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 0.75 }}>
+              {note}
+            </Typography>
+          )}
+        </Typography>
+      </Box>
+      {Icon && (
+        <Icon
+          // Decoration, not information: the label already says what this is,
+          // so the icon is hidden from a screen reader rather than read out.
+          aria-hidden
+          sx={{ fontSize: 26, color: tint ? tint.main : 'primary.main', opacity: 0.65, flexShrink: 0 }}
+        />
+      )}
     </Paper>
   );
 }
 
 export function Panel({
   title,
+  count,
   actions,
   children,
 }: {
   title?: string;
+  /**
+   * How many records the table below holds. It sits on the filter row rather
+   * than under the page title because it describes what the filters are
+   * currently selecting, and it changes when they do — reading it beside them
+   * costs no vertical space and puts cause next to effect.
+   */
+  count?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-      {(title || actions) && (
+      {(title || count || actions) && (
         <Stack
           direction="row"
          
          
          
           spacing={1.5}
-          sx={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', px: 2, py: 1.25, borderBottom: 1, borderColor: 'divider' }}
+          // One row, always. The header is a heading, a count and the controls
+          // for the table under it, and wrapping turned it into a two-line
+          // block that pushed the table down. Everything here either shrinks
+          // or truncates instead; only the buttons keep their full width.
+          sx={{
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'nowrap',
+            px: 2,
+            py: 1.25,
+            borderBottom: 1,
+            borderColor: 'divider',
+          }}
         >
-          {title ? <Typography variant="h2">{title}</Typography> : <span />}
+          {title || count ? (
+            <Stack
+              direction="row"
+              spacing={1.25}
+              sx={{ alignItems: 'baseline', minWidth: 0, overflow: 'hidden' }}
+            >
+              {title && (
+                <Typography variant="h2" sx={{ whiteSpace: 'nowrap' }}>
+                  {title}
+                </Typography>
+              )}
+              {count && (
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                >
+                  {count}
+                </Typography>
+              )}
+            </Stack>
+          ) : (
+            <span />
+          )}
           {actions && (
-            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ alignItems: 'center', minWidth: 0, flexShrink: 1 }}
+            >
               {actions}
             </Stack>
           )}
@@ -399,8 +491,13 @@ export function ToneAction({
   return (
     <Button
       size="small"
-      variant="outlined"
-      color={TONE_COLOUR[tone]}
+      // Filled rather than outlined: these decide something, and on a row of
+      // otherwise quiet controls the fill is what makes the pair read at a
+      // glance as accept and refuse.
+      variant="contained"
+      // `plain` has no Button colour of its own — a toneless action inherits
+      // the surrounding text colour rather than claiming a semantic one.
+      color={tone === 'plain' ? 'inherit' : TONE_COLOUR[tone]}
       startIcon={<Icon fontSize="small" />}
       disabled={disabled}
       onClick={onClick}

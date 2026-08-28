@@ -13,7 +13,7 @@ import {
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import { Notice, PageHead, Pager, Panel, StatusChip, TableFrame, Tile, ToneAction, money } from '../components/ui';
+import { Notice, Pager, Panel, StatusChip, TableFrame, Tile, ToneAction, money } from '../components/ui';
 import type { Paged, Transaction } from '../lib/api';
 import { isAdmin } from '../lib/portal';
 import ApproveIcon from '@mui/icons-material/CheckCircleOutlined';
@@ -87,17 +87,6 @@ export default function Transactions() {
 
   return (
     <>
-      <PageHead
-        title={ledgerView ? 'Ledger' : status === '0' ? 'Commission approval' : 'Commission history'}
-        subtitle={
-          ledgerView
-            ? 'Your running account. Only approved entries move the balance.'
-            : `${
-                data ? `${data.meta.total.toLocaleString()} records` : 'Loading…'
-              } · you can decide only what was sent to you`
-        }
-      />
-
       {done && <Notice kind="ok">{done}</Notice>}
       {error && <Notice kind="error">{error}</Notice>}
 
@@ -110,7 +99,7 @@ export default function Transactions() {
             <Tile label="Awaiting approval" value={money(account?.pending_out ?? 0)} />
           </Stack>
 
-          <Panel>
+          <Panel title="Ledger">
             <TableFrame
               loading={ledger.loading}
               error={ledger.error}
@@ -157,6 +146,8 @@ export default function Transactions() {
         </>
       ) : (
       <Panel
+        title={status === '0' ? 'Commission approval' : 'Commission history'}
+        count={data ? `${data.meta.total.toLocaleString()} records` : 'Loading…'}
         actions={
           <TextField
             select
@@ -167,7 +158,7 @@ export default function Transactions() {
               setPage(1);
               setParams(e.target.value === '' ? {} : { status: e.target.value });
             }}
-            sx={{ minWidth: 150 }}
+            sx={{ minWidth: 0, flex: '1 1 150px', maxWidth: 150 }}
           >
             <MenuItem value="">All</MenuItem>
             <MenuItem value="0">Pending</MenuItem>

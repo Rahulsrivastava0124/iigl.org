@@ -63,6 +63,28 @@ const VIEWS: Record<string, Record<string, string>> = {
   },
 };
 
+/**
+ * What a section opens on when no view is chosen.
+ *
+ * Several sections are named for the menu group rather than the screen —
+ * `/categories` sits under Report Master, `/staff` under Employee Management —
+ * and pages no longer carry a heading of their own, so without this the trail
+ * would stop at the group and never say which of its screens you are on.
+ *
+ * Only listed where the group and the screen have different names; where they
+ * are the same, a second crumb saying it twice is worse than one.
+ */
+const DEFAULT_VIEW: Record<string, string> = {
+  categories: 'Categories',
+  attributes: 'Attributes',
+  staff: 'Employee List',
+  customers: 'Registered',
+  transactions: 'Commission History',
+  content: 'Pages',
+  pricing: 'Standard Prices',
+  laboratories: 'View Franchise',
+};
+
 /** Child routes whose last segment is a word rather than an id. */
 const LEAVES: Record<string, string> = {
   'reports/new': 'Issue a Certificate',
@@ -118,6 +140,9 @@ export function useBreadcrumbs(portal: string): Crumb[] {
   if (id) {
     return [root, { label: sectionLabel, to: `/${section}` }, { label: recordName }];
   }
+
+  const opensOn = DEFAULT_VIEW[section];
+  if (opensOn) return [root, { label: sectionLabel, to: `/${section}` }, { label: opensOn }];
 
   return [root, { label: sectionLabel }];
 }

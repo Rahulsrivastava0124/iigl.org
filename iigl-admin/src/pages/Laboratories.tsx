@@ -12,7 +12,7 @@ import { useFetch } from '../lib/useFetch';
 import { usePermissions } from '../lib/permissions';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import { Dialog, IconAction, Notice, PageHead, Panel, RowActions, TableFrame, YesNo } from '../components/ui';
+import { Dialog, IconAction, Notice, Panel, RowActions, TableFrame, YesNo } from '../components/ui';
 import type { Lab } from '../lib/api';
 import { isAdmin } from '../lib/portal';
 import CommissionIcon from '@mui/icons-material/PercentOutlined';
@@ -62,15 +62,10 @@ export default function Laboratories() {
 
   return (
     <>
-      <PageHead
-        title="Laboratories"
-        subtitle={admin ? `${rows.length} in the network` : 'Your laboratory'}
-      />
-
       {msg && <Notice kind="ok">{msg}</Notice>}
       {err && <Notice kind="error">{err}</Notice>}
 
-      <Panel>
+      <Panel title="Laboratories" count={admin ? `${rows.length} in the network` : undefined}>
         <TableFrame loading={loading} error={error} empty={rows.length === 0}>
           <Table size="small" stickyHeader>
             <TableHead>

@@ -98,6 +98,16 @@ interface Group {
   items: Item[];
   adminOnly?: boolean;
   labOnly?: boolean;
+  /**
+   * Hidden behind the super administrator door.
+   *
+   * Both doors admit role 1, so the difference is not what the account may do —
+   * the API decides that and does not change — but what the door is for. The
+   * admin address runs the day: the order queue and the certificates coming off
+   * it. The super address is the business above that, so the two operational
+   * lists are left off it.
+   */
+  hideInSuper?: boolean;
 }
 
 /**
@@ -119,8 +129,18 @@ interface Group {
  */
 const ADMIN_GROUPS: Group[] = [
   { label: 'Dashboard', icon: DashboardIcon, items: [{ to: '/', label: 'Dashboard', end: true }] },
-  { label: 'Orders', icon: OrdersIcon, items: [{ to: '/orders', label: 'Order Management' }] },
-  { label: 'Certificates', icon: CertificatesIcon, items: [{ to: '/reports', label: 'Certificates' }] },
+  {
+    label: 'Orders',
+    icon: OrdersIcon,
+    hideInSuper: true,
+    items: [{ to: '/orders', label: 'Order Management' }],
+  },
+  {
+    label: 'Certificates',
+    icon: CertificatesIcon,
+    hideInSuper: true,
+    items: [{ to: '/reports', label: 'Certificates' }],
+  },
   {
     label: 'Report Master',
     icon: CategoriesIcon,
@@ -436,7 +456,12 @@ export default function Shell() {
           }}
         >
           {groups
-            .filter((g) => (!g.adminOnly || isAdmin) && (!g.labOnly || isLab))
+            .filter(
+              (g) =>
+                (!g.adminOnly || isAdmin) &&
+                (!g.labOnly || isLab) &&
+                (!g.hideInSuper || portal !== 'super'),
+            )
             .map((group) => {
               const Icon = group.icon;
 

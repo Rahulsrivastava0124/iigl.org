@@ -19,7 +19,7 @@ import AddIcon from '@mui/icons-material/AddOutlined';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Dialog, IconAction, Notice, PageHead, Panel, RowActions, TableFrame } from '../components/ui';
+import { Dialog, IconAction, Notice, Panel, RowActions, TableFrame } from '../components/ui';
 import PermissionsIcon from '@mui/icons-material/KeyOutlined';
 import RenameIcon from '@mui/icons-material/DriveFileRenameOutlineOutlined';
 
@@ -143,11 +143,14 @@ export default function Roles() {
 
   return (
     <>
-      <PageHead
-        title="Roles and permissions"
-        subtitle="What each role may see and do. Administrators are unrestricted and are not listed here."
-        action={
+      {msg && <Notice kind="ok">{msg}</Notice>}
+      {err && <Notice kind="error">{err}</Notice>}
+
+      <Panel
+        title="Roles"
+        actions={
           <Button
+            size="small"
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => setForm({ open: true, name: '' })}
@@ -155,12 +158,7 @@ export default function Roles() {
             Add role
           </Button>
         }
-      />
-
-      {msg && <Notice kind="ok">{msg}</Notice>}
-      {err && <Notice kind="error">{err}</Notice>}
-
-      <Panel title="Roles">
+      >
         <TableFrame loading={roles.loading} error={roles.error} empty={list.length === 0}>
           <Table size="small">
             <TableHead>

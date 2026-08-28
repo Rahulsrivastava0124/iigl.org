@@ -179,5 +179,20 @@ export interface Price {
 export interface DashboardSummary {
   orders: { total: number; active: number; delivered: number; today: number };
   reports: { total: number };
+  cards: { smart: number; classic: number };
   money: { sale: number; paid: number; dues: number; sale_today: number };
+  wallet: {
+    balance: number;
+    commission_accrued: number;
+    commission_paid: number;
+    commission_dues: number;
+    on_approval: number;
+  };
+  people: {
+    /** Null for a laboratory: it is one, so it does not count them. */
+    laboratories: number | null;
+    employees: number;
+    customers_registered: number;
+    customers_unregistered: number;
+  };
 }

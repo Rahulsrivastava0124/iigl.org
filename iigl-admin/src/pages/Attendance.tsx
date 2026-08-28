@@ -18,7 +18,7 @@ import BreakIcon from '@mui/icons-material/FreeBreakfastOutlined';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import { Notice, PageHead, Pager, Panel, StateChip, TableFrame, attendanceState } from '../components/ui';
+import { Notice, Pager, Panel, StateChip, TableFrame, attendanceState } from '../components/ui';
 import type { Paged } from '../lib/api';
 
 interface Day {
@@ -97,20 +97,14 @@ export default function Attendance() {
 
   const t = today.data?.data;
   const rows = history.data?.data ?? [];
-  const viewingSelf = empId === 'me';
 
   return (
     <>
-      <PageHead
-        title="Attendance"
-        subtitle={viewingSelf ? 'Your own days.' : 'A colleague’s record.'}
-      />
-
       {msg && <Notice kind="ok">{msg}</Notice>}
       {err && <Notice kind="error">{err}</Notice>}
 
       {t && (
-        <Panel>
+        <Panel title="Today">
           <Box sx={{ p: 2.5 }}>
             <Stack
               direction="row"

@@ -18,7 +18,7 @@ import AddIcon from '@mui/icons-material/AddOutlined';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Dialog, IconAction, Notice, PageHead, Panel, RowActions, TableFrame, YesNo } from '../components/ui';
+import { Dialog, IconAction, Notice, Panel, RowActions, TableFrame, YesNo } from '../components/ui';
 import FileField from '../components/FileField';
 import EditIcon from '@mui/icons-material/EditOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
@@ -117,12 +117,25 @@ export default function Content() {
 
   return (
     <>
-      <PageHead
-        title="Website content"
-        subtitle="What the public site shows. Changes are live as soon as they are saved."
-        action={
+      {msg && <Notice kind="ok">{msg}</Notice>}
+      {err && <Notice kind="error">{err}</Notice>}
+
+      <Tabs
+        value={section}
+        onChange={(_, v) => setSection(v)}
+        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+      >
+        {SECTIONS.map((s) => (
+          <Tab key={s.id} value={s.id} label={s.label} />
+        ))}
+      </Tabs>
+
+      <Panel
+        title={SECTIONS.find((s) => s.id === section)?.label ?? 'Website content'}
+        actions={
           section !== 'pages' && (
             <Button
+              size="small"
               variant="contained"
               startIcon={<AddIcon />}
               onClick={() =>
@@ -141,22 +154,7 @@ export default function Content() {
             </Button>
           )
         }
-      />
-
-      {msg && <Notice kind="ok">{msg}</Notice>}
-      {err && <Notice kind="error">{err}</Notice>}
-
-      <Tabs
-        value={section}
-        onChange={(_, v) => setSection(v)}
-        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
       >
-        {SECTIONS.map((s) => (
-          <Tab key={s.id} value={s.id} label={s.label} />
-        ))}
-      </Tabs>
-
-      <Panel>
         <TableFrame loading={source.loading} error={source.error} empty={rows.length === 0}>
           <Table size="small" stickyHeader>
             <TableHead>

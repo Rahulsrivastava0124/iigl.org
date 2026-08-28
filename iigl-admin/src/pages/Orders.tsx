@@ -10,7 +10,7 @@ import {
   TextField,
 } from '@mui/material';
 import { useFetch } from '../lib/useFetch';
-import { IconAction, OrderChip, PageHead, Pager, Panel, RowActions, TableFrame, money } from '../components/ui';
+import { IconAction, OrderChip, Pager, Panel, RowActions, TableFrame, money } from '../components/ui';
 import type { Order, Paged } from '../lib/api';
 import OpenIcon from '@mui/icons-material/ChevronRightOutlined';
 
@@ -38,27 +38,20 @@ export default function Orders() {
 
   return (
     <>
-      <PageHead
-        title={dues ? 'Dues orders' : 'Orders'}
-        subtitle={
-          dues
-            ? `${
-                data ? data.meta.total.toLocaleString() : '…'
-              } delivered orders still carrying a balance`
-            : data
-              ? `${data.meta.total.toLocaleString()} orders`
-              : 'Loading…'
-        }
-      />
-
       <Panel
+        title={dues ? 'Dues orders' : 'Orders'}
+        count={
+          data
+            ? `${data.meta.total.toLocaleString()} ${dues ? 'with a balance' : 'orders'}`
+            : 'Loading…'
+        }
         actions={
           <TextField
             select
             label="Status"
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            sx={{ minWidth: 170 }}
+            sx={{ minWidth: 0, flex: '1 1 170px', maxWidth: 170 }}
           >
             <MenuItem value="">All statuses</MenuItem>
             <MenuItem value="preparing">In progress</MenuItem>

@@ -27,7 +27,7 @@ const educationHighlights = [
 export default function EducationSection() {
   return (
     <section id="education" className="bg-[#f8f9fb] px-5 py-10 text-[#2c3b64] sm:px-8 lg:px-12">
-      <div className="mx-auto max-w-[1320px]">
+      <div className="mx-auto max-w-[1390px]">
         <div className="relative min-h-[560px] overflow-hidden rounded-[26px] bg-white shadow-[0_18px_50px_rgba(44,59,100,0.10)] ring-1 ring-[#e6e8ee] max-[1180px]:min-h-[640px] max-[760px]:min-h-0 max-[760px]:rounded-2xl">
           <img
             className="absolute inset-y-0 left-0 h-full w-[104%] max-w-none object-cover object-left max-[760px]:static max-[760px]:h-[240px] max-[760px]:w-full max-[760px]:object-cover max-[760px]:object-[68%_center]"

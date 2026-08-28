@@ -11,7 +11,7 @@ import {
 } from '@mui/material';
 import PrintIcon from '@mui/icons-material/PrintOutlined';
 import { useFetch } from '../lib/useFetch';
-import { IconAction, PageHead, Pager, Panel, RowActions, TableFrame } from '../components/ui';
+import { IconAction, Pager, Panel, RowActions, TableFrame } from '../components/ui';
 import type { Paged, Report } from '../lib/api';
 import { apiUrl } from '../lib/config';
 import SmartIcon from '@mui/icons-material/CreditCardOutlined';
@@ -59,12 +59,9 @@ export default function Reports() {
 
   return (
     <>
-      <PageHead
-        title="Certificates"
-        subtitle={data ? `${data.meta.total.toLocaleString()} issued` : 'Loading…'}
-      />
-
       <Panel
+        title="Certificates"
+        count={data ? `${data.meta.total.toLocaleString()} issued` : 'Loading…'}
         actions={
           <>
             <Typography variant="body2" color={selected.length > 50 ? 'error' : 'text.secondary'}>
