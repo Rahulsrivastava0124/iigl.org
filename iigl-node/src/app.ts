@@ -1,5 +1,5 @@
+import path from 'node:path';
 import express from 'express';
-import session from 'express-session';
 import helmet from 'helmet';
 import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
@@ -18,7 +18,7 @@ import { uploadRoutes } from './routes/upload.routes.js';
 import { attendanceRoutes } from './routes/attendance.routes.js';
 import { contentRoutes } from './routes/content.routes.js';import { customerRoutes } from './routes/customer.routes.js';
 import { requireAuth } from './middleware/auth.js';
-import { loginLimiter, verifyLogLimiter, renderLimiter } from './middleware/limits.js';
+import { loginLimiter, resetLimiter, verifyLogLimiter, renderLimiter } from './middleware/limits.js';
 import { openApiDocument } from './docs/openapi.js';
 
 export function createApp() {
@@ -51,21 +51,6 @@ export function createApp() {
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: true }));
 
-  app.use(
-    session({
-      name: 'iigl.sid',
-      secret: env.sessionSecret,
-      resave: false,
-      saveUninitialized: false,
-      cookie: {
-        httpOnly: true,
-        sameSite: 'lax',
-        secure: env.isProd,
-        maxAge: 1000 * 60 * 60 * 8,
-      },
-    }),
-  );
-
   app.get('/health', (_req, res) => res.json({ ok: true }));
 
   // Interactive reference. Served before the session guard so the docs are
@@ -92,6 +77,8 @@ export function createApp() {
 
   // Public surface: the marketing site and certificate verification.
   app.use('/api/auth/login', loginLimiter);
+  app.use('/api/auth/forgot-password', resetLimiter);
+  app.use('/api/auth/reset-password', resetLimiter);
   app.use('/api/public/verify-log', verifyLogLimiter);
   app.use('/api/cards', renderLimiter);
 
@@ -110,6 +97,19 @@ export function createApp() {
   app.use('/api/cards', cardRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/uploads', uploadRoutes);
+
+  // Reading back what was uploaded. Every image path in the database is
+  // `public/uploads/<bucket>/<file>`, and until now nothing served those files
+  // at all — the panel could upload an icon and never show it again.
+  //
+  // Only `uploads/` is mounted, not the whole Laravel public root, which also
+  // holds the application's own source. `screenshots/` — payment proof — is
+  // deliberately left out; it is evidence attached to a transaction rather than
+  // a picture a list needs to render.
+  app.use(
+    '/api/files',
+    express.static(path.resolve(env.legacyPublicRoot, 'uploads'), { index: false }),
+  );
   app.use('/api/attendance', attendanceRoutes);
   app.use('/api/content', contentRoutes);
   app.use('/api/customers', customerRoutes);

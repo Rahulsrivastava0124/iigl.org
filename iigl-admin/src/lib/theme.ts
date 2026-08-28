@@ -53,14 +53,23 @@ export const BRAND = {
  * each screen invents its own grey.
  *
  * `main` is the fill, `on` the text that sits on it, `soft` the tint for a
- * surface that should carry the state without shouting it. Each `main` clears
- * 4.5:1 against white for text use and carries white above 7:1 as a fill.
+ * surface that should carry the state without shouting it. The first four
+ * `main` values clear 4.5:1 against white for text use and carry white above
+ * 7:1 as a fill; `yes` and `no` are the Laravel panel's own flag colours and do
+ * not — see the note on them below.
  */
 export const TONE = {
   settled: { main: '#1f6b4b', on: '#ffffff', soft: '#e7f1ec' },
   waiting: { main: '#8a5a16', on: '#ffffff', soft: '#f7efe1' },
   refused: { main: '#97293f', on: '#ffffff', soft: '#f8e9ec' },
   plain: { main: '#4a5265', on: '#ffffff', soft: '#eef0f4' },
+  // The Yes/No flag columns, kept as the Laravel panel had them. Those columns
+  // are read as a block — a wall of green with the exceptions in red — and the
+  // muted settled/refused tones lose that at-a-glance read. They stay separate
+  // from settled/refused so that brightening a flag cannot brighten every
+  // status chip and alert in the panel.
+  yes: { main: '#20c020', on: '#ffffff', soft: '#e6f7e6' },
+  no: { main: '#fb3b5c', on: '#ffffff', soft: '#feeaee' },
 } as const;
 
 export type ToneName = keyof typeof TONE;
@@ -160,7 +169,7 @@ export const theme = createTheme({
       },
     },
     MuiButton: {
-      defaultProps: { disableElevation: true },
+      defaultProps: { disableElevation: true, size: 'medium' },
       styleOverrides: {
         // A button sharing a flex row with a filter is the item that gives way
         // when the row runs out of width, and its label breaks across lines

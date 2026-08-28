@@ -712,6 +712,70 @@ const document = {
       },
     },
 
+    '/api/auth/forgot-password': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Ask for a password reset link',
+        description:
+          'Public. Answers identically whether or not the address is on an account, so it ' +
+          'cannot be used to test addresses. Sends a link valid for one hour, storing the ' +
+          'token hashed in `password_resets`. Refuses when the address is on more than one ' +
+          'active account, silently — the reply does not change. Rate limited to 5 an hour ' +
+          'per address.',
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email'],
+                properties: { email: { type: 'string', format: 'email' } },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Accepted, whether or not any mail was sent.' },
+          400: errorResponse('No address given.'),
+          429: errorResponse('Too many reset requests from this address.'),
+        },
+      },
+    },
+
+    '/api/auth/reset-password': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Set a new password using a reset link',
+        description:
+          'Public. Consumes the token from the emailed link: single use, one hour, compared ' +
+          'against the bcrypt hash in `password_resets`. Rehashes at cost 10, matching the ' +
+          'existing rows.',
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email', 'token', 'new_password'],
+                properties: {
+                  email: { type: 'string', format: 'email' },
+                  token: { type: 'string' },
+                  new_password: { type: 'string', format: 'password', minLength: 8 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Password updated.' },
+          400: errorResponse('Link expired, already used, incomplete, or the password is too short.'),
+          429: errorResponse('Too many reset attempts from this address.'),
+        },
+      },
+    },
+
     '/api/cards/data/{id}': {
       get: {
         tags: ['Cards'],
@@ -997,6 +1061,48 @@ const document = {
               },
             },
           },
+          ...guarded,
+        },
+      },
+    },
+
+    '/api/catalog/categories/{id}/attributes': {
+      get: {
+        tags: ['Catalog'],
+        summary: 'Certificate form fields across a whole category',
+        description: 'Same ordering as the per-subcategory list, but spanning every subcategory.',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        responses: {
+          200: {
+            description: 'Attributes.',
+            content: {
+              'application/json': {
+                schema: dataOf({ type: 'array', items: { $ref: '#/components/schemas/Attribute' } }),
+              },
+            },
+          },
+          ...guarded,
+        },
+      },
+    },
+
+    '/api/catalog/attribute-values': {
+      get: {
+        tags: ['Catalog'],
+        summary: 'Attribute values across a branch of the catalogue',
+        description:
+          'Filter by attr_id, subcategory_id or category_id — at least one is required, since one category holds 3,899 values. Paginated, and ?q searches the value name.',
+        parameters: [
+          { name: 'attr_id', in: 'query', schema: { type: 'integer' } },
+          { name: 'subcategory_id', in: 'query', schema: { type: 'integer' } },
+          { name: 'category_id', in: 'query', schema: { type: 'integer' } },
+          { name: 'q', in: 'query', schema: { type: 'string' } },
+          { name: 'page', in: 'query', schema: { type: 'integer' } },
+          { name: 'per_page', in: 'query', schema: { type: 'integer' } },
+        ],
+        responses: {
+          200: { description: 'Attribute values, paginated.' },
+          400: { description: 'No filter given.' },
           ...guarded,
         },
       },
@@ -1683,6 +1789,19 @@ const document = {
         responses: {
           200: { description: 'Updated.' },
           404: errorResponse('User not found.'),
+          ...guarded,
+        },
+      },
+    },
+
+    '/api/dashboard/trend': {
+      get: {
+        tags: ['Dashboard'],
+        summary: 'Twelve months of orders and certificates',
+        description:
+          'One row per month including empty ones, oldest first. Scoped to the caller’s laboratory, or every lab for an administrator.',
+        responses: {
+          200: { description: 'Monthly counts.' },
           ...guarded,
         },
       },

@@ -1,6 +1,9 @@
 import type { RequestHandler } from 'express';
 import { db } from '../db/index.js';
 import { forbidden, unauthorized } from '../lib/errors.js';
+import { readSession, type SessionUser } from '../lib/session.js';
+
+export type { SessionUser };
 
 /** Role ids as they exist in the `roles` table. */
 export const ROLE = {
@@ -9,20 +12,6 @@ export const ROLE = {
   // 3 = LAB EMPLOYEE, 4 = MANAGER, 5 = Office Boy.
   // The Laravel guard admits role_id > 2, so staff roles are open-ended.
 } as const;
-
-export interface SessionUser {
-  id: number;
-  fullname: string;
-  roleId: number;
-  /** Lab this user belongs to: itself for a lab, the employer for staff. */
-  labId: number | null;
-}
-
-declare module 'express-session' {
-  interface SessionData {
-    user?: SessionUser;
-  }
-}
 
 declare global {
   namespace Express {
@@ -52,17 +41,19 @@ export async function resolveLabId(userId: number, roleId: number): Promise<numb
 
 /** Every route is authenticated unless it is explicitly mounted as public. */
 export const requireAuth: RequestHandler = (req, _res, next) => {
-  if (!req.session.user) return next(unauthorized());
-  req.user = req.session.user;
+  const user = readSession(req);
+  if (!user) return next(unauthorized());
+  req.user = user;
   next();
 };
 
 export const requireRole =
   (predicate: (roleId: number) => boolean, label: string): RequestHandler =>
   (req, _res, next) => {
-    if (!req.session.user) return next(unauthorized());
-    req.user = req.session.user;
-    if (!predicate(req.user.roleId)) return next(forbidden(`Requires ${label} access.`));
+    const user = readSession(req);
+    if (!user) return next(unauthorized());
+    req.user = user;
+    if (!predicate(user.roleId)) return next(forbidden(`Requires ${label} access.`));
     next();
   };
 

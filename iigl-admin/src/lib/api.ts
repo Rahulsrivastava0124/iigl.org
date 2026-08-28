@@ -146,20 +146,31 @@ export interface Category {
   name: string;
   description: string | null;
   short_description: string | null;
+  /** `public/uploads/icon/…`, as Laravel stored it. Render with `fileUrl`. */
+  icon: string | null;
+  banner: string | null;
+  /** A `units.id`, held as text. The weight every item in the category is priced by. */
+  unit: string | null;
 }
 
 export interface Subcategory {
   id: number;
   name: string;
+  description: string | null;
   category_id: number;
 }
 
 export interface Attribute {
   id: number;
   attr_name: string;
+  category_id: number;
   subcategory_id: number;
   show_in_smart_card: number;
   show_in_classic_card: number;
+  /** The description/comment box on the certificate form. */
+  show_description: number;
+  /** The item image upload on the certificate form. */
+  show_image: number;
   is_opensource: number;
   is_required: number;
   order_no: number;
@@ -174,6 +185,14 @@ export interface Price {
   rate: string;
   smart_price: number;
   classic_price: number;
+}
+
+/** One month of the dashboard chart. */
+export interface TrendMonth {
+  month: string;
+  label: string;
+  orders: number;
+  reports: number;
 }
 
 export interface DashboardSummary {

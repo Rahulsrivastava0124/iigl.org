@@ -137,6 +137,8 @@ export const extraPaths: Record<string, unknown> = {
     ['attr_name', 'category_id', 'subcategory_id'],
     {
       attr_name: { type: 'string' },
+      category_id: int,
+      subcategory_id: int,
       order_no: int,
       show_in_smart_card: bool,
       show_in_classic_card: bool,
@@ -165,7 +167,7 @@ export const extraPaths: Record<string, unknown> = {
     '/api/admin/attribute-values',
     { attr_id: int, value_name: { type: 'string' }, description: str, icon: str },
     ['attr_id', 'value_name'],
-    { value_name: { type: 'string' }, description: str, icon: str },
+    { attr_id: int, value_name: { type: 'string' }, description: str, icon: str },
     {
       '/api/admin/attribute-values/{id}': {
         delete: {

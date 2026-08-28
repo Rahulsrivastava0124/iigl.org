@@ -8,11 +8,28 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { usePermissions } from '../lib/permissions';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import { Dialog, IconAction, Notice, Panel, RowActions, TableFrame, YesNo } from '../components/ui';
+import {
+  Dialog,
+  IconAction,
+  Panel,
+  RowActions,
+  SearchField,
+  TableFrame,
+  YesNo,
+} from '../components/ui';
+
+/** True when the row's text contains the term. Case-insensitive; blank matches all. */
+const hits = (term: string, ...fields: (string | number | null | undefined)[]) => {
+  const q = term.trim().toLowerCase();
+  if (!q) return true;
+  return fields.some((f) => f != null && String(f).toLowerCase().includes(q));
+};
+
 import type { Lab } from '../lib/api';
 import { isAdmin } from '../lib/portal';
 import CommissionIcon from '@mui/icons-material/PercentOutlined';
@@ -20,52 +37,59 @@ import ActiveIcon from '@mui/icons-material/ToggleOnOutlined';
 import InactiveIcon from '@mui/icons-material/ToggleOffOutlined';
 
 export default function Laboratories() {
+  const toast = useToast();
   const { user } = useAuth();
   const { can } = usePermissions();
   const admin = isAdmin(user);
   const mayEdit = admin && can('laboratory', 'update');
   const { data, loading, error, reload } = useFetch<{ data: Lab[] }>('/users/laboratories');
-  const rows = data?.data ?? [];
+  const all = data?.data ?? [];
+  const [search, setSearch] = useState('');
+  const rows = all.filter((l) => hits(search, l.id, l.fullname, l.mobile, l.city));
 
   const [editing, setEditing] = useState<Lab | null>(null);
   const [rate, setRate] = useState('');
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
 
   const saveRate = async () => {
     if (!editing) return;
     setBusy(true);
-    setErr(null);
     try {
       await api.patch(`/admin/laboratories/${editing.id}/commission`, { commision: Number(rate) });
-      setMsg(`Commission for ${editing.fullname} set to ${rate}%.`);
+      toast.ok(`Commission for ${editing.fullname} set to ${rate}%.`);
       setEditing(null);
       reload();
     } catch (e) {
-      setErr(messageOf(e));
+      toast.error(messageOf(e));
     } finally {
       setBusy(false);
     }
   };
 
   const toggleActive = async (lab: Lab) => {
-    setErr(null);
     try {
       await api.patch(`/users/${lab.id}/active`, { is_active: !lab.is_active });
-      setMsg(`${lab.fullname} ${lab.is_active ? 'deactivated' : 'activated'}.`);
+      toast.ok(`${lab.fullname} ${lab.is_active ? 'deactivated' : 'activated'}.`);
       reload();
     } catch (e) {
-      setErr(messageOf(e));
+      toast.error(messageOf(e));
     }
   };
 
   return (
     <>
-      {msg && <Notice kind="ok">{msg}</Notice>}
-      {err && <Notice kind="error">{err}</Notice>}
 
-      <Panel title="Laboratories" count={admin ? `${rows.length} in the network` : undefined}>
+      <Panel
+        title="Laboratories"
+        count={admin ? `${rows.length} of ${all.length} in the network` : undefined}
+        actions={
+          <SearchField
+            placeholder="Name, mobile, city…"
+            value={search}
+            onChange={setSearch}
+          />
+        }
+      >
         <TableFrame loading={loading} error={error} empty={rows.length === 0}>
           <Table size="small" stickyHeader>
             <TableHead>

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Table,
@@ -9,8 +10,8 @@ import {
   Tabs,
   Typography,
 } from '@mui/material';
-import { useFetch } from '../lib/useFetch';
-import { Pager, Panel, TableFrame } from '../components/ui';
+import { useFetch, useDebounced } from '../lib/useFetch';
+import { Pager, Panel, SearchField, TableFrame } from '../components/ui';
 import type { Paged } from '../lib/api';
 
 type Tab = 'registered' | 'unregistered' | 'verifiers';
@@ -62,9 +63,16 @@ export default function Customers() {
 
   const current = TABS.find((t) => t.id === tab) ?? TABS[0];
 
-  const source = useFetch<Paged<Customer & Verifier>>(
-    `/customers/${current.id}?page=${page}&per_page=25`,
-  );
+  // The term is component state rather than another URL parameter: `setPage`
+  // and `setTab` below rewrite the whole query string, and a third value in it
+  // would have to be threaded through both.
+  const [search, setSearch] = useState('');
+  const term = useDebounced(search);
+
+  const query = new URLSearchParams({ page: String(page), per_page: '25' });
+  if (term.trim()) query.set('q', term.trim());
+
+  const source = useFetch<Paged<Customer & Verifier>>(`/customers/${current.id}?${query}`);
   const rows = source.data?.data ?? [];
 
   const setTab = (next: Tab) => setParams(next === 'registered' ? {} : { tab: next });
@@ -93,7 +101,21 @@ export default function Customers() {
         ))}
       </Tabs>
 
-      <Panel title="Customers" count={source.data ? `${source.data.meta.total.toLocaleString()} people` : 'Loading…'}>
+      <Panel
+        footer={<Pager meta={source.data?.meta} onPage={setPage} />}
+        title="Customers"
+        count={source.data ? `${source.data.meta.total.toLocaleString()} people` : 'Loading…'}
+        actions={
+          <SearchField
+            placeholder="Name, mobile, email…"
+            value={search}
+            onChange={(v) => {
+              setSearch(v);
+              setPage(1);
+            }}
+          />
+        }
+      >
         <TableFrame loading={source.loading} error={source.error} empty={rows.length === 0}>
           <Table size="small" stickyHeader>
             <TableHead>
@@ -148,7 +170,6 @@ export default function Customers() {
             </TableBody>
           </Table>
         </TableFrame>
-        <Pager meta={source.data?.meta} onPage={setPage} />
       </Panel>
 
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>

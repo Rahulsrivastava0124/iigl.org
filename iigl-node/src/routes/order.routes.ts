@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
 import { notFound } from '../lib/errors.js';
-import { paged, readPage } from '../lib/paginate.js';
+import { paged, readPage, readSearch } from '../lib/paginate.js';
 import { assertLabOwnership, requireLabScope, ROLE } from '../middleware/auth.js';
 import {
   createOrder,
@@ -52,6 +52,13 @@ orderRoutes.get(
     if (status) {
       q = q.where('status', '=', status);
       c = c.where('status', '=', status);
+    }
+
+    // Free-text search across the columns the list actually shows.
+    const search = readSearch(req, ['order_no', 'customer_name', 'mobile']);
+    if (search) {
+      q = q.where(search);
+      c = c.where(search);
     }
 
     if (duesOnly) {

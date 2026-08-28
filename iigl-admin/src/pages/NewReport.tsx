@@ -15,6 +15,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
@@ -51,6 +52,7 @@ const STEPS = ['Choose the order', 'Choose the item', 'Describe the stone'];
  * that order rather than presenting one long page with ids to type in.
  */
 export default function NewReport() {
+  const toast = useToast();
   const navigate = useNavigate();
   const [params] = useSearchParams();
 
@@ -88,8 +90,6 @@ export default function NewReport() {
   const [notes, setNotes] = useState<Record<number, string>>({});
 
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [done, setDone] = useState<string | null>(null);
 
   const items = order.data?.data.items ?? [];
   const issued = order.data?.data.reports ?? [];
@@ -101,7 +101,6 @@ export default function NewReport() {
 
   const submit = async () => {
     setBusy(true);
-    setErr(null);
     try {
       const r = await api.post<{ data: { id: number; report_no: string } }>('/reports', {
         order_id: orderId,
@@ -122,7 +121,7 @@ export default function NewReport() {
             attr_desc: notes[a.id] ?? null,
           })),
       });
-      setDone(`Certificate ${r.data.report_no} issued.`);
+      toast.ok(`Certificate ${r.data.report_no} issued.`);
       order.reload();
       // Straight back to the item step, ready for the next stone on the order.
       setItemId(null);
@@ -131,7 +130,7 @@ export default function NewReport() {
       setImage(null);
       setForm({ gross_weight: '', gross_wt_unit: '', carat_weight: '', stone_wt_unit: '', size: '', comments: '' });
     } catch (e) {
-      setErr(messageOf(e));
+      toast.error(messageOf(e));
     } finally {
       setBusy(false);
     }
@@ -153,13 +152,11 @@ export default function NewReport() {
             </Step>
           ))}
         </Stepper>
-        <Button size="small" onClick={() => navigate('/reports')}>
+        <Button onClick={() => navigate('/reports')}>
           Back to certificates
         </Button>
       </Stack>
 
-      {done && <Notice kind="ok">{done}</Notice>}
-      {err && <Notice kind="error">{err}</Notice>}
 
       {/* ---------------------------------------------------- 1. the order */}
       {step === 0 && (
@@ -187,7 +184,7 @@ export default function NewReport() {
                     <TableCell className="mono">{o.mobile}</TableCell>
                     <TableCell>{o.order_date}</TableCell>
                     <TableCell>
-                      <Button size="small" variant="contained" onClick={() => setOrderId(o.id)}>
+                      <Button variant="contained" onClick={() => setOrderId(o.id)}>
                         Choose
                       </Button>
                     </TableCell>
@@ -203,7 +200,7 @@ export default function NewReport() {
       {step === 1 && (
         <Panel
           title={`Items on ${order.data?.data.order_no ?? '…'}`}
-          actions={<Button size="small" onClick={() => setOrderId(null)}>Change order</Button>}
+          actions={<Button onClick={() => setOrderId(null)}>Change order</Button>}
         >
           <TableFrame loading={order.loading} error={order.error} empty={items.length === 0}>
             <Table size="small">
@@ -235,7 +232,6 @@ export default function NewReport() {
                       </TableCell>
                       <TableCell>
                         <Button
-                          size="small"
                           variant="contained"
                           disabled={left <= 0}
                           onClick={() => setItemId(it.id)}
@@ -257,7 +253,7 @@ export default function NewReport() {
         <>
           <Panel
             title={`Certificate for item #${chosenItem.id} on ${order.data?.data.order_no}`}
-            actions={<Button size="small" onClick={() => setItemId(null)}>Change item</Button>}
+            actions={<Button onClick={() => setItemId(null)}>Change item</Button>}
           >
             <Stack spacing={2.5} sx={{ p: 2 }}>
               <TextField

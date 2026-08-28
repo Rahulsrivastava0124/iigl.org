@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { ComponentType, ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
@@ -11,6 +12,7 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  InputAdornment,
   Paper,
   Stack,
   TableContainer,
@@ -18,8 +20,15 @@ import {
   Typography,
 } from '@mui/material';
 import type { SvgIconProps } from '@mui/material';
+import TextField from '@mui/material/TextField';
+import SearchIcon from '@mui/icons-material/SearchOutlined';
+import ClearIcon from '@mui/icons-material/CloseOutlined';
+import ShowIcon from '@mui/icons-material/VisibilityOutlined';
+import HideIcon from '@mui/icons-material/VisibilityOffOutlined';
+import type { TextFieldProps } from '@mui/material';
 import type { PageMeta } from '../lib/api';
 import { BRAND, TONE } from '../lib/theme';
+import type { ToneName } from '../lib/theme';
 
 /**
  * A message about a state, coloured by what the state is.
@@ -32,24 +41,29 @@ import { BRAND, TONE } from '../lib/theme';
  *
  * Three chips used to decide their own colours, which was fine at three and
  * would have become a fourth mapping at the fourth status column. Settled,
- * unfinished, refused, plain — every state in the panel is one of those four,
- * whatever the column is called.
+ * unfinished, refused, plain — every status in the panel is one of those four,
+ * whatever the column is called, plus the two flag colours the Yes/No columns
+ * carry over from the Laravel panel.
  */
-export type Tone = 'settled' | 'waiting' | 'refused' | 'plain';
+export type Tone = ToneName;
 
 const TONE_COLOUR = {
   settled: 'success',
   waiting: 'warning',
   refused: 'error',
   plain: 'default',
+  yes: 'success',
+  no: 'error',
 } as const satisfies Record<Tone, 'success' | 'warning' | 'error' | 'default'>;
 
-/** The same four tones, as Material UI names them on an Alert. */
+/** The same tones, as Material UI names them on an Alert. */
 const TONE_SEVERITY: Record<Tone, 'success' | 'warning' | 'error' | 'info'> = {
   settled: 'success',
   waiting: 'warning',
   refused: 'error',
   plain: 'info',
+  yes: 'success',
+  no: 'error',
 };
 
 /** For the rare control that needs the colour rather than a component. */
@@ -107,7 +121,7 @@ export function orderState(status: string): { tone: Tone; label: string } {
 }
 
 export function flagState(on: boolean | number): { tone: Tone; label: string } {
-  return on ? { tone: 'settled', label: 'Yes' } : { tone: 'plain', label: 'No' };
+  return on ? { tone: 'yes', label: 'Yes' } : { tone: 'no', label: 'No' };
 }
 
 export function Notice({
@@ -144,8 +158,8 @@ export function Notice({
  * A screen used to open with its own title and description above the panel,
  * which said again what the breadcrumb in the top bar had already said, and
  * cost a block of height on every page to do it. The trail names the screen;
- * the panel header carries the record count, the filters and the one button
- * that acts on the whole list.
+ * the panel header carries the filters and the one button that acts on the
+ * whole list, and the record count sits under the table it counts.
  */
 
 /**
@@ -243,34 +257,45 @@ export function Tile({
 
 export function Panel({
   title,
+  subtitle,
   count,
+  footer,
   actions,
   children,
 }: {
   title?: string;
   /**
-   * How many records the table below holds. It sits on the filter row rather
-   * than under the page title because it describes what the filters are
-   * currently selecting, and it changes when they do — reading it beside them
-   * costs no vertical space and puts cause next to effect.
+   * What this panel is about, beside the title — the account, the customer.
+   * Not a row count: that is `count`, and it belongs under the table.
+   */
+  subtitle?: ReactNode;
+  /**
+   * How many records the table holds. It sits under the table, not beside the
+   * title: it describes what you have just finished reading, and a table long
+   * enough for the number to matter is one you are looking at the bottom of by
+   * the time you want it.
    */
   count?: ReactNode;
+  /**
+   * The table's footer, beside the count — in practice a `Pager`. It belongs
+   * on the same rule as the count rather than above it, which is two footers
+   * stacked and reads as one of them having come loose.
+   */
+  footer?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-      {(title || count || actions) && (
+      {(title || subtitle || actions) && (
         <Stack
           direction="row"
-         
-         
-         
           spacing={1.5}
           // One row, always. The header is a heading, a count and the controls
           // for the table under it, and wrapping turned it into a two-line
-          // block that pushed the table down. Everything here either shrinks
-          // or truncates instead; only the buttons keep their full width.
+          // block that pushed the table down. The title side truncates; the
+          // filters keep their width, because a select squeezed to "St…" is
+          // not a control any more.
           sx={{
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -281,7 +306,7 @@ export function Panel({
             borderColor: 'divider',
           }}
         >
-          {title || count ? (
+          {title || subtitle ? (
             <Stack
               direction="row"
               spacing={1.25}
@@ -292,13 +317,13 @@ export function Panel({
                   {title}
                 </Typography>
               )}
-              {count && (
+              {subtitle && (
                 <Typography
                   variant="body2"
                   color="text.secondary"
                   sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
                 >
-                  {count}
+                  {subtitle}
                 </Typography>
               )}
             </Stack>
@@ -309,7 +334,7 @@ export function Panel({
             <Stack
               direction="row"
               spacing={1}
-              sx={{ alignItems: 'center', minWidth: 0, flexShrink: 1 }}
+              sx={{ alignItems: 'center', flexShrink: 0 }}
             >
               {actions}
             </Stack>
@@ -317,7 +342,106 @@ export function Panel({
         </Stack>
       )}
       {children}
+      {(count || footer) && (
+        <Stack
+          direction="row"
+          spacing={1.5}
+          sx={{
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            px: 2,
+            py: 1.25,
+            borderTop: 1,
+            borderColor: 'divider',
+          }}
+        >
+          <Typography variant="body2" color="text.secondary" className="tabular">
+            {count}
+          </Typography>
+          {footer}
+        </Stack>
+      )}
     </Paper>
+  );
+}
+
+/**
+ * A form that opens above the list it writes into, rather than over it.
+ *
+ * Shown on click, not permanently: a page whose list is pushed down by a form
+ * nobody asked for is worse than a dialog. Once open it leaves the list
+ * readable underneath, which is the reason to prefer it to one.
+ *
+ * Adding and editing are the same form — the only difference is what the two
+ * buttons are called — so a screen holds one rather than an add form and an
+ * edit form that drift apart.
+ *
+ * The props deliberately match `Dialog`, so a screen can move between the two
+ * by changing the tag and nothing else.
+ */
+export function FormPanel({
+  title,
+  onClose,
+  onSubmit,
+  submitLabel = 'Save',
+  busy,
+  children,
+}: {
+  title: string;
+  /** Closes the form and empties it. The button says "Cancel". */
+  onClose: () => void;
+  onSubmit: () => void;
+  submitLabel?: string;
+  busy?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    // Panel carries no margin of its own, and a list always follows this.
+    <Box sx={{ mb: 2 }}>
+      <Panel title={title}>
+        <Box
+          component="form"
+          onSubmit={(e: React.FormEvent) => {
+            e.preventDefault();
+            onSubmit();
+          }}
+          sx={{ p: 2 }}
+        >
+          {/*
+            Fields lay out on a grid rather than in a row of fixed widths. A
+            page-wide panel is far wider than any one field wants to be, so left
+            to themselves they either stretch across the whole card or sit in a
+            ragged line of hand-picked pixel widths that stops lining up the
+            moment a field is added.
+
+            Each direct child takes one cell. A field that needs the full width
+            — anything multiline — asks for it with `gridColumn: '1 / -1'`.
+          */}
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: '1fr',
+                sm: 'repeat(2, minmax(0, 1fr))',
+                lg: 'repeat(3, minmax(0, 1fr))',
+              },
+              gap: 2,
+              alignItems: 'start',
+            }}
+          >
+            {children}
+          </Box>
+          <Stack direction="row" spacing={1} sx={{ mt: 3 }}>
+            <Button type="submit" variant="contained" disabled={busy}>
+              {busy ? 'Saving…' : submitLabel}
+            </Button>
+            <Button type="button" color="inherit" onClick={onClose}>
+              Cancel
+            </Button>
+          </Stack>
+        </Box>
+      </Panel>
+    </Box>
   );
 }
 
@@ -326,11 +450,13 @@ export function TableFrame({
   loading,
   error,
   empty,
+  emptyText = 'Nothing here yet.',
   children,
 }: {
   loading: boolean;
   error: string | null;
   empty: boolean;
+  emptyText?: string;
   children: ReactNode;
 }) {
   if (loading) {
@@ -350,7 +476,7 @@ export function TableFrame({
   if (empty) {
     return (
       <Typography sx={{ py: 5, textAlign: 'center' }} color="text.secondary" variant="body2">
-        Nothing here yet.
+        {emptyText}
       </Typography>
     );
   }
@@ -360,21 +486,17 @@ export function TableFrame({
 export function Pager({ meta, onPage }: { meta: PageMeta | undefined; onPage: (page: number) => void }) {
   if (!meta || meta.total_pages <= 1) return null;
   return (
-    <Stack
-      direction="row"
-     
-      spacing={1.5}
-      sx={{ alignItems: 'center', px: 2, py: 1.25, borderTop: 1, borderColor: 'divider' }}
-    >
+    // Sits in the Panel's footer row, which supplies the padding and the rule.
+    // The total is the count's job on the other side of that row, not repeated
+    // here.
+    <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', flexShrink: 0 }}>
       <Typography variant="body2" color="text.secondary" className="tabular">
-        {meta.total.toLocaleString()} rows · page {meta.page} of {meta.total_pages}
+        Page {meta.page} of {meta.total_pages}
       </Typography>
-      <Box sx={{ flex: 1 }} />
-      <Button size="small" disabled={meta.page <= 1} onClick={() => onPage(meta.page - 1)}>
+      <Button disabled={meta.page <= 1} onClick={() => onPage(meta.page - 1)}>
         Previous
       </Button>
       <Button
-        size="small"
         disabled={meta.page >= meta.total_pages}
         onClick={() => onPage(meta.page + 1)}
       >
@@ -394,6 +516,107 @@ export function OrderChip({ status }: { status: string }) {
 
 export function YesNo({ on }: { on: boolean | number }) {
   return <StateChip {...flagState(on)} />;
+}
+
+/**
+ * The search box that sits in a list's header.
+ *
+ * One component so that every list searches the same way and looks the same
+ * doing it. Whether the term filters rows already loaded or is sent to the API
+ * is the page's business — this only collects it.
+ *
+ * The clear button matters more than it looks: a list narrowed by a term left
+ * in the box reads as an empty list, and the fastest way out of that has to be
+ * visible.
+ */
+export function SearchField({
+  placeholder = 'Search…',
+  value,
+  onChange,
+  width = 240,
+}: {
+  placeholder?: string;
+  value: string;
+  onChange: (value: string) => void;
+  width?: number;
+}) {
+  return (
+    <TextField
+      placeholder={placeholder}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      sx={{ width }}
+      slotProps={{
+        input: {
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchIcon fontSize="small" />
+            </InputAdornment>
+          ),
+          endAdornment: value ? (
+            <InputAdornment position="end">
+              <IconButton size="small" aria-label="Clear search" onClick={() => onChange('')}>
+                <ClearIcon fontSize="small" />
+              </IconButton>
+            </InputAdornment>
+          ) : null,
+        },
+      }}
+    />
+  );
+}
+
+/**
+ * A password box with a control to read what has been typed.
+ *
+ * Typing a password blind is where sign-in failures actually come from — a
+ * held shift key, a keyboard on the wrong layout, a character dropped by a
+ * phone keyboard — and the person cannot tell which. Showing it is their
+ * choice and stays off until they make it.
+ *
+ * It reverts to hidden whenever the field is emptied, so a value revealed on
+ * one account is not still on screen for the next.
+ *
+ * Every other TextField prop passes through, so a caller still sets its own
+ * label, `autoComplete` and validation.
+ */
+export function PasswordField({ value, ...props }: TextFieldProps) {
+  const [shown, setShown] = useState(false);
+  const empty = !value;
+
+  useEffect(() => {
+    if (empty) setShown(false);
+  }, [empty]);
+
+  return (
+    <TextField
+      {...props}
+      value={value}
+      type={shown ? 'text' : 'password'}
+      slotProps={{
+        ...props.slotProps,
+        input: {
+          ...(props.slotProps?.input as object),
+          endAdornment: (
+            <InputAdornment position="end">
+              <IconButton
+                size="small"
+                edge="end"
+                onClick={() => setShown((s) => !s)}
+                aria-label={shown ? 'Hide password' : 'Show password'}
+                // Keeps the toggle out of the tab order between the field and
+                // the submit button: tabbing off a password should sign you in,
+                // not land on a control you did not ask for.
+                tabIndex={-1}
+              >
+                {shown ? <HideIcon fontSize="small" /> : <ShowIcon fontSize="small" />}
+              </IconButton>
+            </InputAdornment>
+          ),
+        },
+      }}
+    />
+  );
 }
 
 /**
@@ -490,7 +713,6 @@ export function ToneAction({
 }) {
   return (
     <Button
-      size="small"
       // Filled rather than outlined: these decide something, and on a row of
       // otherwise quiet controls the fill is what makes the pair read at a
       // glance as accept and refuse.

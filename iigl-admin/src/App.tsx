@@ -4,6 +4,9 @@ import { AuthProvider, useAuth } from './lib/auth';
 import { PermissionProvider } from './lib/permissions';
 import { basenameFor, currentPortal } from './lib/portal';
 import Shell from './components/Shell';
+import { ToastProvider } from './components/Toast';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Orders from './pages/Orders';
@@ -44,7 +47,18 @@ function Routed() {
       </Box>
     );
   }
-  if (!user) return <Login />;
+  // Signed out, the panel is three pages: sign in, asking for a reset link, and
+  // the page that link opens. All three have to be reachable by someone who
+  // cannot sign in, which is the whole point of them.
+  if (!user) {
+    return (
+      <Routes>
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="*" element={<Login />} />
+      </Routes>
+    );
+  }
 
   return (
     <PermissionProvider>
@@ -117,7 +131,9 @@ export default function App() {
   return (
     <BrowserRouter basename={basename || undefined}>
       <AuthProvider>
-        <Routed />
+        <ToastProvider>
+          <Routed />
+        </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   );

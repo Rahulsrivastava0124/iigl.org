@@ -18,10 +18,11 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/AddOutlined';
 import RemoveIcon from '@mui/icons-material/DeleteOutlineOutlined';
+import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Notice, Panel } from '../components/ui';
+import { Panel } from '../components/ui';
 import type { Category } from '../lib/api';
 
 interface Item {
@@ -46,6 +47,7 @@ const BLANK_ITEM: Item = { category_id: '', qty: '1', smart_card: true, classic_
  * with.
  */
 export default function NewOrder() {
+  const toast = useToast();
   const navigate = useNavigate();
   const categories = useFetch<{ data: Category[] }>('/catalog/categories');
   const cats = categories.data?.data ?? [];
@@ -60,8 +62,6 @@ export default function NewOrder() {
   });
   const [items, setItems] = useState<Item[]>([{ ...BLANK_ITEM }]);
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [found, setFound] = useState<string | null>(null);
 
   const set = (key: keyof typeof customer, v: string) =>
     setCustomer((c) => ({ ...c, [key]: v }));
@@ -73,7 +73,6 @@ export default function NewOrder() {
   const lookup = async () => {
     const mobile = customer.mobile.trim();
     if (mobile.length < 10) return;
-    setFound(null);
     try {
       const res = await api.get<{ data: Record<string, string> | null }>(
         `/orders/customer/lookup?mobile=${encodeURIComponent(mobile)}`,
@@ -88,7 +87,7 @@ export default function NewOrder() {
         gst: c.gst ?? prev.gst,
         address: c.address ?? prev.address,
       }));
-      setFound(`Filled in from the last order for ${c.customer_name ?? mobile}.`);
+      toast.ok(`Filled in from the last order for ${c.customer_name ?? mobile}.`);
     } catch {
       // A number nobody has ordered under is the normal case, not an error.
     }
@@ -96,7 +95,6 @@ export default function NewOrder() {
 
   const save = async () => {
     setBusy(true);
-    setErr(null);
     try {
       const res = await api.post<{ data: { id: number } }>('/orders', {
         ...customer,
@@ -109,7 +107,7 @@ export default function NewOrder() {
       });
       navigate(`/orders/${res.data.id}`);
     } catch (e) {
-      setErr(messageOf(e));
+      toast.error(messageOf(e));
       setBusy(false);
     }
   };
@@ -123,8 +121,6 @@ export default function NewOrder() {
 
   return (
     <>
-      {err && <Notice kind="error">{err}</Notice>}
-      {found && <Notice kind="ok">{found}</Notice>}
 
       <Panel title="Customer">
         <Stack spacing={2} sx={{ maxWidth: 720 }}>
@@ -183,7 +179,6 @@ export default function NewOrder() {
         title="Items"
         actions={
           <Button
-            size="small"
             startIcon={<AddIcon />}
             onClick={() => setItems((rows) => [...rows, { ...BLANK_ITEM }])}
           >

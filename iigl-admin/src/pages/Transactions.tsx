@@ -10,10 +10,20 @@ import {
   TableRow,
   TextField,
 } from '@mui/material';
-import { useFetch } from '../lib/useFetch';
+import { useToast } from '../components/Toast';
+import { useFetch, useDebounced } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import { Notice, Pager, Panel, StatusChip, TableFrame, Tile, ToneAction, money } from '../components/ui';
+import {
+  Pager,
+  Panel,
+  SearchField,
+  StatusChip,
+  TableFrame,
+  Tile,
+  ToneAction,
+  money,
+} from '../components/ui';
 import type { Paged, Transaction } from '../lib/api';
 import { isAdmin } from '../lib/portal';
 import ApproveIcon from '@mui/icons-material/CheckCircleOutlined';
@@ -44,6 +54,7 @@ interface LedgerPage {
 }
 
 export default function Transactions() {
+  const toast = useToast();
   const { user } = useAuth();
 
   // The menu points here three ways: the history, the pending queue awaiting a
@@ -53,12 +64,14 @@ export default function Transactions() {
 
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState(params.get('status') ?? '');
-  const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
+
+  const [search, setSearch] = useState('');
+  const term = useDebounced(search);
 
   const query = new URLSearchParams({ page: String(page), per_page: '25' });
   if (status !== '') query.set('status', status);
+  if (term.trim()) query.set('q', term.trim());
 
   const { data, loading, error: loadError, reload } = useFetch<Paged<Transaction>>(
     ledgerView ? null : `/transactions?${query}`,
@@ -72,14 +85,12 @@ export default function Transactions() {
 
   const decide = async (id: number, next: 1 | 2) => {
     setBusyId(id);
-    setError(null);
-    setDone(null);
     try {
       await api.post(`/transactions/${id}/status`, { status: next });
-      setDone(next === 1 ? 'Transaction approved.' : 'Transaction declined.');
+      toast.ok(next === 1 ? 'Transaction approved.' : 'Transaction declined.');
       reload();
     } catch (err) {
-      setError(messageOf(err));
+      toast.error(messageOf(err));
     } finally {
       setBusyId(null);
     }
@@ -87,8 +98,6 @@ export default function Transactions() {
 
   return (
     <>
-      {done && <Notice kind="ok">{done}</Notice>}
-      {error && <Notice kind="error">{error}</Notice>}
 
       {ledgerView ? (
         <>
@@ -146,9 +155,19 @@ export default function Transactions() {
         </>
       ) : (
       <Panel
+        footer={<Pager meta={data?.meta} onPage={setPage} />}
         title={status === '0' ? 'Commission approval' : 'Commission history'}
         count={data ? `${data.meta.total.toLocaleString()} records` : 'Loading…'}
         actions={
+          <>
+          <SearchField
+            placeholder="Transaction no, remark, mode…"
+            value={search}
+            onChange={(v) => {
+              setSearch(v);
+              setPage(1);
+            }}
+          />
           <TextField
             select
             label="Status"
@@ -158,13 +177,14 @@ export default function Transactions() {
               setPage(1);
               setParams(e.target.value === '' ? {} : { status: e.target.value });
             }}
-            sx={{ minWidth: 0, flex: '1 1 150px', maxWidth: 150 }}
+            sx={{ width: 150 }}
           >
             <MenuItem value="">All</MenuItem>
             <MenuItem value="0">Pending</MenuItem>
             <MenuItem value="1">Approved</MenuItem>
             <MenuItem value="2">Declined</MenuItem>
           </TextField>
+          </>
         }
       >
         <TableFrame loading={loading} error={loadError} empty={rows.length === 0}>
@@ -228,7 +248,6 @@ export default function Transactions() {
             </TableBody>
           </Table>
         </TableFrame>
-        <Pager meta={data?.meta} onPage={setPage} />
       </Panel>
       )}
     </>

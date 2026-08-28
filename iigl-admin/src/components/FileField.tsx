@@ -71,7 +71,6 @@ export default function FileField({
 
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mt: 0.5 }}>
         <Button
-          size="small"
           variant="outlined"
           startIcon={busy ? <CircularProgress size={14} /> : <UploadIcon />}
           disabled={busy}
@@ -81,7 +80,7 @@ export default function FileField({
         </Button>
 
         {value && (
-          <Button size="small" color="inherit" startIcon={<ClearIcon />} onClick={() => onChange(null)}>
+          <Button color="inherit" startIcon={<ClearIcon />} onClick={() => onChange(null)}>
             Remove
           </Button>
         )}

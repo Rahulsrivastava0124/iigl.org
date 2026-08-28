@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
 import { notFound } from '../lib/errors.js';
-import { paged, readPage } from '../lib/paginate.js';
+import { paged, readPage, readSearch } from '../lib/paginate.js';
 import { assertLabOwnership, requireLabScope, ROLE } from '../middleware/auth.js';
 import {
   createReport,
@@ -33,6 +33,14 @@ reportRoutes.get(
     if (orderId) {
       q = q.where('order_no', '=', orderId);
       c = c.where('order_no', '=', orderId);
+    }
+
+    // `description` is the attribute blob and `item_image` a path, so neither
+    // belongs in a search a person types.
+    const search = readSearch(req, ['report_no', 'order_no', 'comments']);
+    if (search) {
+      q = q.where(search);
+      c = c.where(search);
     }
 
     const [rows, count] = await Promise.all([

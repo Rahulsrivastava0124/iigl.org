@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
-import { paged, readPage } from '../lib/paginate.js';
+import { paged, readPage, readSearch } from '../lib/paginate.js';
 import { requireAdmin, requireLabScope, ROLE } from '../middleware/auth.js';
 import {
   invalidatePermissions,
@@ -72,12 +72,16 @@ userRoutes.get(
     const p = readPage(req);
     const labId = req.user.roleId === ROLE.ADMIN ? Number(req.query.lab_id) || null : req.user.labId;
 
+    // Qualified column names: the join puts a `mobile` on both sides.
+    const search = readSearch(req, ['users.fullname', 'users.mobile', 'users.email']);
+
     const base = () => {
       let q = db
         .selectFrom('employements')
         .innerJoin('users', 'users.id', 'employements.user_id')
         .where('employements.is_working', '=', '1');
       if (labId !== null) q = q.where('employements.parent_id', '=', labId);
+      if (search) q = q.where(search);
       return q;
     };
 

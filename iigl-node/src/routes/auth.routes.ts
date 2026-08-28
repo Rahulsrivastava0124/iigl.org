@@ -1,9 +1,35 @@
 import { Router } from 'express';
+import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
 import { badRequest, unauthorized } from '../lib/errors.js';
-import { requireAuth, resolveLabId, type SessionUser } from '../middleware/auth.js';
+import { env } from '../lib/env.js';
+import { sendPasswordReset } from '../lib/mail.js';
+import { requireAuth, resolveLabId } from '../middleware/auth.js';
+import { clearSession, issueSession, type SessionUser } from '../lib/session.js';
+
+/** How long a reset link works for. Long enough to read mail, short enough to matter. */
+const RESET_TTL_MS = 60 * 60 * 1000;
+
+/**
+ * The one account a reset may act on, or null.
+ *
+ * `users.email` carries no unique constraint and four addresses are currently
+ * held by two accounts each, exactly as mobile numbers are. Sign-in resolves
+ * that ambiguity with the password; a reset has no such second factor, so it
+ * refuses rather than guessing which of two people is asking.
+ */
+async function soleAccountFor(email: string) {
+  const rows = await db
+    .selectFrom('users')
+    .select(['id', 'fullname', 'email', 'is_active'])
+    .where('email', '=', email)
+    .execute();
+
+  const active = rows.filter((r) => r.is_active);
+  return active.length === 1 ? active[0] : null;
+}
 
 export const authRoutes = Router();
 
@@ -59,16 +85,106 @@ authRoutes.post(
       labId: await resolveLabId(Number(row.id), Number(row.role_id)),
     };
 
-    req.session.regenerate((err) => {
-      if (err) throw err;
-      req.session.user = user;
-      res.json({ user });
-    });
+    issueSession(res, user);
+    res.json({ user });
   }),
 );
 
-authRoutes.post('/logout', (req, res) => {
-  req.session.destroy(() => res.json({ ok: true }));
+/**
+ * Starts a password reset.
+ *
+ * Answers the same way whether or not the address is on an account: the reply
+ * to "is this email registered" must not depend on the answer, or the endpoint
+ * becomes a way to test addresses against the customer list.
+ *
+ * Tokens are stored hashed in `password_resets` — the Laravel table, already in
+ * the schema and empty — so a copy of the database is not a set of live reset
+ * links. Any earlier token for the address is dropped, so asking twice
+ * invalidates the first mail rather than leaving two keys in circulation.
+ */
+authRoutes.post(
+  '/forgot-password',
+  wrap(async (req, res) => {
+    const email = String(req.body?.email ?? '').trim().toLowerCase();
+    if (!email) throw badRequest('Enter the email address on your account.');
+
+    const said = {
+      ok: true,
+      message:
+        'If that address is on an account, a link to choose a new password is on its way. ' +
+        'It stops working in an hour.',
+    };
+
+    const user = await soleAccountFor(email);
+    if (!user) return res.json(said);
+
+    const token = randomBytes(32).toString('hex');
+
+    await db.deleteFrom('password_resets').where('email', '=', email).execute();
+    await db
+      .insertInto('password_resets')
+      .values({ email, token: await bcrypt.hash(token, 10), created_at: new Date() })
+      .execute();
+
+    const url = `${env.panelUrl}/reset-password?email=${encodeURIComponent(email)}&token=${token}`;
+    await sendPasswordReset(email, url, user.fullname);
+
+    res.json(said);
+  }),
+);
+
+/** Finishes a reset: the token from the mail, and the new password. */
+authRoutes.post(
+  '/reset-password',
+  wrap(async (req, res) => {
+    const email = String(req.body?.email ?? '').trim().toLowerCase();
+    const token = String(req.body?.token ?? '');
+    const password = String(req.body?.new_password ?? req.body?.password ?? '');
+
+    if (!email || !token) throw badRequest('This reset link is incomplete. Ask for a new one.');
+    if (password.length < 8) throw badRequest('New password must be at least 8 characters.');
+
+    const expired = badRequest('This reset link has expired or has already been used. Ask for a new one.');
+
+    const row = await db
+      .selectFrom('password_resets')
+      .select(['token', 'created_at'])
+      .where('email', '=', email)
+      .executeTakeFirst();
+    if (!row) throw expired;
+
+    const age = Date.now() - new Date(row.created_at ?? 0).getTime();
+    if (age > RESET_TTL_MS) {
+      await db.deleteFrom('password_resets').where('email', '=', email).execute();
+      throw expired;
+    }
+    if (!(await bcrypt.compare(token, row.token))) throw expired;
+
+    const user = await soleAccountFor(email);
+    if (!user) {
+      throw badRequest(
+        'This address is on more than one active account, so it cannot identify which to reset. ' +
+          'Ask an administrator to set your password.',
+      );
+    }
+
+    // Cost 10 matches the existing Laravel hashes, so old and new rows stay uniform.
+    await db
+      .updateTable('users')
+      .set({ password: await bcrypt.hash(password, 10), updated_at: new Date() })
+      .where('id', '=', user.id)
+      .execute();
+
+    // Single use: the link is spent whether or not the mail is still in an inbox.
+    await db.deleteFrom('password_resets').where('email', '=', email).execute();
+
+    res.json({ ok: true });
+  }),
+);
+
+authRoutes.post('/logout', (_req, res) => {
+  clearSession(res);
+  res.json({ ok: true });
 });
 
 authRoutes.get('/me', requireAuth, (req, res) => {

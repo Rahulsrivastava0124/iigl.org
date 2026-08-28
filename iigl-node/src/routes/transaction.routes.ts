@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
-import { paged, readPage } from '../lib/paginate.js';
+import { paged, readPage, readSearch } from '../lib/paginate.js';
 import { assertLabOwnership, requireLabScope, ROLE } from '../middleware/auth.js';
 import {
   ledgerFor,
@@ -42,6 +42,12 @@ transactionRoutes.get(
       const s = Number(req.query.status);
       q = q.where('status', '=', s);
       c = c.where('status', '=', s);
+    }
+
+    const search = readSearch(req, ['transaction_no', 'remark', 'pay_mode', 'transaction_type']);
+    if (search) {
+      q = q.where(search);
+      c = c.where(search);
     }
 
     const [rows, count] = await Promise.all([

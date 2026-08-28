@@ -24,7 +24,8 @@ two interpretations.
 | Server state | `useFetch` (`src/lib/useFetch.ts`) | One hook per screen; returns `data`, `loading`, `error`, `reload` |
 | Writes | `api` (`src/lib/api.ts`) | `get` / `post` / `patch` / `put` / `del`, always `credentials: include` |
 | Uploads | `FileField` | Uploads on choose, hands back a path; the form saves it |
-| Errors | `messageOf(err)` into a `Notice` | Never a bare thrown string |
+| Results | `messageOf(err)` into `toast.error` | Never a bare thrown string, never a banner |
+| Charts | Inline SVG (`TrendChart`) | No charting library is installed, and none is wanted |
 
 ### MUI v9 differs from v7 in three ways
 
@@ -135,15 +136,19 @@ fourth.
 
 ```tsx
 <PageHead title="Orders" subtitle="9,608 orders" action={<Button/>} />
-{msg && <Notice kind="ok">{msg}</Notice>}
-{err && <Notice kind="error">{err}</Notice>}
-<Panel actions={<TextField select … />}>
-  <TableFrame loading={…} error={…} empty={…}>
+<Panel
+  actions={<TextField select … />}
+  count={…}
+  footer={<Pager meta={data?.meta} onPage={setPage} />}
+>
+  <TableFrame loading={…} error={…} empty={…} emptyText={…}>
     <Table size="small" stickyHeader>…</Table>
   </TableFrame>
-  <Pager meta={data?.meta} onPage={setPage} />
 </Panel>
 ```
+
+Nothing sits between the head and the panel. A saved record is a toast, not a
+banner wedged in there — see **Messages**.
 
 **2. Detail** — head with a back action, then one `Panel` per section, figures in
 a tile grid.
@@ -162,6 +167,13 @@ gets its own route — see `NewReport`.
 5. **Every table is wrapped in `TableFrame`**, which owns loading, error and
    empty. Do not hand-roll a spinner.
 6. **Reload after a write.** The list is the truth, not the component's state.
+7. **The result of an action is a toast**, never a banner pushed in above the
+   panel. See **Messages** below for the one case that stays inline.
+8. **A form opens as a `FormPanel` above the list**, not as a row of fields
+   wedged into the table's toolbar.
+9. **Typecheck with `npx tsc -p tsconfig.app.json --noEmit`.** The root
+   `tsconfig.json` is a solution file with no files of its own — running `tsc`
+   against it reports success on code that does not compile.
 
 ---
 
@@ -201,10 +213,15 @@ handling and none should be added to a component.
 | `sx` value | Pixels | Between |
 | --- | --- | --- |
 | `0.5` | 4px | Buttons in a table row |
-| `1.5` | 12px | Tiles in a grid |
-| `2` | 16px | Fields in a dialog |
+| `1` | 8px | Tiles in a grid, controls in a panel header |
+| `1.5` | 12px | The padding a tile grid sits in |
+| `2` | 16px | Fields in a dialog; one dashboard panel and the next |
 | `2.5` | 20px | Page head and the first panel |
 | `4` | 32px | A section heading inside a screen |
+
+A dashboard is a dozen panels of tiles at once, so its gaps are the tight end of
+this table — `spacing={1}` inside a `p: 1.5` grid, `mt: 2` between panels. Wider
+than that and the screen reads as four separate pages stacked.
 
 ### Border radius
 
@@ -257,9 +274,10 @@ feel finished.
 | Page title and one action | `PageHead` | A bare `Typography variant="h1"` |
 | A surface | `Panel` | `Paper`, `Card`, `CardContent` |
 | A table's states | `TableFrame` | A hand-rolled `CircularProgress` |
-| Server pagination | `Pager` | `TablePagination` |
+| Server pagination | `Pager`, passed as `Panel footer={…}` | `TablePagination`, or `Pager` as a child |
 | A short form | `Dialog` | A raw `MuiDialog` |
-| A message | `Notice` | A bare `Alert` in the page body |
+| The result of an action | `useToast()` | `Notice`, a bare `Alert`, a `msg`/`err` state pair |
+| Something permanently true of the screen | `Notice` | A toast that vanishes |
 | A figure on a card | `Tile` | `Paper` with your own padding |
 | A file | `FileField` | A raw `<input type=file>` |
 | Money | `money()` | `toLocaleString` inline |
@@ -280,6 +298,50 @@ feel finished.
 - Wrapping text needs `sx={{ whiteSpace: 'normal', minWidth: 160 }}`; everything
   else stays on one line and the container scrolls.
 
+### Panel anatomy
+
+A list screen is one `Panel`, and everything has a fixed place in it:
+
+```tsx
+<Panel
+  title="Attribute values"
+  actions={<Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+    <SearchField … /> {branchFilters(220)} <Button variant="contained" startIcon={<AddIcon />}>Add value</Button>
+  </Stack>}
+  count={`${shown} of ${total} in ${branch}`}
+  footer={<Pager meta={data?.meta} onPage={setPage} />}
+>
+  <TableFrame …><Table size="small" stickyHeader>…</Table></TableFrame>
+</Panel>
+```
+
+- **Header, one row, in this order:** search, filters, the primary action.
+  Selects in a header take a fixed width — 220 — so they line up; the same
+  selects in a form take none and fill their grid cell.
+- **Footer, one row:** the count on the left, the `Pager` on the right, sharing
+  a single rule. Two stacked footers is the bug this replaced.
+- **`Panel` pads nothing**, so a table can run edge to edge. Anything else you
+  put in a panel supplies its own `px: 2, py: 1.5`.
+- **A filter that is not set says so:** `TableFrame emptyText="Select a
+  category."` rather than an empty table or "Nothing here yet."
+
+### Filters and forms share their selects
+
+Where a form needs the same Category / Subcategory pair the header filters, it
+is **one function returning both fields**, called twice — never a second copy:
+
+```tsx
+const branchFilters = (width?: number) => ( … );   // header: 220. form: undefined
+```
+
+While **adding**, the form's selects drive the page filter, so the list behind
+follows what you are about to create. While **editing** they are form-local: a
+row that refilters itself out from under you mid-edit is the same bug twice.
+
+**Never hold a picked record as an object found in a list.** Hold its id and
+derive the record. `rows.find(…)` against a list fetched for another branch
+returns `undefined`, and a save guarded on that object silently does nothing.
+
 ### Buttons
 
 | Variant | Use | Count |
@@ -297,6 +359,42 @@ feel finished.
 - Constraints go in `slotProps.htmlInput`: `{ min: 0, step: 0.001 }`.
 - Explanation goes in `helperText`, not a paragraph above the field.
 - Dialogs stack fields in `<Stack spacing={2}>`.
+
+---
+
+## Messages
+
+**The result of an action is a toast.** `useToast()` from
+`src/components/Toast.tsx`, mounted once in `App.tsx`:
+
+```tsx
+const toast = useToast();
+…
+try {
+  await api.patch(`/admin/attributes/${id}`, body);
+  toast.ok('Attribute updated.');
+  reload();
+} catch (e) {
+  toast.error(messageOf(e));
+}
+```
+
+`ok` · `error` · `info`. Bottom right, 4s for a success and 8s for a failure,
+one at a time with the rest queued. Click-away does not dismiss it — a message
+must not disappear because someone clicked the table behind it.
+
+There is no `msg` / `err` state pair on a page any more, and no
+`{msg && <Notice kind="ok">…}` above the panel. That pattern moved the whole
+page down on every save and then sat there until something else replaced it.
+
+**`Notice` is for what stays true**, not for what just happened:
+
+| Case | Use |
+| --- | --- |
+| Saved, deleted, moved, failed | `toast` |
+| The fetch behind this screen failed | `Notice` — it describes what you are looking at |
+| A standing explanation (a role has no permissions yet) | `Notice` |
+| Sign-in, forgot password, reset | `Notice` — the message belongs on the form, and these render outside the shell |
 
 ---
 
@@ -406,7 +504,7 @@ Base path is `VITE_API_URL`, default `/api`. See `src/lib/config.ts`.
 ```
 
 **Errors are always the same shape.** `messageOf(err)` pulls the message out;
-put it in a `Notice`, never in the table body.
+put it in `toast.error`, never in the table body.
 
 ```json
 { "error": "conflict", "message": "All 2 reports for this item have already been created." }
@@ -459,7 +557,8 @@ the same colour on every screen:
 | Where | How |
 | --- | --- |
 | Chips | `StateChip` with `transactionState()`, `orderState()`, `flagState()`, `attendanceState()`, `remainingState()` |
-| Messages | `Notice` — `kind` (`ok`/`error`/`warn`/`info`) resolves to a tone, then to an Alert severity |
+| The result of an action | `toast.ok` / `toast.error` — an `Alert` inside a `Snackbar`, severity from the call |
+| A standing message | `Notice` — `kind` (`ok`/`error`/`warn`/`info`) resolves to a tone, then to an Alert severity |
 | Figures | `Tile tone=` — the dashboard's Outstanding is `waiting` while anything is owed, `settled` at zero |
 | Destructive controls | `IconAction danger` — nothing types `color="error"` at a call site |
 | The rest | `toneColour(tone)` for the odd badge or line of text |
@@ -522,9 +621,34 @@ the instruction, not a repetition.
    follow the rules under **The menu** and add its label to `VIEWS` in
    `src/lib/breadcrumbs.ts`; a child route goes in `LEAVES`.
 3. Start from `PageHead` + `Panel` + `TableFrame`. Load with `useFetch`.
-4. Write with `api.*`, catch with `messageOf(err)`, show the result in a
-   `Notice`, then `reload()`.
+4. Write with `api.*`, catch with `messageOf(err)`, report with
+   `toast.ok` / `toast.error`, then `reload()`.
 5. Gate every write control behind a permission check.
+6. Typecheck with `npx tsc -p tsconfig.app.json --noEmit` and build with
+   `npx vite build`. The root `tsconfig.json` checks nothing.
+
+---
+
+## Charts
+
+There is no charting library, and adding one needs a reason bigger than a
+dashboard panel. `src/components/TrendChart.tsx` is a twelve-month area chart in
+about seventy lines of inline SVG: one path for the line, one for the fill, and
+a `<linearGradient>` from the series colour at 38% down to transparent — which
+is the whole reason it reads as an area rather than a shape.
+
+- The gradient id comes from `useId()`. Two charts on one page that share an id
+  share a fill, and the second one gets the first one's colours.
+- The line path takes `vectorEffect="non-scaling-stroke"`, or the
+  `preserveAspectRatio="none"` stretch thins it unevenly.
+- Colour comes from `BRAND`. Navy for the primary series, gold for the second —
+  gold is legible here because it is a 2px line, not a text colour.
+- No axis, no tooltip, no zoom. The shape of the last year is the point; the
+  exact figures are the tiles above it.
+
+**Never chart a column that is mostly zero.** `orders.payable_amt` is 0 on most
+recent rows, so a revenue line draws a collapse that did not happen. The
+dashboard charts orders and certificates because both are real for every month.
 
 ---
 

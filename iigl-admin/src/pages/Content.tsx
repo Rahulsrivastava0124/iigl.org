@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  Box,
   Button,
   Chip,
-  Stack,
   Tab,
   Table,
   TableBody,
@@ -14,12 +14,29 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import AddIcon from '@mui/icons-material/AddOutlined';
+import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Dialog, IconAction, Notice, Panel, RowActions, TableFrame, YesNo } from '../components/ui';
+import {
+  FormPanel,
+  IconAction,
+  Panel,
+  RowActions,
+  SearchField,
+  TableFrame,
+  YesNo,
+} from '../components/ui';
+
+/** True when the row's text contains the term. Case-insensitive; blank matches all. */
+const hits = (term: string, ...fields: (string | number | null | undefined)[]) => {
+  const q = term.trim().toLowerCase();
+  if (!q) return true;
+  return fields.some((f) => f != null && String(f).toLowerCase().includes(q));
+};
+
 import FileField from '../components/FileField';
+import AddIcon from '@mui/icons-material/AddOutlined';
 import EditIcon from '@mui/icons-material/EditOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
 
@@ -41,15 +58,30 @@ interface Editing {
   image: string | null;
 }
 
+/**
+ * An empty record for a section, which is the shape its form renders from.
+ *
+ * The form is a panel on the page rather than a dialog, so it needs these
+ * fields before anyone has clicked anything — a dialog could wait until the
+ * Add button said which section it was for.
+ */
+const blankFor = (section: Section): Record<string, string> =>
+  section === 'articles'
+    ? { page_name: '', slug: '', content: '', meta_title: '', meta_description: '' }
+    : section === 'branches'
+      ? { city: '', pageURL: '', h1: '', content: '', title: '', description: '' }
+      : section === 'types'
+        ? { name: '', short_description: '', description: '' }
+        : { name: '', img_type: '', url: '' };
+
 export default function Content() {
+  const toast = useToast();
   // The sidebar links straight to a tab, so the URL decides which is open.
   const [params, setParams] = useSearchParams();
   const section = (params.get('tab') as Section) ?? 'articles';
   const setSection = (next: Section) => setParams({ tab: next });
   const [editing, setEditing] = useState<Editing | null>(null);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
 
   const articles = useFetch<{ data: any[] }>(section === 'articles' ? '/public/blogs' : null);
   const branches = useFetch<{ data: any[] }>(section === 'branches' ? '/public/branches' : null);
@@ -62,16 +94,28 @@ export default function Content() {
   const open = (values: Record<string, string>, id?: number, image: string | null = null) =>
     setEditing({ section, id, values, image });
 
+  const clear = () => setEditing(null);
+
+  /**
+   * What the form is showing: the record being edited, or an empty one for the
+   * section in view. Switching tabs drops an edit rather than carrying it over,
+   * since the record belongs to the tab just left.
+   */
+  const form: Editing =
+    editing && editing.section === section
+      ? editing
+      : { section, values: blankFor(section), image: null };
+
   const set = (key: string, v: string) =>
-    setEditing((e) => (e ? { ...e, values: { ...e.values, [key]: v } } : e));
+    setEditing((e) => {
+      const base = e && e.section === section ? e : form;
+      return { ...base, values: { ...base.values, [key]: v } };
+    });
 
   const save = async () => {
-    if (!editing) return;
     setBusy(true);
-    setErr(null);
-    setMsg(null);
 
-    const { section: s, id, values, image } = editing;
+    const { section: s, id, values, image } = form;
     const paths: Record<Section, string> = {
       articles: '/content/blogs',
       branches: '/content/branches',
@@ -88,37 +132,40 @@ export default function Content() {
     try {
       if (id) {
         await api.patch(`${paths[s]}/${id}`, body);
-        setMsg('Saved.');
+        toast.ok('Saved.');
       } else {
         await api.post(paths[s], body);
-        setMsg('Added.');
+        toast.ok('Added.');
       }
       setEditing(null);
       source.reload();
     } catch (e) {
-      setErr(messageOf(e));
+      toast.error(messageOf(e));
     } finally {
       setBusy(false);
     }
   };
 
   const removeBanner = async (id: number) => {
-    setErr(null);
     try {
       await api.del(`/content/banners/${id}`);
-      setMsg('Banner removed.');
+      toast.ok('Banner removed.');
       banners.reload();
     } catch (e) {
-      setErr(messageOf(e));
+      toast.error(messageOf(e));
     }
   };
 
-  const rows = source.data?.data ?? [];
+  const all = source.data?.data ?? [];
+  const [search, setSearch] = useState('');
+  // The four sections hold different shapes, so the search looks at whichever
+  // of these a row happens to carry rather than at a fixed column list.
+  const rows = all.filter((r: any) =>
+    hits(search, r.id, r.page_name, r.slug, r.title, r.city, r.pageURL, r.h1, r.page_type, r.img_type),
+  );
 
   return (
     <>
-      {msg && <Notice kind="ok">{msg}</Notice>}
-      {err && <Notice kind="error">{err}</Notice>}
 
       <Tabs
         value={section}
@@ -130,29 +177,59 @@ export default function Content() {
         ))}
       </Tabs>
 
+      {editing && editing.section === section && (
+        <FormPanel
+          title={`${form.id ? 'Edit' : 'Add'} ${SECTIONS.find((s) => s.id === section)!.label.replace(/s$/, '').toLowerCase()}`}
+          onClose={clear}
+          onSubmit={save}
+          submitLabel={form.id ? 'Save changes' : 'Add'}
+          busy={busy}
+        >
+          {Object.keys(form.values).map((key) => {
+              const long = key === 'content' || key === 'description';
+              return (
+                <TextField
+                  key={key}
+                  label={key.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())}
+                  value={form.values[key]}
+                  onChange={(e) => set(key, e.target.value)}
+                  multiline={long}
+                  minRows={long ? 4 : undefined}
+                  // A body of text needs the width; a slug does not.
+                  sx={long ? { gridColumn: '1 / -1' } : undefined}
+                  required={['page_name', 'city', 'name', 'img_type'].includes(key)}
+                />
+              );
+          })}
+
+          <Box sx={{ gridColumn: '1 / -1' }}>
+            <FileField
+              label={section === 'banners' ? 'Image' : 'Banner image'}
+              bucket={section === 'branches' || section === 'banners' ? 'banner' : 'website'}
+              value={form.image}
+              onChange={(path) => setEditing({ ...form, image: path })}
+            />
+          </Box>
+        </FormPanel>
+      )}
+
       <Panel
         title={SECTIONS.find((s) => s.id === section)?.label ?? 'Website content'}
+        count={source.loading ? 'Loading…' : `${rows.length} of ${all.length}`}
         actions={
-          section !== 'pages' && (
-            <Button
-              size="small"
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() =>
-                open(
-                  section === 'articles'
-                    ? { page_name: '', slug: '', content: '', meta_title: '', meta_description: '' }
-                    : section === 'branches'
-                      ? { city: '', pageURL: '', h1: '', content: '', title: '', description: '' }
-                      : section === 'types'
-                        ? { name: '', short_description: '', description: '' }
-                        : { name: '', img_type: '', url: '' },
-                )
-              }
-            >
-              Add
-            </Button>
-          )
+          <>
+            <SearchField value={search} onChange={setSearch} />
+            {/* `pages` is a fixed set of site pages — they are edited, never added. */}
+            {section !== 'pages' && (
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => open(blankFor(section))}
+              >
+                Add
+              </Button>
+            )}
+          </>
         }
       >
         <TableFrame loading={source.loading} error={source.error} empty={rows.length === 0}>
@@ -288,45 +365,6 @@ export default function Content() {
         </Typography>
       )}
 
-      {editing && (
-        <Dialog
-          title={`${editing.id ? 'Edit' : 'Add'} ${SECTIONS.find((s) => s.id === editing.section)!.label.replace(/s$/, '').toLowerCase()}`}
-          onClose={() => setEditing(null)}
-          onSubmit={save}
-          busy={busy}
-        >
-          <Stack spacing={2}>
-            {Object.keys(editing.values).map((key) => {
-              const long = key === 'content' || key === 'description';
-              return (
-                <TextField
-                  key={key}
-                  label={key.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())}
-                  value={editing.values[key]}
-                  onChange={(e) => set(key, e.target.value)}
-                  multiline={long}
-                  minRows={long ? 4 : undefined}
-                  required={['page_name', 'city', 'name', 'img_type'].includes(key)}
-                  helperText={
-                    key === 'slug' || key === 'pageURL'
-                      ? 'The public address. Leave blank when adding and it is made from the title.'
-                      : key === 'img_type'
-                        ? 'Where on the site this banner appears.'
-                        : undefined
-                  }
-                />
-              );
-            })}
-
-            <FileField
-              label={editing.section === 'banners' ? 'Image' : 'Banner image'}
-              bucket={editing.section === 'branches' || editing.section === 'banners' ? 'banner' : 'website'}
-              value={editing.image}
-              onChange={(path) => setEditing((e) => (e ? { ...e, image: path } : e))}
-            />
-          </Stack>
-        </Dialog>
-      )}
     </>
   );
 }

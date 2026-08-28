@@ -17,6 +17,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
@@ -44,6 +45,7 @@ interface Quote {
 }
 
 export default function OrderDetail() {
+  const toast = useToast();
   const { id } = useParams();
   const order = useFetch<{ data: any }>(`/orders/${id}`);
   const [discount, setDiscount] = useState(0);
@@ -53,15 +55,12 @@ export default function OrderDetail() {
   const [paid, setPaid] = useState('');
   const [payMode, setPayMode] = useState('cash');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<string | null>(null);
 
   const o = order.data?.data;
   const q = quote.data?.data;
 
   const settle = async () => {
     setBusy(true);
-    setError(null);
     try {
       await api.post(`/orders/${id}/deliver`, {
         discount,
@@ -69,11 +68,11 @@ export default function OrderDetail() {
         pay_mode: payMode,
       });
       setSettling(false);
-      setDone('Order settled and marked delivered.');
+      toast.ok('Order settled and marked delivered.');
       order.reload();
       quote.reload();
     } catch (err) {
-      setError(messageOf(err));
+      toast.error(messageOf(err));
     } finally {
       setBusy(false);
     }
@@ -91,15 +90,13 @@ export default function OrderDetail() {
 
   return (
     <>
-      {done && <Notice kind="ok">{done}</Notice>}
-      {error && <Notice kind="error">{error}</Notice>}
 
       {/* Who the order belongs to travels with the first panel now that the
           page carries no heading. The breadcrumb already names the order, so
           this says the part the trail cannot: whose it is and where it is. */}
       <Panel
         title="Items"
-        count={
+        subtitle={
           <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
             <span>
               {o.customer_name} · {o.mobile} · taken {o.order_date}
@@ -110,14 +107,12 @@ export default function OrderDetail() {
         actions={
           <Stack direction="row" spacing={1}>
             <Button
-              size="small"
               startIcon={<PrintIcon />}
               onClick={() => window.open(apiUrl(`/cards/order/receipt/${id}`), '_blank', 'noopener')}
             >
               Receipt
             </Button>
             <Button
-              size="small"
               startIcon={<PrintIcon />}
               onClick={() => window.open(apiUrl(`/cards/order/invoice/${id}`), '_blank', 'noopener')}
             >
@@ -125,7 +120,6 @@ export default function OrderDetail() {
             </Button>
             {o.status !== 'delivered' && (
               <Button
-                size="small"
                 variant="contained"
                 onClick={() => setSettling(true)}
                 disabled={!q}

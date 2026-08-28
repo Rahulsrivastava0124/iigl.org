@@ -1,6 +1,6 @@
 # IIGL API
 
-102 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
+107 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
 
 The interactive version is at `/docs` when the server is running, and the raw
 document at `/openapi.json`.
@@ -96,9 +96,11 @@ Sign in, sign out, and the current session.
 | Method | Path | Auth | Query | Body | Fails | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
 | POST | `/api/auth/change-password` | session | — | **current_password**, **new_password** | 400, 401 | Change your own password |
+| POST | `/api/auth/forgot-password` | public | — | **email** | 400, 429 | Ask for a password reset link |
 | POST | `/api/auth/login` | public | — | **mobile**, **password** | 400, 401 | Sign in |
 | POST | `/api/auth/logout` | public | — | — | — | Sign out |
 | GET | `/api/auth/me` | session | — | — | 401 | Current session |
+| POST | `/api/auth/reset-password` | public | — | **email**, **token**, **new_password** | 400, 429 | Set a new password using a reset link |
 
 ## Public
 
@@ -125,8 +127,10 @@ Categories, subcategories, attributes and their values.
 
 | Method | Path | Auth | Query | Body | Fails | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/catalog/attribute-values` | session | `attr_id`, `subcategory_id`, `category_id`, `q`, `page`, `per_page` | — | 400, 401, 403 | Attribute values across a branch of the catalogue |
 | GET | `/api/catalog/attributes/{id}/values` | session | — | — | 401, 403 | Allowed values for an attribute |
 | GET | `/api/catalog/categories` | session | — | — | 401, 403 | List categories |
+| GET | `/api/catalog/categories/{id}/attributes` | session | — | — | 401, 403 | Certificate form fields across a whole category |
 | GET | `/api/catalog/categories/{id}/subcategories` | session | — | — | 401, 403 | Subcategories of a category |
 | GET | `/api/catalog/form-layouts/{categoryId}` | session | — | — | 401, 403, 404 | Form layout for a category |
 | GET | `/api/catalog/report-types` | session | — | — | 401, 403 | Certificate types |
@@ -200,6 +204,7 @@ Aggregate counts and totals.
 | Method | Path | Auth | Query | Body | Fails | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/dashboard/summary` | session | — | — | 401, 403 | Counts and totals |
+| GET | `/api/dashboard/trend` | session | — | — | 401, 403 | Twelve months of orders and certificates |
 
 ## Cards
 
@@ -219,10 +224,10 @@ Creating and editing categories, attributes and prices. Administrators only.
 | Method | Path | Auth | Query | Body | Fails | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
 | POST | `/api/admin/attribute-values` | session | — | **attr_id**, **value_name**, description, icon | 400, 401, 403, 409 | Add a attribute value |
-| PATCH | `/api/admin/attribute-values/{id}` | session | — | value_name, description, icon | 400, 401, 403, 404 | Update a attribute value |
+| PATCH | `/api/admin/attribute-values/{id}` | session | — | attr_id, value_name, description, icon | 400, 401, 403, 404 | Update a attribute value |
 | DELETE | `/api/admin/attribute-values/{id}` | session | — | — | 401, 403, 404 | Retire an attribute value |
 | POST | `/api/admin/attributes` | session | — | **attr_name**, **category_id**, **subcategory_id**, order_no, show_in_smart_card, show_in_classic_card, show_description, show_image, +2 more | 400, 401, 403, 409 | Add a attribute |
-| PATCH | `/api/admin/attributes/{id}` | session | — | attr_name, order_no, show_in_smart_card, show_in_classic_card, show_description, show_image, is_opensource, is_required | 400, 401, 403, 404 | Update a attribute |
+| PATCH | `/api/admin/attributes/{id}` | session | — | attr_name, category_id, subcategory_id, order_no, show_in_smart_card, show_in_classic_card, show_description, show_image, +2 more | 400, 401, 403, 404 | Update a attribute |
 | DELETE | `/api/admin/attributes/{id}` | session | — | — | 401, 403, 404 | Retire an attribute |
 | POST | `/api/admin/categories` | session | — | **name**, **unit**, description, short_description, banner, icon | 400, 401, 403, 409 | Add a category |
 | PATCH | `/api/admin/categories/{id}` | session | — | name, unit, description, short_description, banner, icon | 400, 401, 403, 404 | Update a category |
@@ -300,4 +305,4 @@ Views over orders, grouped by mobile number. There is no customer table.
 
 Bold body fields are required.
 
-102 endpoints: 14 public, 88 requiring a session.
+107 endpoints: 16 public, 91 requiring a session.

@@ -1,8 +1,10 @@
-import { Box, CircularProgress, Grid } from '@mui/material';
+import { Box, CircularProgress, Grid, Typography } from '@mui/material';
 import { useFetch } from '../lib/useFetch';
 import { Notice, Panel, Tile, money } from '../components/ui';
+import TrendChart from '../components/TrendChart';
+import { BRAND } from '../lib/theme';
 import type { Tone } from '../components/ui';
-import type { DashboardSummary } from '../lib/api';
+import type { DashboardSummary, TrendMonth } from '../lib/api';
 import OrdersIcon from '@mui/icons-material/ReceiptLongOutlined';
 import DeliveredIcon from '@mui/icons-material/TaskAltOutlined';
 import SmartCardIcon from '@mui/icons-material/CreditCardOutlined';
@@ -34,6 +36,7 @@ const owed = (amount: number): Tone => (amount > 0 ? 'refused' : 'settled');
 
 export default function Dashboard() {
   const { data, loading, error } = useFetch<{ data: DashboardSummary }>('/dashboard/summary');
+  const trend = useFetch<{ data: TrendMonth[] }>('/dashboard/trend');
   const s = data?.data;
   const n = (v: number) => v.toLocaleString();
 
@@ -49,7 +52,7 @@ export default function Dashboard() {
       {s && (
         <>
           <Panel title="Account">
-            <Grid container spacing={1.5} sx={{ p: 2 }}>
+            <Grid container spacing={1} sx={{ p: 1.5 }}>
               <Grid size={CELL}>
                 <Tile
                   label="Total collected"
@@ -113,9 +116,9 @@ export default function Dashboard() {
             </Grid>
           </Panel>
 
-          <Box sx={{ mt: 3 }}>
+          <Box sx={{ mt: 2 }}>
             <Panel title="Wallet">
-              <Grid container spacing={1.5} sx={{ p: 2 }}>
+              <Grid container spacing={1} sx={{ p: 1.5 }}>
                 <Grid size={CELL}>
                   <Tile
                     label="Current wallet"
@@ -153,9 +156,9 @@ export default function Dashboard() {
             </Panel>
           </Box>
 
-          <Box sx={{ mt: 3 }}>
+          <Box sx={{ mt: 2 }}>
             <Panel title="People">
-              <Grid container spacing={1.5} sx={{ p: 2 }}>
+              <Grid container spacing={1} sx={{ p: 1.5 }}>
                 {s.people.laboratories !== null && (
                   <Grid size={CELL}>
                     <Tile
@@ -195,9 +198,9 @@ export default function Dashboard() {
             </Panel>
           </Box>
 
-          <Box sx={{ mt: 3 }}>
+          <Box sx={{ mt: 2 }}>
             <Panel title="Today">
-              <Grid container spacing={1.5} sx={{ p: 2 }}>
+              <Grid container spacing={1} sx={{ p: 1.5 }}>
                 <Grid size={CELL}>
                   <Tile
                     label="Orders taken"
@@ -221,6 +224,36 @@ export default function Dashboard() {
                     note="all time"
                     fill="brand"
                     icon={CertificateIcon}
+                  />
+                </Grid>
+              </Grid>
+            </Panel>
+          </Box>
+
+          <Box sx={{ mt: 2 }}>
+            <Panel title="Last twelve months">
+              <Grid container spacing={1} sx={{ p: 1.5 }}>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Orders taken
+                  </Typography>
+                  <TrendChart
+                    points={(trend.data?.data ?? []).map((m) => ({
+                      label: m.label,
+                      value: m.orders,
+                    }))}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Certificates issued
+                  </Typography>
+                  <TrendChart
+                    points={(trend.data?.data ?? []).map((m) => ({
+                      label: m.label,
+                      value: m.reports,
+                    }))}
+                    colour={BRAND.gold}
                   />
                 </Grid>
               </Grid>

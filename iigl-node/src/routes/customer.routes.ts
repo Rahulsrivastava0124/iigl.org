@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
-import { paged, readPage } from '../lib/paginate.js';
+import { paged, readPage, readSearch } from '../lib/paginate.js';
 import { requireLabScope, ROLE } from '../middleware/auth.js';
 import { orderVisibility } from '../services/permission.service.js';
 
@@ -30,6 +30,7 @@ async function customerList(
   registered: boolean,
   limit: number,
   offset: number,
+  search: ((eb: any) => any) | null = null,
 ) {
   const s = await scope(user);
 
@@ -38,9 +39,13 @@ async function customerList(
     if (s.kind === 'lab') q = q.where('lab_id', '=', s.id);
     if (s.kind === 'own') q = q.where('received_by', '=', s.id);
     // A GST number is what makes a customer "registered".
-    return registered
+    q = registered
       ? q.where('gst', 'is not', null).where('gst', '!=', '')
       : q.where((eb) => eb.or([eb('gst', 'is', null), eb('gst', '=', '')]));
+    // Applied before the grouping, so a match on any of a customer's orders
+    // brings the customer back rather than only the row that matched.
+    if (search) q = q.where(search);
+    return q;
   };
 
   const [rows, count] = await Promise.all([
@@ -73,7 +78,8 @@ customerRoutes.get(
   '/registered',
   wrap(async (req, res) => {
     const p = readPage(req);
-    const { rows, total } = await customerList(req.user, true, p.limit, p.offset);
+    const search = readSearch(req, ['customer_name', 'mobile', 'email', 'gst']);
+    const { rows, total } = await customerList(req.user, true, p.limit, p.offset, search);
     res.json(paged(rows, total, p));
   }),
 );
@@ -82,7 +88,8 @@ customerRoutes.get(
   '/unregistered',
   wrap(async (req, res) => {
     const p = readPage(req);
-    const { rows, total } = await customerList(req.user, false, p.limit, p.offset);
+    const search = readSearch(req, ['customer_name', 'mobile', 'email', 'gst']);
+    const { rows, total } = await customerList(req.user, false, p.limit, p.offset, search);
     res.json(paged(rows, total, p));
   }),
 );
@@ -96,10 +103,14 @@ customerRoutes.get(
   '/verifiers',
   wrap(async (req, res) => {
     const p = readPage(req);
+    const search = readSearch(req, ['fullname', 'mobile', 'report_no']);
+    const base = () => {
+      const q = db.selectFrom('reportsearches');
+      return search ? q.where(search) : q;
+    };
 
     const [rows, groups] = await Promise.all([
-      db
-        .selectFrom('reportsearches')
+      base()
         .select(({ fn }) => [
           'mobile',
           fn.max('fullname').as('fullname'),
@@ -111,8 +122,7 @@ customerRoutes.get(
         .limit(p.limit)
         .offset(p.offset)
         .execute(),
-      db
-        .selectFrom('reportsearches')
+      base()
         .select(({ fn }) => fn.countAll().as('n'))
         .groupBy('mobile')
         .execute(),

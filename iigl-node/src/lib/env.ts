@@ -50,6 +50,18 @@ export const env = {
    * combined with credentials, and reflecting whatever Origin arrives would let
    * any site call the API with the visitor's session.
    */
+  /**
+   * Where the admin panel is served from. A password reset link points here,
+   * so it has to be the address the person actually uses, not the API's.
+   */
+  panelUrl: (process.env.PANEL_URL ?? 'http://localhost:5173').replace(/\/+$/, ''),
+  /**
+   * SMTP connection string, e.g. `smtps://user:pass@smtp.example.com:465`.
+   * Absent means no mail: password reset then logs the link in development and
+   * refuses in production rather than reporting a success that never arrives.
+   */
+  smtpUrl: process.env.SMTP_URL ?? '',
+  mailFrom: process.env.MAIL_FROM ?? 'IIGL <no-reply@iigl.org>',
   corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:5173')
     .split(',')
     .map((o) => o.trim())

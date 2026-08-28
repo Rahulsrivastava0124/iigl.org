@@ -15,10 +15,11 @@ import {
 import LoginIcon from '@mui/icons-material/LoginOutlined';
 import LogoutIcon from '@mui/icons-material/LogoutOutlined';
 import BreakIcon from '@mui/icons-material/FreeBreakfastOutlined';
+import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import { Notice, Pager, Panel, StateChip, TableFrame, attendanceState } from '../components/ui';
+import { Pager, Panel, StateChip, TableFrame, attendanceState } from '../components/ui';
 import type { Paged } from '../lib/api';
 
 interface Day {
@@ -60,6 +61,7 @@ const time = (v: string | null) => (!v || v === '00:00:00' ? '—' : v.slice(0, 
 const stamp = (v: string | null) => (v ? String(v).slice(11, 16) : '—');
 
 export default function Attendance() {
+  const toast = useToast();
   const { user } = useAuth();
   const canReadOthers = (user?.roleId ?? 0) <= 2;
 
@@ -76,20 +78,16 @@ export default function Attendance() {
   const history = useFetch<Paged<Day>>(`/attendance?${query}`);
 
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
 
   const act = async (path: string, body: unknown, done: string) => {
     setBusy(true);
-    setErr(null);
-    setMsg(null);
     try {
       await api.post(path, body);
-      setMsg(done);
+      toast.ok(done);
       today.reload();
       if (empId === 'me') history.reload();
     } catch (e) {
-      setErr(messageOf(e));
+      toast.error(messageOf(e));
     } finally {
       setBusy(false);
     }
@@ -100,8 +98,6 @@ export default function Attendance() {
 
   return (
     <>
-      {msg && <Notice kind="ok">{msg}</Notice>}
-      {err && <Notice kind="error">{err}</Notice>}
 
       {t && (
         <Panel title="Today">
@@ -171,6 +167,7 @@ export default function Attendance() {
       )}
 
       <Panel
+        footer={<Pager meta={history.data?.meta} onPage={setPage} />}
         title="History"
         actions={
           canReadOthers && (
@@ -226,7 +223,6 @@ export default function Attendance() {
             </TableBody>
           </Table>
         </TableFrame>
-        <Pager meta={history.data?.meta} onPage={setPage} />
       </Panel>
     </>
   );

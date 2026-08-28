@@ -15,11 +15,28 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import AddIcon from '@mui/icons-material/AddOutlined';
+import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Dialog, IconAction, Notice, Panel, RowActions, TableFrame } from '../components/ui';
+import {
+  FormPanel,
+  IconAction,
+  Notice,
+  Panel,
+  RowActions,
+  SearchField,
+  TableFrame,
+} from '../components/ui';
+
+/** True when the row's text contains the term. Case-insensitive; blank matches all. */
+const hits = (term: string, ...fields: (string | number | null | undefined)[]) => {
+  const q = term.trim().toLowerCase();
+  if (!q) return true;
+  return fields.some((f) => f != null && String(f).toLowerCase().includes(q));
+};
+
+import AddIcon from '@mui/icons-material/AddOutlined';
 import PermissionsIcon from '@mui/icons-material/KeyOutlined';
 import RenameIcon from '@mui/icons-material/DriveFileRenameOutlineOutlined';
 
@@ -72,8 +89,13 @@ const labelFor = (action: string) =>
 const isBuiltIn = (id: number) => id <= 2;
 
 export default function Roles() {
+  const toast = useToast();
   const roles = useFetch<{ data: Role[] }>('/users/roles');
   const list = roles.data?.data ?? [];
+  // `list` itself stays whole: it resolves the selected role and drives the
+  // permission matrix below, neither of which a search of the table should touch.
+  const [search, setSearch] = useState('');
+  const shown = list.filter((r) => hits(search, r.id, r.role_name));
 
   const [roleId, setRoleId] = useState<string>('');
   const chosen = roleId || (list.find((r) => !isBuiltIn(r.id))?.id ?? list[0]?.id ?? '');
@@ -84,9 +106,9 @@ export default function Roles() {
   );
 
   const [saving, setSaving] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
 
+  // No `open`: the form is a panel on the page, empty to add and filled to
+  // rename, with `id` the only thing telling the two apart.
   const [form, setForm] = useState<{ open: boolean; id?: number; name: string }>({
     open: false,
     name: '',
@@ -100,8 +122,6 @@ export default function Roles() {
   const toggle = async (permission: Permission, ability: Ability) => {
     const next = { ...permission, [ability]: !permission[ability] };
     setSaving(`${permission.action_type}:${ability}`);
-    setErr(null);
-    setMsg(null);
     try {
       await api.put(`/users/roles/${chosen}/permissions`, {
         action_type: permission.action_type,
@@ -112,7 +132,7 @@ export default function Roles() {
       });
       permissions.reload();
     } catch (e) {
-      setErr(messageOf(e));
+      toast.error(messageOf(e));
     } finally {
       setSaving(null);
     }
@@ -120,19 +140,18 @@ export default function Roles() {
 
   const saveRole = async () => {
     setBusy(true);
-    setErr(null);
     try {
       if (form.id) {
         await api.patch(`/content/roles/${form.id}`, { role_name: form.name });
-        setMsg('Role renamed.');
+        toast.ok('Role renamed.');
       } else {
         await api.post('/content/roles', { role_name: form.name });
-        setMsg(`${form.name} added. It starts with no permissions — grant them before anyone signs in.`);
+        toast.ok(`${form.name} added. It starts with no permissions — grant them before anyone signs in.`);
       }
       setForm({ open: false, name: '' });
       roles.reload();
     } catch (e) {
-      setErr(messageOf(e));
+      toast.error(messageOf(e));
     } finally {
       setBusy(false);
     }
@@ -143,23 +162,41 @@ export default function Roles() {
 
   return (
     <>
-      {msg && <Notice kind="ok">{msg}</Notice>}
-      {err && <Notice kind="error">{err}</Notice>}
+
+      {form.open && (
+        <FormPanel
+          title={form.id ? 'Rename role' : 'Add role'}
+          onClose={() => setForm({ open: false, name: '' })}
+          onSubmit={saveRole}
+          submitLabel={form.id ? 'Save changes' : 'Add role'}
+          busy={busy}
+        >
+          <TextField
+            label="Role name"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            required
+          />
+        </FormPanel>
+      )}
 
       <Panel
         title="Roles"
+        count={roles.loading ? 'Loading…' : `${shown.length} of ${list.length} roles`}
         actions={
-          <Button
-            size="small"
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setForm({ open: true, name: '' })}
-          >
-            Add role
-          </Button>
+          <>
+            <SearchField placeholder="Role name…" value={search} onChange={setSearch} width={200} />
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setForm({ open: true, name: '' })}
+            >
+              Add role
+            </Button>
+          </>
         }
       >
-        <TableFrame loading={roles.loading} error={roles.error} empty={list.length === 0}>
+        <TableFrame loading={roles.loading} error={roles.error} empty={shown.length === 0}>
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -170,7 +207,7 @@ export default function Roles() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {list.map((r) => (
+              {shown.map((r) => (
                 <TableRow key={r.id} hover selected={String(r.id) === String(chosen)}>
                   <TableCell className="mono">#{r.id}</TableCell>
                   <TableCell>{r.role_name}</TableCell>
@@ -307,27 +344,6 @@ export default function Roles() {
         is the one that visibly changes what a person sees; the rest gate screens and actions.
       </Typography>
 
-      {form.open && (
-        <Dialog
-          title={form.id ? 'Rename role' : 'Add role'}
-          onClose={() => setForm({ open: false, name: '' })}
-          onSubmit={saveRole}
-          busy={busy}
-        >
-          {!form.id && (
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              A new role starts with no permissions at all. Grant them here before anyone signs in
-              with it.
-            </Typography>
-          )}
-          <TextField
-            label="Role name"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            required
-          />
-        </Dialog>
-      )}
     </>
   );
 }

@@ -180,6 +180,12 @@ adminRoutes.patch(
     const patch: Record<string, unknown> = { updated_at: new Date() };
     if (req.body?.attr_name !== undefined) patch.attr_name = requireText(req.body.attr_name, 'Attribute name');
     if (req.body?.order_no !== undefined) patch.order_no = Number(req.body.order_no) || 0;
+    // An attribute can be moved between subcategories. Certificates already
+    // issued keep the values they stored against this id — the move only
+    // changes which form the field appears on from here on.
+    if (req.body?.category_id !== undefined) patch.category_id = positive(req.body.category_id, 'Category');
+    if (req.body?.subcategory_id !== undefined)
+      patch.subcategory_id = positive(req.body.subcategory_id, 'Subcategory');
     for (const key of [
       'show_in_smart_card',
       'show_in_classic_card',
@@ -274,6 +280,22 @@ adminRoutes.patch(
     if (req.body?.value_name !== undefined) patch.value_name = requireText(req.body.value_name, 'Value');
     for (const key of ['description', 'icon'] as const) {
       if (req.body?.[key] !== undefined) patch[key] = text(req.body[key]);
+    }
+
+    // A value can be moved to another attribute. Its category and subcategory
+    // are denormalised copies of that attribute's, so they move with it —
+    // leaving them behind would file the value under a branch it no longer
+    // belongs to, which is what the list endpoint filters on.
+    if (req.body?.attr_id !== undefined) {
+      const attr = await db
+        .selectFrom('attributes')
+        .select(['id', 'category_id', 'subcategory_id'])
+        .where('id', '=', positive(req.body.attr_id, 'Attribute'))
+        .executeTakeFirst();
+      if (!attr) throw badRequest('That attribute does not exist.');
+      patch.attr_id = Number(attr.id);
+      patch.category_id = Number(attr.category_id);
+      patch.subcategory_id = Number(attr.subcategory_id);
     }
     if (Object.keys(patch).length === 1) throw badRequest('Nothing to update.');
 

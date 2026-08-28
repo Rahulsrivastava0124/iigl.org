@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Button,
   MenuItem,
-  Stack,
   Table,
   TableBody,
   TableCell,
@@ -12,15 +11,33 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import AddIcon from '@mui/icons-material/AddOutlined';
+import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Dialog, IconAction, Notice, Panel, RowActions, TableFrame, money } from '../components/ui';
+import {
+  FormPanel,
+  IconAction,
+  Panel,
+  RowActions,
+  SearchField,
+  TableFrame,
+  money,
+} from '../components/ui';
+
+/** True when the row's text contains the term. Case-insensitive; blank matches all. */
+const hits = (term: string, ...fields: (string | number | null | undefined)[]) => {
+  const q = term.trim().toLowerCase();
+  if (!q) return true;
+  return fields.some((f) => f != null && String(f).toLowerCase().includes(q));
+};
+
 import type { Category, Lab, Price } from '../lib/api';
+import AddIcon from '@mui/icons-material/AddOutlined';
 import EditIcon from '@mui/icons-material/EditOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
 
+// No `open`: the form is a panel on the page, empty to add and filled to edit.
 const BLANK = {
   open: false,
   id: undefined as number | undefined,
@@ -32,6 +49,7 @@ const BLANK = {
 };
 
 export default function Pricing() {
+  const toast = useToast();
   const [params] = useSearchParams();
   const [scope, setScope] = useState('standard');
 
@@ -44,8 +62,6 @@ export default function Pricing() {
 
   const [form, setForm] = useState(BLANK);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     const first = labs.data?.data[0];
@@ -54,12 +70,17 @@ export default function Pricing() {
   }, [wantsLab, labs.data]);
 
   const cats = categories.data?.data ?? [];
-  const rows = prices.data?.data ?? [];
+  const allPrices = prices.data?.data ?? [];
+  const [search, setSearch] = useState('');
   const catName = (id: string) => cats.find((c) => String(c.id) === String(id))?.name ?? `#${id}`;
+  // Filtered after catName exists, so a search on the category name works even
+  // though the row itself only carries the id.
+  const rows = allPrices.filter((p) =>
+    hits(search, catName(p.category_id), p.min_wt, p.max_wt, p.smart_price, p.classic_price),
+  );
 
   const save = async () => {
     setBusy(true);
-    setErr(null);
     try {
       const body = {
         min_wt: Number(form.min_wt),
@@ -69,50 +90,109 @@ export default function Pricing() {
       };
       if (form.id) {
         await api.patch(`/admin/prices/${form.id}`, body);
-        setMsg('Price band updated.');
+        toast.ok('Price band updated.');
       } else {
         await api.post('/admin/prices', {
           ...body,
           category_id: Number(form.category_id),
           lab_id: scope === 'standard' ? null : Number(scope),
         });
-        setMsg('Price band added.');
+        toast.ok('Price band added.');
       }
       setForm(BLANK);
       prices.reload();
     } catch (e) {
-      setErr(messageOf(e));
+      toast.error(messageOf(e));
     } finally {
       setBusy(false);
     }
   };
 
   const remove = async (p: Price) => {
-    setErr(null);
     try {
       await api.del(`/admin/prices/${p.id}`);
-      setMsg('Price band removed.');
+      toast.ok('Price band removed.');
       prices.reload();
     } catch (e) {
-      setErr(messageOf(e));
+      toast.error(messageOf(e));
     }
   };
 
   return (
     <>
-      {msg && <Notice kind="ok">{msg}</Notice>}
-      {err && <Notice kind="error">{err}</Notice>}
+
+      {form.open && (
+        <FormPanel
+          title={form.id ? 'Edit price band' : 'Add price band'}
+          onClose={() => setForm(BLANK)}
+          onSubmit={save}
+          submitLabel={form.id ? 'Save changes' : 'Add band'}
+          busy={busy}
+        >
+          <TextField
+          select
+          label="Category"
+          value={form.category_id}
+          onChange={(e) => setForm({ ...form, category_id: e.target.value })}
+          // The band's category is fixed once it exists: moving a band between
+          // categories is a delete and an add, not an edit, because the
+          // overlap it has to not create is inside one category.
+          disabled={Boolean(form.id)}
+          required
+        >
+          {cats.map((c) => (
+            <MenuItem key={c.id} value={String(c.id)}>
+              {c.name}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          label="From (carat)"
+          type="number"
+          value={form.min_wt}
+          onChange={(e) => setForm({ ...form, min_wt: e.target.value })}
+          slotProps={{ htmlInput: { min: 0, step: 0.001 } }}
+          required
+        />
+        <TextField
+          label="To (carat)"
+          type="number"
+          value={form.max_wt}
+          onChange={(e) => setForm({ ...form, max_wt: e.target.value })}
+          slotProps={{ htmlInput: { min: 0, step: 0.001 } }}
+          required
+        />
+        <TextField
+          label="Smart card price"
+          type="number"
+          value={form.smart_price}
+          onChange={(e) => setForm({ ...form, smart_price: e.target.value })}
+          slotProps={{ htmlInput: { min: 0 } }}
+          required
+        />
+        <TextField
+          label="Classic card price"
+          type="number"
+          value={form.classic_price}
+          onChange={(e) => setForm({ ...form, classic_price: e.target.value })}
+          slotProps={{ htmlInput: { min: 0 } }}
+          required
+        />
+        </FormPanel>
+      )}
 
       <Panel
         title="Pricing"
+        count={prices.loading ? 'Loading…' : `${rows.length} of ${allPrices.length} bands`}
         actions={
           <>
+            <SearchField placeholder="Category or weight…" value={search} onChange={setSearch} />
             <TextField
               select
               label="Rates for"
               value={scope}
               onChange={(e) => setScope(e.target.value)}
-              sx={{ minWidth: 0, flex: '1 1 250px', maxWidth: 250 }}
+              sx={{ width: 250 }}
             >
               <MenuItem value="standard">Standard (all laboratories)</MenuItem>
               {(labs.data?.data ?? []).map((l) => (
@@ -122,7 +202,6 @@ export default function Pricing() {
               ))}
             </TextField>
             <Button
-              size="small"
               variant="contained"
               startIcon={<AddIcon />}
               onClick={() =>
@@ -195,68 +274,6 @@ export default function Pricing() {
         be created first.
       </Typography>
 
-      {form.open && (
-        <Dialog
-          title={form.id ? 'Edit price band' : 'Add price band'}
-          onClose={() => setForm(BLANK)}
-          onSubmit={save}
-          busy={busy}
-        >
-          <Stack spacing={2}>
-            {!form.id && (
-              <TextField
-                select
-                label="Category"
-                value={form.category_id}
-                onChange={(e) => setForm({ ...form, category_id: e.target.value })}
-                required
-              >
-                {cats.map((c) => (
-                  <MenuItem key={c.id} value={c.id}>
-                    {c.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-            )}
-            <Stack direction="row" spacing={2}>
-              <TextField
-                label="From (carat)"
-                type="number"
-                value={form.min_wt}
-                onChange={(e) => setForm({ ...form, min_wt: e.target.value })}
-                slotProps={{ htmlInput: { min: 0, step: 0.001 } }}
-                required
-              />
-              <TextField
-                label="To (carat)"
-                type="number"
-                value={form.max_wt}
-                onChange={(e) => setForm({ ...form, max_wt: e.target.value })}
-                slotProps={{ htmlInput: { min: 0, step: 0.001 } }}
-                required
-              />
-            </Stack>
-            <Stack direction="row" spacing={2}>
-              <TextField
-                label="Smart card price"
-                type="number"
-                value={form.smart_price}
-                onChange={(e) => setForm({ ...form, smart_price: e.target.value })}
-                slotProps={{ htmlInput: { min: 0 } }}
-                required
-              />
-              <TextField
-                label="Classic card price"
-                type="number"
-                value={form.classic_price}
-                onChange={(e) => setForm({ ...form, classic_price: e.target.value })}
-                slotProps={{ htmlInput: { min: 0 } }}
-                required
-              />
-            </Stack>
-          </Stack>
-        </Dialog>
-      )}
     </>
   );
 }

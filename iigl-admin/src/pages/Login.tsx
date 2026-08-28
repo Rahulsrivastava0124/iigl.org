@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Box, Button, Paper, Stack, TextField, Typography } from '@mui/material';
+import { Link as RouterLink } from 'react-router-dom';
+import { Box, Button, Link, Stack, TextField } from '@mui/material';
 import { useAuth, messageOf } from '../lib/auth';
 import { PORTALS } from '../lib/portal';
-import { Notice } from '../components/ui';
+import { Notice, PasswordField } from '../components/ui';
+import AuthCard from '../components/AuthCard';
 
 export default function Login() {
   const { signIn, portal } = useAuth();
@@ -27,87 +29,61 @@ export default function Login() {
   };
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        display: 'grid',
-        placeItems: 'center',
-        p: 3,
-        bgcolor: 'background.default',
-      }}
+    <AuthCard
+      title={config.title}
+      subtitle={config.subtitle}
+      onSubmit={submit}
+      footer={
+        portal === 'team'
+          ? 'Administrators sign in at the admin address.'
+          : 'Laboratories and staff sign in at the team address.'
+      }
     >
-      <Paper
-        variant="outlined"
-        component="form"
-        onSubmit={submit}
-        sx={{
-          width: '100%',
-          maxWidth: 420,
-          // Generous vertical padding: the card is the only thing on the page,
-          // so it should feel like a destination rather than a widget.
-          px: { xs: 4, sm: 6 },
-          py: 6,
-          textAlign: 'center',
-          borderTop: 4,
-          borderTopColor: 'primary.main',
-        }}
-      >
-        <Box
-          component="img"
-          src="/logo.png"
-          alt="IIGL"
-          sx={{ height: 84, width: 'auto', mx: 'auto', mb: 3, display: 'block' }}
+      {error && (
+        <Notice kind="error" sx={{ mb: 3, textAlign: 'left' }}>
+          {error}
+        </Notice>
+      )}
+
+      <Stack spacing={2.5} sx={{ textAlign: 'left' }}>
+        <TextField
+          label="Mobile number"
+          name="mobile"
+          value={mobile}
+          onChange={(e) => setMobile(e.target.value)}
+          autoComplete="username"
+          slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+          size="medium"
+          autoFocus
+          required
+        />
+        <PasswordField
+          label="Password"
+          name="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="current-password"
+          size="medium"
+          required
         />
 
-        <Typography variant="h1" sx={{ mb: 1 }}>
-          {config.title}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-          {config.subtitle}
-        </Typography>
+        {/* Above the button, not below it: someone who cannot get in is looking
+            at the password box, and this is the next thing they need. */}
+        <Box sx={{ textAlign: 'right', mt: -1 }}>
+          <Link
+            component={RouterLink}
+            to="/forgot-password"
+            variant="body2"
+            underline="hover"
+          >
+            Forgotten your password?
+          </Link>
+        </Box>
 
-        {error && (
-          <Notice kind="error" sx={{ mb: 3, textAlign: 'left' }}>
-            {error}
-          </Notice>
-        )}
-
-        {/* Fields read left-aligned even inside a centred card: a label above a
-            box belongs over its left edge, and centred input text is hard to
-            scan while typing a number. */}
-        <Stack spacing={2.5} sx={{ textAlign: 'left' }}>
-          <TextField
-            label="Mobile number"
-            name="mobile"
-            value={mobile}
-            onChange={(e) => setMobile(e.target.value)}
-            autoComplete="username"
-            slotProps={{ htmlInput: { inputMode: 'numeric' } }}
-            size="medium"
-            autoFocus
-            required
-          />
-          <TextField
-            label="Password"
-            name="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            size="medium"
-            required
-          />
-          <Button type="submit" variant="contained" size="large" disabled={busy} sx={{ py: 1.4 }}>
-            {busy ? 'Signing in…' : 'Sign in'}
-          </Button>
-        </Stack>
-
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 4 }}>
-          {portal === 'team'
-            ? 'Administrators sign in at the admin address.'
-            : 'Laboratories and staff sign in at the team address.'}
-        </Typography>
-      </Paper>
-    </Box>
+        <Button type="submit" variant="contained" size="large" disabled={busy} sx={{ py: 1.4 }}>
+          {busy ? 'Signing in…' : 'Sign in'}
+        </Button>
+      </Stack>
+    </AuthCard>
   );
 }

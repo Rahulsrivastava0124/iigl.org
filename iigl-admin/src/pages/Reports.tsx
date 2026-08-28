@@ -10,8 +10,8 @@ import {
   Typography,
 } from '@mui/material';
 import PrintIcon from '@mui/icons-material/PrintOutlined';
-import { useFetch } from '../lib/useFetch';
-import { IconAction, Pager, Panel, RowActions, TableFrame } from '../components/ui';
+import { useFetch, useDebounced } from '../lib/useFetch';
+import { IconAction, Pager, Panel, RowActions, SearchField, TableFrame } from '../components/ui';
 import type { Paged, Report } from '../lib/api';
 import { apiUrl } from '../lib/config';
 import SmartIcon from '@mui/icons-material/CreditCardOutlined';
@@ -26,7 +26,14 @@ export default function Reports() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<number[]>([]);
 
-  const { data, loading, error } = useFetch<Paged<Report>>(`/reports?page=${page}&per_page=25`);
+  // Server-side: 22,000 certificates, 25 on screen.
+  const [search, setSearch] = useState('');
+  const term = useDebounced(search);
+
+  const query = new URLSearchParams({ page: String(page), per_page: '25' });
+  if (term.trim()) query.set('q', term.trim());
+
+  const { data, loading, error } = useFetch<Paged<Report>>(`/reports?${query}`);
   const rows = data?.data ?? [];
 
   const toggle = (id: number) =>
@@ -60,17 +67,25 @@ export default function Reports() {
   return (
     <>
       <Panel
+        footer={<Pager meta={data?.meta} onPage={setPage} />}
         title="Certificates"
         count={data ? `${data.meta.total.toLocaleString()} issued` : 'Loading…'}
         actions={
           <>
+            <SearchField
+              placeholder="Certificate or order no…"
+              value={search}
+              onChange={(v) => {
+                setSearch(v);
+                setPage(1);
+              }}
+            />
             <Typography variant="body2" color={selected.length > 50 ? 'error' : 'text.secondary'}>
               {selected.length} selected
               {selected.length > 50 && ' — the cap is 50 per print run'}
             </Typography>
             <Button
               variant="contained"
-              size="small"
               startIcon={<PrintIcon />}
               disabled={selected.length === 0 || selected.length > 50}
               onClick={printBatch}
@@ -140,7 +155,6 @@ export default function Reports() {
             </TableBody>
           </Table>
         </TableFrame>
-        <Pager meta={data?.meta} onPage={setPage} />
       </Panel>
     </>
   );

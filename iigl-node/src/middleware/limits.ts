@@ -40,6 +40,17 @@ export const loginLimiter = rateLimit({
   skipSuccessfulRequests: true,
 });
 
+/**
+ * Password reset requests, by address. Each one sends mail and writes a row,
+ * and unlike sign-in there is no wrong answer to slow anyone down, so the limit
+ * is the only thing standing between this endpoint and a mail flood.
+ */
+export const resetLimiter = rateLimit({
+  ...tooMany('Too many password reset requests. Wait a few minutes and try again.'),
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+});
+
 /** Verification logging, which writes a row per call. */
 export const verifyLogLimiter = rateLimit({
   ...tooMany('Too many verification lookups from this address. Try again shortly.'),

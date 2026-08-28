@@ -788,7 +788,7 @@ export default function Shell() {
         <Box sx={{ px: { xs: 2, md: 3 }, pt: 2 }}>
           <Breadcrumbs
             aria-label="breadcrumb"
-            separator={<NextIcon fontSize="small" sx={{ color: 'text.disabled' }} />}
+            separator={<NextIcon fontSize="inherit" sx={{ color: 'text.disabled' }} />}
             sx={{ fontSize: 13.5, '& .MuiBreadcrumbs-separator': { mx: 0.75 } }}
           >
             {crumbs.map((crumb, i) =>
@@ -800,21 +800,22 @@ export default function Shell() {
                   underline="hover"
                   color="inherit"
                   sx={{
-                    display: 'inline-flex',
+                    display: 'flex',
                     alignItems: 'center',
                     gap: 0.5,
                     color: 'text.secondary',
                     '&:hover': { color: 'text.primary' },
                   }}
                 >
-                  {i === 0 && <HomeIcon sx={{ fontSize: 17 }} />}
+                  {i === 0 && <HomeIcon fontSize="inherit" />}
                   {crumb.label}
                 </Link>
               ) : (
                 <Typography
                   key={crumb.label}
+                  variant="inherit"
                   aria-current="page"
-                  sx={{ fontSize: 13.5, fontWeight: 600, color: 'text.primary' }}
+                  sx={{ fontWeight: 600, color: 'text.primary' }}
                 >
                   {crumb.label}
                 </Typography>

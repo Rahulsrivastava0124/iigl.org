@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Button, Grid, Stack, TextField, Typography } from '@mui/material';
+import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import { Notice, Panel } from '../components/ui';
+import { Panel, PasswordField } from '../components/ui';
 import FileField from '../components/FileField';
 import { ROLE_NAMES } from '../lib/portal';
 
@@ -44,6 +45,7 @@ const TEXT_FIELDS = [
 ] as const;
 
 export default function Profile() {
+  const toast = useToast();
   const { user } = useAuth();
   const account = useFetch<{ data: Account }>('/users/me');
 
@@ -53,8 +55,6 @@ export default function Profile() {
   const [signature, setSignature] = useState<string | null>(null);
 
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
 
   // Seed the form once the record arrives; after that the form is the truth
   // until it is saved.
@@ -71,8 +71,6 @@ export default function Profile() {
 
   const save = async () => {
     setBusy(true);
-    setErr(null);
-    setMsg(null);
     try {
       await api.patch('/users/me', {
         ...form,
@@ -80,10 +78,10 @@ export default function Profile() {
         company_logo: logo,
         signature,
       });
-      setMsg('Profile saved.');
+      toast.ok('Profile saved.');
       account.reload();
     } catch (e) {
-      setErr(messageOf(e));
+      toast.error(messageOf(e));
     } finally {
       setBusy(false);
     }
@@ -94,21 +92,19 @@ export default function Profile() {
 
   const changePassword = async () => {
     if (passwords.new_password !== passwords.confirm) {
-      setErr('The two new passwords do not match.');
+      toast.error('The two new passwords do not match.');
       return;
     }
     setPwBusy(true);
-    setErr(null);
-    setMsg(null);
     try {
       await api.post('/auth/change-password', {
         current_password: passwords.current_password,
         new_password: passwords.new_password,
       });
-      setMsg('Password changed.');
+      toast.ok('Password changed.');
       setPasswords({ current_password: '', new_password: '', confirm: '' });
     } catch (e) {
-      setErr(messageOf(e));
+      toast.error(messageOf(e));
     } finally {
       setPwBusy(false);
     }
@@ -119,20 +115,18 @@ export default function Profile() {
 
   return (
     <>
-      {msg && <Notice kind="ok">{msg}</Notice>}
-      {err && <Notice kind="error">{err}</Notice>}
 
       <Panel
         title="Details"
         // Which account this is: the breadcrumb says "Your profile" but not
         // whose role or number, and that is the part worth having on screen.
-        count={
+        subtitle={
           a
             ? `${ROLE_NAMES[a.role_id] ?? 'Account'} · ${a.mobile}${a.empid ? ` · ${a.empid}` : ''}`
             : 'Loading…'
         }
         actions={
-          <Button size="small" variant="contained" disabled={busy || !a} onClick={save}>
+          <Button variant="contained" disabled={busy || !a} onClick={save}>
             {busy ? 'Saving…' : 'Save'}
           </Button>
         }
@@ -184,24 +178,21 @@ export default function Profile() {
 
       <Panel>
         <Stack spacing={2} sx={{ p: 2, maxWidth: 380 }}>
-          <TextField
+          <PasswordField
             label="Current password"
-            type="password"
             autoComplete="current-password"
             value={passwords.current_password}
             onChange={(e) => setPasswords({ ...passwords, current_password: e.target.value })}
           />
-          <TextField
+          <PasswordField
             label="New password"
-            type="password"
             autoComplete="new-password"
             helperText="Eight characters or more."
             value={passwords.new_password}
             onChange={(e) => setPasswords({ ...passwords, new_password: e.target.value })}
           />
-          <TextField
+          <PasswordField
             label="Repeat new password"
-            type="password"
             autoComplete="new-password"
             value={passwords.confirm}
             onChange={(e) => setPasswords({ ...passwords, confirm: e.target.value })}

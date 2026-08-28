@@ -2,7 +2,6 @@ import { useState } from 'react';
 import {
   Button,
   MenuItem,
-  Stack,
   Table,
   TableBody,
   TableCell,
@@ -11,14 +10,26 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import AddIcon from '@mui/icons-material/AddOutlined';
-import { useFetch } from '../lib/useFetch';
+import { useToast } from '../components/Toast';
+import { useFetch, useDebounced } from '../lib/useFetch';
 import { usePermissions } from '../lib/permissions';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import { Dialog, IconAction, Notice, Pager, Panel, RowActions, TableFrame, YesNo } from '../components/ui';
+import {
+  Dialog,
+  FormPanel,
+  IconAction,
+  Pager,
+  Panel,
+  PasswordField,
+  RowActions,
+  SearchField,
+  TableFrame,
+  YesNo,
+} from '../components/ui';
 import type { Lab, Paged } from '../lib/api';
 import { isAdmin } from '../lib/portal';
+import AddIcon from '@mui/icons-material/AddOutlined';
 import EditIcon from '@mui/icons-material/EditOutlined';
 import MoveIcon from '@mui/icons-material/SwapHorizOutlined';
 import PasswordIcon from '@mui/icons-material/LockResetOutlined';
@@ -39,7 +50,18 @@ interface Role {
   role_name: string;
 }
 
+const BLANK_ACCOUNT = {
+  open: false,
+  id: undefined as number | undefined,
+  fullname: '',
+  mobile: '',
+  email: '',
+  password: '',
+  role_id: '3',
+};
+
 export default function Staff() {
+  const toast = useToast();
   const { user } = useAuth();
   const { can } = usePermissions();
   const admin = isAdmin(user);
@@ -47,9 +69,13 @@ export default function Staff() {
   const mayEdit = admin && can('employee_management', 'update');
   const [page, setPage] = useState(1);
 
-  const { data, loading, error, reload } = useFetch<Paged<StaffRow>>(
-    `/users/staff?page=${page}&per_page=25`,
-  );
+  const [search, setSearch] = useState('');
+  const term = useDebounced(search);
+
+  const query = new URLSearchParams({ page: String(page), per_page: '25' });
+  if (term.trim()) query.set('q', term.trim());
+
+  const { data, loading, error, reload } = useFetch<Paged<StaffRow>>(`/users/staff?${query}`);
   const roles = useFetch<{ data: Role[] }>('/users/roles');
   const rows = data?.data ?? [];
   const roleName = (id: number) =>
@@ -57,47 +83,47 @@ export default function Staff() {
 
   const labs = useFetch<{ data: Lab[] }>(admin ? '/users/laboratories' : null);
 
-  const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ fullname: '', mobile: '', password: '', role_id: '3' });
+  /**
+   * One form for both jobs, on the page rather than in a dialog. `id` is what
+   * separates them, and it decides which fields matter: a new account needs a
+   * password and cannot have an email yet, an existing one is the other way
+   * round — its password is changed through Reset, which is a different act
+   * with a different warning.
+   */
+  const [form, setForm] = useState(BLANK_ACCOUNT);
+  const clearForm = () => setForm(BLANK_ACCOUNT);
 
-  /** Editing an account, resetting a password, or moving an employment. */
-  const [editing, setEditing] = useState<StaffRow | null>(null);
-  const [edit, setEdit] = useState({ fullname: '', mobile: '', email: '', role_id: '3' });
+  /** Resetting a password or moving an employment: actions, not record forms. */
   const [resetting, setResetting] = useState<StaffRow | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [employing, setEmploying] = useState<StaffRow | null>(null);
   const [labId, setLabId] = useState('');
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-
-  const create = async () => {
-    setBusy(true);
-    setErr(null);
-    try {
-      await api.post('/users', { ...form, role_id: Number(form.role_id) });
-      setMsg(`${form.fullname} added. They can sign in with their mobile number.`);
-      setAdding(false);
-      setForm({ fullname: '', mobile: '', password: '', role_id: '3' });
-      reload();
-    } catch (e) {
-      setErr(messageOf(e));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const saveAccount = async () => {
-    if (!editing) return;
     setBusy(true);
-    setErr(null);
     try {
-      await api.patch(`/users/${editing.id}`, { ...edit, role_id: Number(edit.role_id) });
-      setMsg(`${edit.fullname} updated.`);
-      setEditing(null);
+      if (form.id) {
+        await api.patch(`/users/${form.id}`, {
+          fullname: form.fullname,
+          mobile: form.mobile,
+          email: form.email,
+          role_id: Number(form.role_id),
+        });
+        toast.ok(`${form.fullname} updated.`);
+      } else {
+        await api.post('/users', {
+          fullname: form.fullname,
+          mobile: form.mobile,
+          password: form.password,
+          role_id: Number(form.role_id),
+        });
+        toast.ok(`${form.fullname} added. They can sign in with their mobile number.`);
+      }
+      clearForm();
       reload();
     } catch (e) {
-      setErr(messageOf(e));
+      toast.error(messageOf(e));
     } finally {
       setBusy(false);
     }
@@ -106,14 +132,13 @@ export default function Staff() {
   const resetPassword = async () => {
     if (!resetting) return;
     setBusy(true);
-    setErr(null);
     try {
       await api.post(`/users/${resetting.id}/password`, { password: newPassword });
-      setMsg(`Password reset for ${resetting.fullname}. Tell them through a separate channel.`);
+      toast.ok(`Password reset for ${resetting.fullname}. Tell them through a separate channel.`);
       setResetting(null);
       setNewPassword('');
     } catch (e) {
-      setErr(messageOf(e));
+      toast.error(messageOf(e));
     } finally {
       setBusy(false);
     }
@@ -122,29 +147,27 @@ export default function Staff() {
   const move = async () => {
     if (!employing) return;
     setBusy(true);
-    setErr(null);
     try {
       // Ending first, because the API refuses a second active employment.
       await api.post(`/users/${employing.id}/employment/end`, {}).catch(() => undefined);
       await api.post(`/users/${employing.id}/employment`, { lab_id: Number(labId) });
-      setMsg(`${employing.fullname} moved.`);
+      toast.ok(`${employing.fullname} moved.`);
       setEmploying(null);
       reload();
     } catch (e) {
-      setErr(messageOf(e));
+      toast.error(messageOf(e));
     } finally {
       setBusy(false);
     }
   };
 
   const endEmployment = async (row: StaffRow) => {
-    setErr(null);
     try {
       await api.post(`/users/${row.id}/employment/end`, {});
-      setMsg(`${row.fullname} is no longer employed.`);
+      toast.ok(`${row.fullname} is no longer employed.`);
       reload();
     } catch (e) {
-      setErr(messageOf(e));
+      toast.error(messageOf(e));
     }
   };
 
@@ -153,23 +176,81 @@ export default function Staff() {
 
   return (
     <>
-      {msg && <Notice kind="ok">{msg}</Notice>}
-      {err && <Notice kind="error">{err}</Notice>}
+
+      {form.open && (
+        <FormPanel
+          title={form.id ? 'Edit account' : 'Add account'}
+          onClose={clearForm}
+          onSubmit={saveAccount}
+          submitLabel={form.id ? 'Save changes' : 'Add account'}
+          busy={busy}
+        >
+          <TextField
+            label="Full name"
+            value={form.fullname}
+            onChange={(e) => setForm({ ...form, fullname: e.target.value })}
+            required
+          />
+          <TextField
+            label="Mobile number"
+            value={form.mobile}
+            onChange={(e) => setForm({ ...form, mobile: e.target.value })}
+            required
+          />
+          {form.id ? (
+            <TextField
+              label="Email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
+          ) : (
+            <PasswordField
+              label="Password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              slotProps={{ htmlInput: { minLength: 8 } }}
+              required
+            />
+          )}
+          <TextField
+            select
+            label="Role"
+            value={form.role_id}
+            onChange={(e) => setForm({ ...form, role_id: e.target.value })}
+          >
+            {(roles.data?.data ?? []).map((r) => (
+              <MenuItem key={r.id} value={String(r.id)}>
+                {r.role_name}
+              </MenuItem>
+            ))}
+          </TextField>
+        </FormPanel>
+      )}
 
       <Panel
+        footer={<Pager meta={data?.meta} onPage={setPage} />}
         title="Staff"
         count={data ? `${data.meta.total.toLocaleString()} currently working` : 'Loading…'}
         actions={
-          mayAdd && (
-            <Button
-              size="small"
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => setAdding(true)}
-            >
-              Add account
-            </Button>
-          )
+          <>
+            <SearchField
+              placeholder="Name, mobile, email…"
+              value={search}
+              onChange={(v) => {
+                setSearch(v);
+                setPage(1);
+              }}
+            />
+            {mayAdd && (
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => setForm({ ...BLANK_ACCOUNT, open: true })}
+              >
+                Add account
+              </Button>
+            )}
+          </>
         }
       >
         <TableFrame loading={loading} error={error} empty={rows.length === 0}>
@@ -204,15 +285,17 @@ export default function Staff() {
                         <IconAction
                           label="Edit employee"
                           icon={EditIcon}
-                          onClick={() => {
-                            setEditing(s);
-                            setEdit({
+                          onClick={() =>
+                            setForm({
+                              open: true,
+                              id: s.id,
                               fullname: s.fullname,
                               mobile: s.mobile,
                               email: '',
+                              password: '',
                               role_id: String(s.role_id),
-                            });
-                          }}
+                            })
+                          }
                         />
                         <IconAction
                           label="Move to another laboratory"
@@ -241,94 +324,8 @@ export default function Staff() {
             </TableBody>
           </Table>
         </TableFrame>
-        <Pager meta={data?.meta} onPage={setPage} />
       </Panel>
 
-      {adding && (
-        <Dialog title="Add account" onClose={() => setAdding(false)} onSubmit={create} busy={busy}>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Creating the account does not attach it to a laboratory. That link lives in the
-            employments record and is not yet editable here.
-          </Typography>
-          <Stack spacing={2}>
-            <TextField
-              label="Full name"
-              value={form.fullname}
-              onChange={(e) => setForm({ ...form, fullname: e.target.value })}
-              required
-            />
-            <TextField
-              label="Mobile number"
-              value={form.mobile}
-              onChange={(e) => setForm({ ...form, mobile: e.target.value })}
-              required
-            />
-            <TextField
-              label="Password"
-              type="password"
-              helperText="Eight characters or more."
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              slotProps={{ htmlInput: { minLength: 8 } }}
-              required
-            />
-            <TextField
-              select
-              label="Role"
-              value={form.role_id}
-              onChange={(e) => setForm({ ...form, role_id: e.target.value })}
-            >
-              {(roles.data?.data ?? []).map((r) => (
-                <MenuItem key={r.id} value={r.id}>
-                  {r.role_name}
-                </MenuItem>
-              ))}
-            </TextField>
-          </Stack>
-        </Dialog>
-      )}
-
-      {editing && (
-        <Dialog
-          title={`Edit ${editing.fullname}`}
-          onClose={() => setEditing(null)}
-          onSubmit={saveAccount}
-          busy={busy}
-        >
-          <Stack spacing={2}>
-            <TextField
-              label="Full name"
-              value={edit.fullname}
-              onChange={(e) => setEdit({ ...edit, fullname: e.target.value })}
-              required
-            />
-            <TextField
-              label="Mobile number"
-              value={edit.mobile}
-              onChange={(e) => setEdit({ ...edit, mobile: e.target.value })}
-              helperText="This is how they sign in. Two accounts on one number locks one of them out."
-              required
-            />
-            <TextField
-              label="Email"
-              value={edit.email}
-              onChange={(e) => setEdit({ ...edit, email: e.target.value })}
-            />
-            <TextField
-              select
-              label="Role"
-              value={edit.role_id}
-              onChange={(e) => setEdit({ ...edit, role_id: e.target.value })}
-            >
-              {(roles.data?.data ?? []).map((r) => (
-                <MenuItem key={r.id} value={r.id}>
-                  {r.role_name}
-                </MenuItem>
-              ))}
-            </TextField>
-          </Stack>
-        </Dialog>
-      )}
 
       {resetting && (
         <Dialog
@@ -345,9 +342,8 @@ export default function Staff() {
             They are not told automatically. Pass the new password on through a separate channel,
             and ask them to change it once they are in.
           </Typography>
-          <TextField
+          <PasswordField
             label="New password"
-            type="password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             helperText="Eight characters or more."
@@ -384,6 +380,7 @@ export default function Staff() {
           </TextField>
         </Dialog>
       )}
+
     </>
   );
 }

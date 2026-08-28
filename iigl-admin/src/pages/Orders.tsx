@@ -9,8 +9,17 @@ import {
   TableRow,
   TextField,
 } from '@mui/material';
-import { useFetch } from '../lib/useFetch';
-import { IconAction, OrderChip, Pager, Panel, RowActions, TableFrame, money } from '../components/ui';
+import { useFetch, useDebounced } from '../lib/useFetch';
+import {
+  IconAction,
+  OrderChip,
+  Pager,
+  Panel,
+  RowActions,
+  SearchField,
+  TableFrame,
+  money,
+} from '../components/ui';
 import type { Order, Paged } from '../lib/api';
 import OpenIcon from '@mui/icons-material/ChevronRightOutlined';
 
@@ -24,9 +33,20 @@ export default function Orders() {
 
   const [page, setPage] = useState(1);
 
+  // Searched on the server, not in the browser: the list is one page of 25 out
+  // of 9,600 orders, so filtering what has already arrived would search the
+  // page rather than the orders.
+  //
+  // The term is held for 150ms so a typed word is one query rather than eight,
+  // and `useFetch` discards all but the newest response — a debounce shortens
+  // the queue but does not stop two from overlapping.
+  const [search, setSearch] = useState('');
+  const term = useDebounced(search);
+
   const query = new URLSearchParams({ page: String(page), per_page: '25' });
   if (status) query.set('status', status);
   if (dues) query.set('dues', '1');
+  if (term.trim()) query.set('q', term.trim());
 
   const setStatus = (next: string) => {
     setPage(1);
@@ -39,6 +59,7 @@ export default function Orders() {
   return (
     <>
       <Panel
+        footer={<Pager meta={data?.meta} onPage={setPage} />}
         title={dues ? 'Dues orders' : 'Orders'}
         count={
           data
@@ -46,18 +67,28 @@ export default function Orders() {
             : 'Loading…'
         }
         actions={
+          <>
+          <SearchField
+            placeholder="Order no, customer, mobile…"
+            value={search}
+            onChange={(v) => {
+              setSearch(v);
+              setPage(1);
+            }}
+          />
           <TextField
             select
             label="Status"
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            sx={{ minWidth: 0, flex: '1 1 170px', maxWidth: 170 }}
+            sx={{ width: 170 }}
           >
             <MenuItem value="">All statuses</MenuItem>
             <MenuItem value="preparing">In progress</MenuItem>
             <MenuItem value="delivered">Delivered</MenuItem>
             <MenuItem value="not assigned">Not assigned</MenuItem>
           </TextField>
+          </>
         }
       >
         <TableFrame loading={loading} error={error} empty={rows.length === 0}>
@@ -106,7 +137,6 @@ export default function Orders() {
             </TableBody>
           </Table>
         </TableFrame>
-        <Pager meta={data?.meta} onPage={setPage} />
       </Panel>
     </>
   );

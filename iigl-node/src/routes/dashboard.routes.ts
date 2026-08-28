@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { sql } from 'kysely';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
 import { requireLabScope, ROLE } from '../middleware/auth.js';
@@ -241,5 +242,68 @@ dashboardRoutes.get(
         },
       },
     });
+  }),
+);
+
+/**
+ * Twelve months of orders and certificates, for the dashboard chart.
+ *
+ * `orders.order_date` is a dd-mm-yyyy string rather than a date column, so the
+ * month has to be parsed out of it — the same reason "today" upstairs is a
+ * string comparison. Certificates carry a real `created_at`, so they are
+ * grouped directly.
+ *
+ * Deliberately not money: `payable_amt` is 0 on most recent orders, so a
+ * revenue line would draw a collapse that did not happen.
+ */
+dashboardRoutes.get(
+  '/trend',
+  wrap(async (req, res) => {
+    const isAdmin = req.user.roleId === ROLE.ADMIN;
+    const labId = req.user.labId ?? 0;
+    const scope = (column: string) =>
+      isAdmin ? sql`1 = 1` : sql`${sql.raw(column)} = ${labId}`;
+
+    const months = 12;
+
+    const orders = await sql<{ ym: string; n: number }>`
+      select date_format(str_to_date(order_date, '%d-%m-%Y'), '%Y-%m') as ym,
+             count(*) as n
+        from orders
+       where str_to_date(order_date, '%d-%m-%Y')
+             >= date_sub(date_format(curdate(), '%Y-%m-01'), interval ${months - 1} month)
+         and ${scope('lab_id')}
+       group by ym
+    `.execute(db);
+
+    const reports = await sql<{ ym: string; n: number }>`
+      select date_format(created_at, '%Y-%m') as ym, count(*) as n
+        from reports
+       where created_at
+             >= date_sub(date_format(curdate(), '%Y-%m-01'), interval ${months - 1} month)
+         and ${scope('lab_id')}
+       group by ym
+    `.execute(db);
+
+    const countOf = (rows: { ym: string; n: number }[]) =>
+      new Map(rows.map((r) => [r.ym, Number(r.n)]));
+    const byOrder = countOf(orders.rows);
+    const byReport = countOf(reports.rows);
+
+    // Every month in the window is emitted, including the empty ones: a gap
+    // the chart skips would draw a flat line across a month with no orders.
+    const now = new Date();
+    const data = Array.from({ length: months }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (months - 1 - i), 1);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      return {
+        month: ym,
+        label: d.toLocaleString('en-IN', { month: 'short' }),
+        orders: byOrder.get(ym) ?? 0,
+        reports: byReport.get(ym) ?? 0,
+      };
+    });
+
+    res.json({ data });
   }),
 );
