@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Button,
   MenuItem,
@@ -15,8 +16,10 @@ import AddIcon from '@mui/icons-material/AddOutlined';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Dialog, Notice, PageHead, Panel, TableFrame, money } from '../components/ui';
+import { Dialog, IconAction, Notice, PageHead, Panel, RowActions, TableFrame, money } from '../components/ui';
 import type { Category, Lab, Price } from '../lib/api';
+import EditIcon from '@mui/icons-material/EditOutlined';
+import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
 
 const BLANK = {
   open: false,
@@ -29,7 +32,12 @@ const BLANK = {
 };
 
 export default function Pricing() {
+  const [params] = useSearchParams();
   const [scope, setScope] = useState('standard');
+
+  // "Price list for Laboratory" in the sidebar opens on the first laboratory
+  // rather than on the standard rates.
+  const wantsLab = params.get('scope') === 'laboratory';
   const categories = useFetch<{ data: Category[] }>('/catalog/categories');
   const labs = useFetch<{ data: Lab[] }>('/users/laboratories');
   const prices = useFetch<{ data: Price[] }>(`/admin/prices?lab_id=${scope}`);
@@ -38,6 +46,12 @@ export default function Pricing() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    const first = labs.data?.data[0];
+    if (wantsLab && first && scope === 'standard') setScope(String(first.id));
+    if (!wantsLab && scope !== 'standard') setScope('standard');
+  }, [wantsLab, labs.data]);
 
   const cats = categories.data?.data ?? [];
   const rows = prices.data?.data ?? [];
@@ -152,9 +166,10 @@ export default function Pricing() {
                     {money(p.classic_price)}
                   </TableCell>
                   <TableCell>
-                    <Stack direction="row" spacing={0.5}>
-                      <Button
-                        size="small"
+                    <RowActions>
+                      <IconAction
+                        label="Edit band"
+                        icon={EditIcon}
                         onClick={() =>
                           setForm({
                             open: true,
@@ -166,13 +181,9 @@ export default function Pricing() {
                             classic_price: String(p.classic_price),
                           })
                         }
-                      >
-                        Edit
-                      </Button>
-                      <Button size="small" color="error" onClick={() => remove(p)}>
-                        Delete
-                      </Button>
-                    </Stack>
+                      />
+                      <IconAction label="Delete band" icon={DeleteIcon} danger onClick={() => remove(p)} />
+                    </RowActions>
                   </TableCell>
                 </TableRow>
               ))}

@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
-  Button,
   MenuItem,
   Table,
   TableBody,
@@ -11,15 +10,28 @@ import {
   TextField,
 } from '@mui/material';
 import { useFetch } from '../lib/useFetch';
-import { OrderChip, PageHead, Pager, Panel, TableFrame, money } from '../components/ui';
+import { IconAction, OrderChip, PageHead, Pager, Panel, RowActions, TableFrame, money } from '../components/ui';
 import type { Order, Paged } from '../lib/api';
+import OpenIcon from '@mui/icons-material/ChevronRightOutlined';
 
 export default function Orders() {
+  // The laboratory menu points here four ways — in progress, paid and
+  // delivered, dues, and everything — so the URL holds the filter rather than
+  // the component.
+  const [params, setParams] = useSearchParams();
+  const status = params.get('status') ?? '';
+  const dues = params.get('dues') === '1';
+
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState('');
 
   const query = new URLSearchParams({ page: String(page), per_page: '25' });
   if (status) query.set('status', status);
+  if (dues) query.set('dues', '1');
+
+  const setStatus = (next: string) => {
+    setPage(1);
+    setParams(next ? { status: next } : {});
+  };
 
   const { data, loading, error } = useFetch<Paged<Order>>(`/orders?${query}`);
   const rows = data?.data ?? [];
@@ -27,8 +39,16 @@ export default function Orders() {
   return (
     <>
       <PageHead
-        title="Orders"
-        subtitle={data ? `${data.meta.total.toLocaleString()} orders` : 'Loading…'}
+        title={dues ? 'Dues orders' : 'Orders'}
+        subtitle={
+          dues
+            ? `${
+                data ? data.meta.total.toLocaleString() : '…'
+              } delivered orders still carrying a balance`
+            : data
+              ? `${data.meta.total.toLocaleString()} orders`
+              : 'Loading…'
+        }
       />
 
       <Panel
@@ -37,10 +57,7 @@ export default function Orders() {
             select
             label="Status"
             value={status}
-            onChange={(e) => {
-              setStatus(e.target.value);
-              setPage(1);
-            }}
+            onChange={(e) => setStatus(e.target.value)}
             sx={{ minWidth: 170 }}
           >
             <MenuItem value="">All statuses</MenuItem>
@@ -87,9 +104,9 @@ export default function Orders() {
                     {money(o.dues_amount)}
                   </TableCell>
                   <TableCell>
-                    <Button size="small" component={RouterLink} to={`/orders/${o.id}`}>
-                      Open
-                    </Button>
+                    <RowActions>
+                      <IconAction label="Open order" icon={OpenIcon} to={`/orders/${o.id}`} />
+                    </RowActions>
                   </TableCell>
                 </TableRow>
               ))}

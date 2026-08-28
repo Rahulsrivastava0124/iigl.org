@@ -4,30 +4,33 @@ Audit of the Node and Express API in this directory, carried out against a local
 copy of the production database (26 tables, 22,103 certificates, 9,608 orders,
 21 user accounts).
 
-Twelve findings. Every one was reproduced against the running service or the
+Thirteen findings. Every one was reproduced against the running service or the
 real data — none are inferred from reading the code. Each entry names the check
 that produced it so it can be re-run.
 
 | Severity | Count | Fixed | Held |
 | --- | --- | --- | --- |
-| High | 4 | 3 | 1 |
+| High | 4 | 4 | 0 |
 | Medium | 4 | 4 | 0 |
 | Low | 4 | 2 | 2 |
 
-**Nine of twelve are fixed and verified.** Three are held because they need a
+**Ten of twelve are fixed and verified.** Two are held because they need a
 decision that is not mine to make:
 
 | Held | Why |
 | --- | --- |
-| H1 indexes | A write against the database the Laravel application is still serving from. Needs a maintenance window. |
 | L2 session revocation | Needs a persistent session store, which is an infrastructure choice. |
 | L4 audit trail | Needs a new column, and a business decision about whether amendments must be traceable. |
+
+Two further constraints — unique on `reports.report_no` and `users.mobile` — are
+written in `migrations/002-unique-constraints.sql` but blocked by existing
+duplicate data. See `migrations/README.md`.
 
 Each fixed finding below carries a **Fixed** note naming the change and the
 check that proves it. The nine bad-path-id cases are now regression cases in
 `npm run sweep`, which stands at 113 checks.
 
-Scope: the 53 endpoints listed in [API-ROUTES.md](API-ROUTES.md). The Laravel
+Scope: the endpoints listed in [API.md](API.md). The Laravel
 application it replaces is out of scope except where behaviour was carried over
 deliberately; its own defects are recorded in the endpoint reference for that
 project.
@@ -80,8 +83,54 @@ from — the two share it.
 Note that adding an index is additive and reversible, unlike the schema
 migrations this project deliberately avoids. It changes no column and no row.
 
-> **Held.** Not actioned. This is the only finding that writes to the shared
-> database, and it needs a window agreed with whoever owns it.
+> **Fixed.** `migrations/001-indexes.sql` adds 31 indexes and has been applied
+> to the working copy. Measured on the same query: `Table scan on reports,
+> cost 2316, rows 21318` became `Covering index lookup using idx_reports_lab,
+> cost 237, rows 2325`. Every hot path now resolves through an index and no
+> query in the sweep does a table scan.
+>
+> Additive and reversible — no column changes type, no row changes value, and
+> the rollback is in the file. About 5 MB of index against 14 MB of data.
+>
+> Still to run against production, during a window. InnoDB builds these online
+> and neither application reads an index by name, so it is safe alongside the
+> Laravel application.
+
+### H1b — Three active staff cannot sign in: duplicate mobile numbers
+
+`users.mobile` carries no unique constraint — only `id` and `empid` are unique —
+and three numbers are held by two accounts each:
+
+| Mobile | Lowest id wins | Shadowed account | Certificates issued |
+| --- | --- | --- | --- |
+| 8420126860 | 4 IIGL-KOLKATTA, laboratory | 23 Sanjoy Naskar, active staff | 5,009 |
+| 9474797199 | 5 IIGL-MALDA, **deactivated** | 7 MOSHMI SHARMA, active staff | 2,419 |
+| 9851562223 | 15 Mintu Sarkar, **deactivated** | 19 Mintu Sarkar, active staff | 110 |
+
+Sign-in looked the number up and took the first row, so the shadowed account was
+unreachable whatever password was typed. Two of the three shadowing accounts are
+themselves deactivated, so those staff hit "This account has been deactivated"
+for an account that is not theirs.
+
+Between them the three shadowed accounts issued 7,538 certificates, a third of
+the 22,103 total. They are working staff, not stale rows.
+
+The Laravel application resolves sign-in the same way — `->first()` on the same
+query — so this is a pre-existing lockout rather than something the migration
+introduced.
+
+> **Fixed in the API.** Sign-in now compares the password against every account
+> holding that number and selects the one it matches, so each person reaches
+> their own account. If more than one *active* account matches both the number
+> and the password, sign-in is refused rather than guessing, because guessing
+> could sign someone in as a different person with a different role.
+>
+> **The data still needs attention, and that is not a code decision.** Someone
+> has to say which account is canonical for each number, and whether the
+> laboratory accounts on 8420126860 and 9474797199 should keep those numbers.
+> A unique index on `users.mobile` should follow the cleanup — until then the
+> duplicate check in `POST /api/users` is an application-level test with no
+> database constraint behind it, so a race can still create a pair.
 
 ### H2 — A non-numeric id returns 500 instead of 400
 

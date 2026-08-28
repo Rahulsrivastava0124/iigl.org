@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Button,
   Checkbox,
@@ -19,8 +20,11 @@ import AddIcon from '@mui/icons-material/AddOutlined';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Dialog, Notice, PageHead, Panel, TableFrame, YesNo } from '../components/ui';
+import { Dialog, IconAction, Notice, PageHead, Panel, RowActions, TableFrame, YesNo } from '../components/ui';
 import type { Attribute, Subcategory } from '../lib/api';
+import EditIcon from '@mui/icons-material/EditOutlined';
+import ValuesIcon from '@mui/icons-material/ListAltOutlined';
+import RetireIcon from '@mui/icons-material/Inventory2Outlined';
 
 interface AttributeValue {
   id: number;
@@ -51,8 +55,16 @@ export default function Attributes() {
   const rows = attributes.data?.data ?? [];
 
   const [valuesFor, setValuesFor] = useState<Attribute | null>(null);
+
+  // The menu's Attribute Values entry opens this screen on the values instead
+  // of the attributes: the attribute is picked from a select and its values are
+  // listed on the page rather than in a dialog.
+  const [params] = useSearchParams();
+  const valuesMode = params.get('tab') === 'values';
+  const picked = valuesMode ? (valuesFor ?? rows[0] ?? null) : valuesFor;
+
   const values = useFetch<{ data: AttributeValue[] }>(
-    valuesFor ? `/catalog/attributes/${valuesFor.id}/values` : null,
+    picked ? `/catalog/attributes/${picked.id}/values` : null,
   );
 
   const [form, setForm] = useState(BLANK);
@@ -107,12 +119,12 @@ export default function Attributes() {
   };
 
   const addValue = async () => {
-    if (!valuesFor || !newValue.trim()) return;
+    if (!picked || !newValue.trim()) return;
     setBusy(true);
     setErr(null);
     try {
       await api.post('/admin/attribute-values', {
-        attr_id: valuesFor.id,
+        attr_id: picked.id,
         value_name: newValue.trim(),
       });
       setNewValue('');
@@ -141,23 +153,111 @@ export default function Attributes() {
   return (
     <>
       <PageHead
-        title="Attributes"
-        subtitle="The fields that make up a certificate, and the order they print in."
+        title={valuesMode ? 'Attribute values' : 'Attributes'}
+        subtitle={
+          valuesMode
+            ? 'The choices a gemologist picks from when filling in an attribute.'
+            : 'The fields that make up a certificate, and the order they print in.'
+        }
         action={
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            disabled={!chosen}
-            onClick={() => setForm({ ...BLANK, open: true })}
-          >
-            Add attribute
-          </Button>
+          !valuesMode && (
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              disabled={!chosen}
+              onClick={() => setForm({ ...BLANK, open: true })}
+            >
+              Add attribute
+            </Button>
+          )
         }
       />
 
       {msg && <Notice kind="ok">{msg}</Notice>}
       {err && <Notice kind="error">{err}</Notice>}
 
+      {valuesMode ? (
+        <Panel
+          actions={
+            <Stack direction="row" spacing={1}>
+              <TextField
+                select
+                label="Subcategory"
+                value={chosen}
+                onChange={(e) => {
+                  setSubId(e.target.value);
+                  setValuesFor(null);
+                }}
+                sx={{ minWidth: 200 }}
+              >
+                {subs.map((s) => (
+                  <MenuItem key={s.id} value={s.id}>
+                    {s.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                select
+                label="Attribute"
+                value={picked ? String(picked.id) : ''}
+                onChange={(e) =>
+                  setValuesFor(rows.find((a) => String(a.id) === e.target.value) ?? null)
+                }
+                sx={{ minWidth: 200 }}
+                disabled={rows.length === 0}
+              >
+                {rows.map((a) => (
+                  <MenuItem key={a.id} value={a.id}>
+                    {a.attr_name}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Stack>
+          }
+        >
+          <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: 'center' }}>
+            <TextField
+              label="New value"
+              value={newValue}
+              onChange={(e) => setNewValue(e.target.value)}
+              sx={{ minWidth: 260 }}
+              disabled={!picked}
+            />
+            <Button
+              variant="contained"
+              onClick={addValue}
+              disabled={busy || !picked || !newValue.trim()}
+            >
+              Add value
+            </Button>
+          </Stack>
+
+          <TableFrame
+            loading={values.loading}
+            error={values.error}
+            empty={(values.data?.data ?? []).length === 0}
+          >
+            <Table size="small" stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Id</TableCell>
+                  <TableCell>Value</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(values.data?.data ?? []).map((v) => (
+                  <TableRow key={v.id} hover>
+                    <TableCell className="mono" sx={{ width: 80 }}>
+                      #{v.id}
+                    </TableCell>
+                    <TableCell>{v.value_name}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableFrame>
+        </Panel>
+      ) : (
       <Panel
         actions={
           <TextField
@@ -208,9 +308,10 @@ export default function Attributes() {
                     <YesNo on={a.is_required} />
                   </TableCell>
                   <TableCell>
-                    <Stack direction="row" spacing={0.5}>
-                      <Button
-                        size="small"
+                    <RowActions>
+                      <IconAction
+                        label="Edit attribute"
+                        icon={EditIcon}
                         onClick={() =>
                           setForm({
                             open: true,
@@ -223,16 +324,10 @@ export default function Attributes() {
                             is_required: Boolean(a.is_required),
                           })
                         }
-                      >
-                        Edit
-                      </Button>
-                      <Button size="small" onClick={() => setValuesFor(a)}>
-                        Values
-                      </Button>
-                      <Button size="small" color="error" onClick={() => retire(a)}>
-                        Retire
-                      </Button>
-                    </Stack>
+                      />
+                      <IconAction label="Values" icon={ValuesIcon} onClick={() => setValuesFor(a)} />
+                      <IconAction label="Retire" icon={RetireIcon} danger onClick={() => retire(a)} />
+                    </RowActions>
                   </TableCell>
                 </TableRow>
               ))}
@@ -240,6 +335,7 @@ export default function Attributes() {
           </Table>
         </TableFrame>
       </Panel>
+      )}
 
       {form.open && (
         <Dialog
@@ -276,7 +372,7 @@ export default function Attributes() {
         </Dialog>
       )}
 
-      {valuesFor && (
+      {valuesFor && !valuesMode && (
         <Dialog
           title={`Values — ${valuesFor.attr_name}`}
           onClose={() => setValuesFor(null)}

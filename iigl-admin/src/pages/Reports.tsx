@@ -2,7 +2,6 @@ import { useState } from 'react';
 import {
   Button,
   Checkbox,
-  Stack,
   Table,
   TableBody,
   TableCell,
@@ -12,9 +11,11 @@ import {
 } from '@mui/material';
 import PrintIcon from '@mui/icons-material/PrintOutlined';
 import { useFetch } from '../lib/useFetch';
-import { PageHead, Pager, Panel, TableFrame } from '../components/ui';
+import { IconAction, PageHead, Pager, Panel, RowActions, TableFrame } from '../components/ui';
 import type { Paged, Report } from '../lib/api';
 import { apiUrl } from '../lib/config';
+import SmartIcon from '@mui/icons-material/CreditCardOutlined';
+import ClassicIcon from '@mui/icons-material/DescriptionOutlined';
 
 /** Opens a card PDF in a new tab. The API streams it inline. */
 function printCard(id: number, kind: 'smart' | 'classic') {
@@ -124,14 +125,18 @@ export default function Reports() {
                   </TableCell>
                   <TableCell>{r.created_at?.slice(0, 10) ?? '—'}</TableCell>
                   <TableCell>
-                    <Stack direction="row" spacing={0.5}>
-                      <Button size="small" onClick={() => printCard(r.id, 'smart')}>
-                        Smart
-                      </Button>
-                      <Button size="small" onClick={() => printCard(r.id, 'classic')}>
-                        Classic
-                      </Button>
-                    </Stack>
+                    <RowActions>
+                      <IconAction
+                        label="Print smart card"
+                        icon={SmartIcon}
+                        onClick={() => printCard(r.id, 'smart')}
+                      />
+                      <IconAction
+                        label="Print classic card"
+                        icon={ClassicIcon}
+                        onClick={() => printCard(r.id, 'classic')}
+                      />
+                    </RowActions>
                   </TableCell>
                 </TableRow>
               ))}

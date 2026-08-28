@@ -3,20 +3,37 @@ import { createTheme } from '@mui/material/styles';
 /**
  * IIGL theme.
  *
- * The primary colour is sampled from the logo files, where `#2c3b64` is the
- * dominant value across logo.png, h-logo.png, card-logo.png and logo-text.png.
- * It carries 10.96:1 against white, so it works for body text and small labels
- * as well as for fills.
+ * The palette is the one in iigl-frontend-website/style.md, so the panel and
+ * the public site are the same brand rather than two interpretations of it.
+ * Deep navy #061948 carries 17.0:1 against white, which is why it works for
+ * body text and small labels as well as for fills.
+ *
+ * Gold is an accent only. It marks a value or a state; it never fills a button
+ * or a bar, because at that size it competes with the navy instead of
+ * punctuating it.
  *
  * Light only, deliberately. White is half the brand, so the panel stays white
  * whatever the operating system prefers rather than flipping to a dark ground.
  */
 
+/**
+ * The one place the brand colour is defined. Everything else in the panel
+ * derives from `navy`, so changing this line restyles the whole thing.
+ */
 export const BRAND = {
-  navy: '#2c3b64',
-  navyDark: '#1d2846',
-  navySoft: '#4a5c8c',
-  navyWash: '#e9ecf3',
+  /** Deep navy. The primary brand colour, shared with the public website. */
+  navy: '#061948',
+  navyDark: '#03102f',
+  /** Primary navy from the website palette: the lighter of the two. */
+  navySoft: '#2c3b64',
+  navyWash: '#e7eaf1',
+  /** Gold, for accents only — never for a large fill or a primary action. */
+  gold: '#d58a2b',
+  goldDark: '#bd7724',
+  bodyText: '#3c4252',
+  mutedText: '#4a5265',
+  cardBorder: '#e6e8ee',
+  sectionBg: '#f8f9fb',
 } as const;
 
 export const theme = createTheme({
@@ -30,14 +47,19 @@ export const theme = createTheme({
       light: BRAND.navySoft,
       contrastText: '#ffffff',
     },
+    secondary: {
+      main: BRAND.gold,
+      dark: BRAND.goldDark,
+      contrastText: '#ffffff',
+    },
     // Semantic colour stays separate from the brand: these carry state, and
     // turning them navy would cost the at-a-glance read on the tables.
     success: { main: '#1f6b4b' },
     warning: { main: '#8a5a16' },
     error: { main: '#97293f' },
-    background: { default: '#f4f5f9', paper: '#ffffff' },
-    text: { primary: '#151a28', secondary: '#5a6178' },
-    divider: '#d6d9e5',
+    background: { default: BRAND.sectionBg, paper: '#ffffff' },
+    text: { primary: BRAND.bodyText, secondary: BRAND.mutedText },
+    divider: BRAND.cardBorder,
   },
 
   shape: { borderRadius: 8 },
@@ -73,7 +95,7 @@ export const theme = createTheme({
       defaultProps: { elevation: 0 },
       styleOverrides: {
         root: { backgroundImage: 'none' },
-        outlined: { borderColor: '#d6d9e5' },
+        outlined: { borderColor: BRAND.cardBorder },
       },
     },
     MuiTableCell: {
@@ -84,8 +106,8 @@ export const theme = createTheme({
           fontSize: '0.66rem',
           letterSpacing: '0.08em',
           fontWeight: 500,
-          color: '#5a6178',
-          backgroundColor: '#eef0f6',
+          color: BRAND.mutedText,
+          backgroundColor: BRAND.sectionBg,
           whiteSpace: 'nowrap',
         },
       },

@@ -126,28 +126,42 @@ restart ends them all. Any request that comes back 401 returns the whole panel
 to its sign-in screen. It does not leave open screens showing the API message
 where their data should be.
 
+## Style
+
+[style.md](style.md) is the design guide — layout, palette, components, writing
+and the role model. It follows the house structure in
+`Prakriti_New_Admin/docs/style.md`.
+
+[STYLE-AUDIT.md](STYLE-AUDIT.md) measures the panel against it. Seven findings,
+one of which changes what a person sees: the permission matrix exists in the API
+but nothing in the UI reads it, so staff are offered buttons the API refuses.
+
 ## Theme
 
 Material UI, themed to the IIGL colours. Everything lives in `src/lib/theme.ts`
 — there is no stylesheet of our own, and `CssBaseline` paints the background.
 
-The primary colour is sampled from the logo files, where `#2c3b64` is the
-dominant value across `logo.png`, `h-logo.png`, `card-logo.png` and
-`logo-text.png`, so the panel matches the mark rather than approximating it. It
-carries 10.96:1 against white, which is why it works for body text and small
-labels as well as for fills.
+The brand navy carries 15.56:1 against white, which is why it works for body
+text and small labels as well as for fills.
+
+Note it is darker than the navy in the current logo files, which sample to
+`#2c3b64`. If the artwork is ever regenerated from the brand sheet the two
+should converge; until then the theme follows the brand sheet, not the logos.
 
 | Token | Value | Used for |
 | --- | --- | --- |
-| `palette.primary.main` | `#2c3b64` | App bar, primary buttons, active navigation |
-| `palette.primary.dark` | `#1d2846` | Hover and pressed |
-| `palette.primary.light` | `#4a5c8c` | Large fills that read as a slab in full navy |
+| `palette.primary.main` | `#12243f` | App bar, primary buttons, active navigation |
+| `palette.primary.dark` | `#0b1729` | Hover and pressed |
+| `palette.primary.light` | `#33456b` | Large fills that read as a slab in full navy |
 | `palette.background.paper` | `#ffffff` | Panels and tables |
 | `palette.background.default` | `#f4f5f9` | The page behind them |
 
 `cssVariables: true` is set, so the palette is emitted as CSS custom properties
 and can be read from the browser or overridden without rebuilding the theme
 object.
+
+Every colour derives from the `BRAND` object at the top of `src/lib/theme.ts`.
+Changing `navy` there restyles the whole panel.
 
 Semantic colour is kept separate from the brand: approved is green, pending
 amber, declined red. Those carry state and are not swapped for navy.
@@ -179,15 +193,19 @@ a public page, so the trade is a reasonable one.
 | Screen | What it does |
 | --- | --- |
 | Dashboard | Order counts, certificate count, and the billed, collected and outstanding totals |
+| Attendance | Clock in and out, breaks, and the record — your own, or a colleague's |
+| Your profile | Contact details, photograph, signature, and changing your password |
+| Website content | Articles, branch pages, certificate types, banners and static pages |
 | Orders | Filterable list; open one to price it and settle it |
-| Order detail | Live quote as the discount changes, then settle and deliver in one step |
+| Order detail | Live quote as the discount changes, settle and deliver, and print the receipt or invoice |
 | Certificates | List, print a smart or classic card, or select up to 50 and print them as one PDF |
 | Transactions | Approve or decline remittances sent to you |
 | Laboratories | Set a laboratory's commission rate, activate or deactivate |
-| Staff | Who is working where, and create accounts |
+| Staff | Who is working where; create and edit accounts, reset passwords, move or end an employment |
 | Categories | Categories and subcategories |
 | Attributes | Certificate fields per subcategory, their print order, and their allowed values |
 | Pricing | Weight bands, standard or per laboratory |
+| Roles and permissions | The permission matrix per role, and adding or renaming a role |
 
 ## Notes on behaviour
 
@@ -199,6 +217,31 @@ itself, so a figure from the browser can never become the bill.
 **Unpriced certificates.** If a certificate's carat weight falls outside every
 band it is billed as zero, and the screen says so before you can settle. That
 means the price table has a gap, not that the certificate is free.
+
+**Uploads happen before the save.** `FileField` sends the file straight away and
+holds the returned path; the form saves the path with everything else. An
+abandoned form therefore leaves a file on disk and no record — which is the
+right way round, because an orphaned file costs disk and a half-written record
+costs a reissue.
+
+**Signatures print.** The one on a laboratory profile is what appears on every
+certificate that laboratory issues, so replacing it changes future cards.
+
+**Moving someone between laboratories ends the old employment and starts a
+new one**, rather than editing the existing row, so the history survives.
+
+**Permissions are enforced, not cosmetic.** The matrix on the roles screen
+decides what staff actually see. Turning off view or create on *Order intake*
+narrows a person to the orders they took or were assigned, instead of the whole
+laboratory queue — which is what the Laravel application does through
+`filterPermission()`.
+
+A toggle sends all four flags for that row, because the API replaces the row
+rather than patching one flag. Changes apply immediately: the API caches the
+matrix for a minute but drops the cache on write.
+
+Administrators are unconditional. The matrix is still shown for role 1 so the
+zeros there are not mistaken for a lockout, with a note saying it has no effect.
 
 **Overlapping price bands.** New bands are rejected when they overlap an
 existing one for the same category and laboratory. Overlaps that already exist

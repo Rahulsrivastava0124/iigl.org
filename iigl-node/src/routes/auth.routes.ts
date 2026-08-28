@@ -13,18 +13,44 @@ authRoutes.post(
     const { mobile, password } = req.body ?? {};
     if (!mobile || !password) throw badRequest('Enter your mobile number and password.');
 
-    const row = await db
+    // users.mobile carries no unique constraint and the live data contains
+    // numbers held by more than one account, so this can return several rows.
+    // Taking the first would hand the sign-in to whichever id happens to be
+    // lowest, which is how three active staff are currently locked out.
+    const candidates = await db
       .selectFrom('users')
       .select(['id', 'fullname', 'mobile', 'password', 'role_id', 'is_active', 'status'])
       .where('mobile', '=', String(mobile))
-      .executeTakeFirst();
+      .orderBy('id')
+      .execute();
+
+    // Match on the password rather than on the row order: when two accounts
+    // share a number they have different passwords, so the credential itself
+    // says which person is signing in.
+    const matches: typeof candidates = [];
+    for (const candidate of candidates) {
+      if (await bcrypt.compare(String(password), candidate.password)) matches.push(candidate);
+    }
 
     // Same response whether the account is missing or the password is wrong,
     // so the endpoint cannot be used to enumerate registered mobile numbers.
-    if (!row || !(await bcrypt.compare(String(password), row.password))) {
+    if (matches.length === 0) {
       throw unauthorized('That mobile number and password do not match.');
     }
-    if (!row.is_active) throw unauthorized('This account has been deactivated.');
+
+    const active = matches.filter((m) => m.is_active);
+    if (active.length === 0) throw unauthorized('This account has been deactivated.');
+
+    // Two active accounts, one number, one password. Guessing would sign
+    // someone in as the wrong person, possibly with a different role.
+    if (active.length > 1) {
+      throw unauthorized(
+        'More than one active account shares this mobile number and password. ' +
+          'Ask an administrator to separate them before signing in.',
+      );
+    }
+
+    const row = active[0];
 
     const user: SessionUser = {
       id: Number(row.id),

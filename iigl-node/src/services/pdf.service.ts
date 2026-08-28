@@ -57,6 +57,30 @@ export async function closeBrowser(): Promise<void> {
   await browser?.close().catch(() => undefined);
 }
 
+/**
+ * Renders arbitrary HTML to PDF on the shared browser. Used by the order
+ * paperwork, which is the same job as a card with a different page size.
+ */
+export async function renderHtmlToPdf(
+  html: string,
+  page: { width: string; height: string } | { format: 'A4' },
+): Promise<Buffer> {
+  const browser = await getBrowser();
+  const tab = await browser.newPage();
+  try {
+    await tab.setContent(html, { waitUntil: 'load', timeout: 30_000 });
+    const pdf = await tab.pdf({
+      ...page,
+      printBackground: true,
+      preferCSSPageSize: true,
+      margin: { top: '0', right: '0', bottom: '0', left: '0' },
+    });
+    return Buffer.from(pdf);
+  } finally {
+    await tab.close().catch(() => undefined);
+  }
+}
+
 export async function renderCardsHtml(
   kind: CardKind,
   cards: CardData[],

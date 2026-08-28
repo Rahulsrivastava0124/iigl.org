@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import {
-  Alert,
   Box,
   Button,
   Chip,
@@ -9,7 +8,6 @@ import {
   Grid,
   Link,
   MenuItem,
-  Paper,
   Stack,
   Table,
   TableBody,
@@ -22,7 +20,9 @@ import {
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Dialog, Notice, OrderChip, PageHead, Panel, money } from '../components/ui';
+import { Dialog, Notice, OrderChip, PageHead, Panel, Tile, money, toneColour } from '../components/ui';
+import { apiUrl } from '../lib/config';
+import PrintIcon from '@mui/icons-material/PrintOutlined';
 
 interface QuoteLine {
   report_id: number;
@@ -41,19 +41,6 @@ interface Quote {
   amount_with_gst: number;
   unpriced_count: number;
   certificates: QuoteLine[];
-}
-
-function Total({ label, value }: { label: string; value: string }) {
-  return (
-    <Paper variant="outlined" sx={{ p: 1.75 }}>
-      <Typography variant="overline" color="text.secondary" sx={{ display: 'block' }}>
-        {label}
-      </Typography>
-      <Typography className="tabular" sx={{ fontSize: 20, fontWeight: 600 }}>
-        {value}
-      </Typography>
-    </Paper>
-  );
 }
 
 export default function OrderDetail() {
@@ -115,11 +102,25 @@ export default function OrderDetail() {
           </Box>
         }
         action={
-          o.status !== 'delivered' && (
-            <Button variant="contained" onClick={() => setSettling(true)} disabled={!q}>
-              Settle and deliver
+          <Stack direction="row" spacing={1}>
+            <Button
+              startIcon={<PrintIcon />}
+              onClick={() => window.open(apiUrl(`/cards/order/receipt/${id}`), '_blank', 'noopener')}
+            >
+              Receipt
             </Button>
-          )
+            <Button
+              startIcon={<PrintIcon />}
+              onClick={() => window.open(apiUrl(`/cards/order/invoice/${id}`), '_blank', 'noopener')}
+            >
+              Invoice
+            </Button>
+            {o.status !== 'delivered' && (
+              <Button variant="contained" onClick={() => setSettling(true)} disabled={!q}>
+                Settle and deliver
+              </Button>
+            )}
+          </Stack>
         }
       />
 
@@ -157,6 +158,7 @@ export default function OrderDetail() {
         Pricing
       </Typography>
       <Panel
+        title="Certificates on this order"
         actions={
           <TextField
             label="Discount"
@@ -174,7 +176,10 @@ export default function OrderDetail() {
           </Box>
         )}
         {quote.error && (
-          <Typography sx={{ py: 4, textAlign: 'center' }} color="error" variant="body2">
+          <Typography
+            sx={{ py: 4, textAlign: 'center', color: `${toneColour('refused')}.main` }}
+            variant="body2"
+          >
             {quote.error}
           </Typography>
         )}
@@ -222,26 +227,26 @@ export default function OrderDetail() {
 
             <Grid container spacing={1.5} sx={{ p: 2 }}>
               <Grid size={{ xs: 6, md: 3 }}>
-                <Total label="Billed" value={money(q.total_amount)} />
+                <Tile label="Billed" value={money(q.total_amount)} />
               </Grid>
               <Grid size={{ xs: 6, md: 3 }}>
-                <Total label="Discount" value={money(q.discount)} />
+                <Tile label="Discount" value={money(q.discount)} />
               </Grid>
               <Grid size={{ xs: 6, md: 3 }}>
-                <Total label="Payable" value={money(q.payable_amount)} />
+                <Tile label="Payable" value={money(q.payable_amount)} />
               </Grid>
               <Grid size={{ xs: 6, md: 3 }}>
-                <Total label="With 18% GST" value={money(q.amount_with_gst)} />
+                <Tile label="With 18% GST" value={money(q.amount_with_gst)} />
               </Grid>
             </Grid>
 
             {q.unpriced_count > 0 && (
               <Box sx={{ px: 2, pb: 2 }}>
-                <Alert severity="error">
+                <Notice kind="error" sx={{ mb: 0 }}>
                   {q.unpriced_count} certificate{q.unpriced_count === 1 ? '' : 's'} fell outside
                   every price band and were billed as zero. Add a band covering that weight before
                   settling.
-                </Alert>
+                </Notice>
               </Box>
             )}
           </>

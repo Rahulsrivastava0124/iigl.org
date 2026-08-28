@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Button,
   MenuItem,
@@ -9,14 +10,14 @@ import {
   TableHead,
   TableRow,
   TextField,
-  Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/AddOutlined';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Dialog, Notice, PageHead, Panel, TableFrame } from '../components/ui';
+import { Dialog, IconAction, Notice, PageHead, Panel, RowActions, TableFrame } from '../components/ui';
 import type { Category, Subcategory } from '../lib/api';
+import EditIcon from '@mui/icons-material/EditOutlined';
 
 interface Unit {
   id: number;
@@ -25,6 +26,12 @@ interface Unit {
 }
 
 export default function Categories() {
+  // The menu has a Category entry and a Sub Category entry pointing here, so
+  // the URL decides which of the two lists this screen is showing. Showing both
+  // would make the two entries the same page.
+  const [params] = useSearchParams();
+  const showSubs = params.get('tab') === 'sub';
+
   const categories = useFetch<{ data: Category[] }>('/catalog/categories');
   const subcategories = useFetch<{ data: Subcategory[] }>('/catalog/subcategories');
   const units = useFetch<{ data: Unit[] }>('/catalog/units');
@@ -93,13 +100,18 @@ export default function Categories() {
   return (
     <>
       <PageHead
-        title="Categories"
-        subtitle="What the laboratory tests, and how each item is described."
+        title={showSubs ? 'Subcategories' : 'Categories'}
+        subtitle={
+          showSubs
+            ? 'The divisions within a category. A certificate is built from a subcategory.'
+            : 'What the laboratory tests, and how each item is described.'
+        }
       />
 
       {msg && <Notice kind="ok">{msg}</Notice>}
       {err && <Notice kind="error">{err}</Notice>}
 
+      {!showSubs && (
       <Panel
         title="Categories"
         actions={
@@ -132,12 +144,13 @@ export default function Categories() {
                     {c.short_description ?? '—'}
                   </TableCell>
                   <TableCell>
-                    <Button
-                      size="small"
-                      onClick={() => setCatForm({ open: true, id: c.id, name: c.name, unit: '' })}
-                    >
-                      Edit
-                    </Button>
+                    <RowActions>
+                      <IconAction
+                        label="Edit category"
+                        icon={EditIcon}
+                        onClick={() => setCatForm({ open: true, id: c.id, name: c.name, unit: '' })}
+                      />
+                    </RowActions>
                   </TableCell>
                 </TableRow>
               ))}
@@ -145,10 +158,9 @@ export default function Categories() {
           </Table>
         </TableFrame>
       </Panel>
+      )}
 
-      <Typography variant="h2" sx={{ mt: 4, mb: 1.5 }}>
-        Subcategories
-      </Typography>
+      {showSubs && (
       <Panel
         actions={
           <Button
@@ -184,19 +196,20 @@ export default function Categories() {
                   <TableCell>{s.name}</TableCell>
                   <TableCell>{catName(s.category_id)}</TableCell>
                   <TableCell>
-                    <Button
-                      size="small"
-                      onClick={() =>
-                        setSubForm({
-                          open: true,
-                          id: s.id,
-                          name: s.name,
-                          category_id: String(s.category_id),
-                        })
-                      }
-                    >
-                      Edit
-                    </Button>
+                    <RowActions>
+                      <IconAction
+                        label="Edit subcategory"
+                        icon={EditIcon}
+                        onClick={() =>
+                          setSubForm({
+                            open: true,
+                            id: s.id,
+                            name: s.name,
+                            category_id: String(s.category_id),
+                          })
+                        }
+                      />
+                    </RowActions>
                   </TableCell>
                 </TableRow>
               ))}
@@ -204,6 +217,7 @@ export default function Categories() {
           </Table>
         </TableFrame>
       </Panel>
+      )}
 
       {catForm.open && (
         <Dialog

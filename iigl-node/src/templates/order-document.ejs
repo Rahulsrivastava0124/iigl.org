@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title><%= kind === 'invoice' ? 'Invoice' : 'Receipt' %> <%= order.order_no %></title>
+<style>
+  /*
+    Counter paperwork: the receipt handed over when an order is taken, and the
+    invoice raised when it is settled. Same document, different totals block.
+    A4 so it prints on ordinary office stock.
+  */
+  @page { size: A4 portrait; margin: 14mm; }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: "IBM Plex Sans", Arial, sans-serif;
+    font-size: 11pt;
+    color: #3c4252;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 2px solid #061948;
+    padding-bottom: 6mm;
+  }
+
+  header img { height: 18mm; }
+
+  .title { text-align: right; }
+  .title h1 {
+    margin: 0;
+    font-size: 15pt;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #061948;
+  }
+  .title .no { margin-top: 2mm; font-size: 10pt; font-weight: 600; }
+  .title .date { font-size: 9pt; color: #4a5265; }
+
+  .parties {
+    display: flex;
+    gap: 10mm;
+    margin-top: 6mm;
+  }
+  .party { flex: 1; }
+  .party h2 {
+    margin: 0 0 1.5mm;
+    font-size: 8pt;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: #4a5265;
+    font-weight: 500;
+  }
+  .party p { margin: 0; line-height: 1.5; }
+  .party strong { display: block; font-size: 11.5pt; color: #061948; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 7mm; }
+  th, td { padding: 2.5mm 3mm; text-align: left; border-bottom: 1px solid #e6e8ee; }
+  th {
+    background: #f8f9fb;
+    font-size: 8pt;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #4a5265;
+    font-weight: 500;
+  }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .totals { margin-top: 6mm; margin-left: auto; width: 78mm; }
+  .totals tr td { border: 0; padding: 1.5mm 3mm; }
+  .totals tr td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  .totals tr.grand td {
+    border-top: 2px solid #061948;
+    font-weight: 700;
+    font-size: 12pt;
+    color: #061948;
+    padding-top: 2.5mm;
+  }
+  .totals tr.dues td { color: #97293f; font-weight: 600; }
+
+  .note {
+    margin-top: 8mm;
+    padding: 4mm;
+    background: #f8f9fb;
+    border-left: 3px solid #d58a2b;
+    font-size: 9pt;
+  }
+
+  footer {
+    margin-top: 12mm;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-top: 1px solid #e6e8ee;
+    padding-top: 4mm;
+    font-size: 8.5pt;
+    color: #4a5265;
+  }
+  .sign { text-align: center; }
+  .sign img { height: 13mm; display: block; margin: 0 auto 1mm; }
+  .sign span { border-top: 1px solid #c9cdd8; padding-top: 1mm; display: block; }
+</style>
+</head>
+<body>
+
+<header>
+  <% if (logo) { %><img src="<%= logo %>" alt="IIGL"><% } %>
+  <div class="title">
+    <h1><%= kind === 'invoice' ? 'Tax Invoice' : 'Receipt' %></h1>
+    <div class="no"><%= order.order_no %></div>
+    <div class="date"><%= kind === 'invoice' ? (order.delivery_date || order.order_date) : order.order_date %></div>
+  </div>
+</header>
+
+<div class="parties">
+  <div class="party">
+    <h2>Issued by</h2>
+    <p>
+      <strong><%= lab ? lab.fullname : 'IIGL' %></strong>
+      <% if (lab && lab.address) { %><%= lab.address %><br><% } %>
+      <% if (lab && lab.city) { %><%= lab.city %><% if (lab.state) { %>, <%= lab.state %><% } %><br><% } %>
+      <% if (lab && lab.mobile) { %><%= lab.mobile %><br><% } %>
+      <% if (lab && lab.gst_no) { %>GST <%= lab.gst_no %><% } %>
+    </p>
+  </div>
+  <div class="party">
+    <h2>Customer</h2>
+    <p>
+      <strong><%= order.customer_name %></strong>
+      <%= order.mobile %><% if (order.alt_mobile) { %> · <%= order.alt_mobile %><% } %><br>
+      <% if (order.email) { %><%= order.email %><br><% } %>
+      <% if (order.address) { %><%= order.address %><br><% } %>
+      <% if (order.gst) { %>GST <%= order.gst %><% } %>
+    </p>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Item</th>
+      <th>Category</th>
+      <th>Cards</th>
+      <th class="num">Quantity</th>
+      <% if (kind === 'invoice') { %><th class="num">Amount</th><% } %>
+    </tr>
+  </thead>
+  <tbody>
+    <% items.forEach(function (it, i) { %>
+      <tr>
+        <td><%= i + 1 %></td>
+        <td><%= it.category_name || ('#' + it.category_id) %></td>
+        <td>
+          <%= [it.smart_card ? 'Smart' : null, it.classic_card ? 'Classic' : null].filter(Boolean).join(' + ') || '—' %>
+        </td>
+        <td class="num"><%= it.qty %></td>
+        <% if (kind === 'invoice') { %><td class="num"><%= it.amount == null ? '—' : money(it.amount) %></td><% } %>
+      </tr>
+    <% }); %>
+  </tbody>
+</table>
+
+<% if (kind === 'invoice' && totals) { %>
+  <table class="totals">
+    <tr><td>Subtotal</td><td><%= money(totals.total_amount) %></td></tr>
+    <% if (totals.discount) { %><tr><td>Discount</td><td>− <%= money(totals.discount) %></td></tr><% } %>
+    <tr><td>Payable</td><td><%= money(totals.payable_amount) %></td></tr>
+    <tr><td>GST at 18%</td><td><%= money(totals.amount_with_gst - totals.payable_amount) %></td></tr>
+    <tr class="grand"><td>Total</td><td><%= money(totals.amount_with_gst) %></td></tr>
+    <tr><td>Paid</td><td><%= money(totals.paid) %></td></tr>
+    <% if (totals.dues > 0) { %>
+      <tr class="dues"><td>Outstanding</td><td><%= money(totals.dues) %></td></tr>
+    <% } %>
+  </table>
+<% } %>
+
+<div class="note">
+  <% if (kind === 'invoice') { %>
+    Certificates issued against this order remain the property of the customer. Verify any
+    certificate at <%= verifyBase %>/verify-report using its report number.
+  <% } else { %>
+    This receipt acknowledges the items listed above have been received for testing. It is not a
+    bill. An invoice follows when the order is collected.
+    <% if (order.dues_date) { %> Expected ready by <%= order.dues_date %>.<% } %>
+  <% } %>
+</div>
+
+<footer>
+  <div>
+    <% if (kind === 'invoice' && order.pay_mode) { %>
+      Paid by <%= order.pay_mode %><% if (order.transaction_no) { %>, reference <%= order.transaction_no %><% } %>.
+    <% } %>
+  </div>
+  <div class="sign">
+    <% if (signature) { %><img src="<%= signature %>" alt=""><% } %>
+    <span>For <%= lab ? lab.fullname : 'IIGL' %></span>
+  </div>
+</footer>
+
+</body>
+</html>

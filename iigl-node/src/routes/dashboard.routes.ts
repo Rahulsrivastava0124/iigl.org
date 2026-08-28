@@ -29,8 +29,26 @@ dashboardRoutes.get(
       return Number(row.n);
     };
 
-    const sum = async (column: 'total_amount' | 'paid_amount' | 'dues_amount', todayOnly = false) => {
-      let q = scopeOrders(db.selectFrom('orders').select(db.fn.sum<number>(column).as('total')));
+    /**
+     * Money is summed over delivered orders only, and the billed figure comes
+     * from payable_amt rather than total_amount — matching
+     * Admin\DashboardController@adminindex.
+     *
+     * The distinction matters: total_amount is the list price before discount,
+     * payable_amt is what was actually charged. Summing the wrong one across
+     * every order rather than the delivered ones overstated by 7,808 against
+     * the Laravel figure.
+     */
+    const sum = async (
+      column: 'payable_amt' | 'paid_amount' | 'dues_amount',
+      todayOnly = false,
+    ) => {
+      let q = scopeOrders(
+        db
+          .selectFrom('orders')
+          .select(db.fn.sum<number>(column).as('total'))
+          .where('status', '=', 'delivered'),
+      );
       if (todayOnly) q = q.where('order_date', '=', today);
       const row = await q.executeTakeFirstOrThrow();
       return Number(row.total ?? 0);
@@ -42,10 +60,10 @@ dashboardRoutes.get(
         count((q) => q.where('status', '=', 'preparing')),
         count((q) => q.where('status', '=', 'delivered')),
         count((q) => q.where('order_date', '=', today)),
-        sum('total_amount'),
+        sum('payable_amt'),
         sum('paid_amount'),
         sum('dues_amount'),
-        sum('total_amount', true),
+        sum('payable_amt', true),
       ]);
 
     let reportsQuery = db.selectFrom('reports').select(db.fn.countAll().as('n'));

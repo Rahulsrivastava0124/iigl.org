@@ -28,10 +28,18 @@ npm run codegen
 
 With the server running:
 
-| URL | What |
+| Where | What |
 | --- | --- |
+| [API.md](API.md) | The written reference: auth, conventions, and every endpoint |
 | `http://localhost:3000/docs` | Swagger UI — browse and call every endpoint |
 | `http://localhost:3000/openapi.json` | Raw OpenAPI 3.1 document, for client generation |
+
+[API.md](API.md) is generated from the OpenAPI document, which `check:spec`
+holds against the routers, so neither can drift from the code:
+
+```bash
+npm run docs
+```
 
 Both are served before the session guard, so the reference is readable without
 signing in. **Try it out** sends the session cookie, so sign in through
@@ -131,7 +139,8 @@ npm test               # 14 unit tests, no database needed
 npm run sweep          # 113 checks across four roles against a live database
 npm run check:spec     # OpenAPI document matches the mounted routers
 npm run check:pricing  # pricing matches the totals already stored
-npm run routes         # regenerate API-ROUTES.md
+npm run parity         # phase 07: every figure against the Laravel queries
+npm run docs           # regenerate API.md
 ```
 
 `npm test` is the only one that runs on a clean checkout; the rest need a
@@ -149,8 +158,13 @@ audit trail for certificate amendments.
 | Types | kysely-codegen | Introspected from the live schema. The Laravel migration files are four years stale and describe columns that no longer match production. |
 | Auth | express-session + bcryptjs | `bcryptjs` verifies the existing `$2y$10$` Laravel hashes, so no password reset is needed at cutover. |
 
-There is deliberately no migration tooling. The application never alters schema.
-Grant its database user `SELECT`, `INSERT`, `UPDATE`, `DELETE` and nothing more.
+The application never alters schema. Grant its database user `SELECT`,
+`INSERT`, `UPDATE`, `DELETE` and nothing more.
+
+Schema changes are plain SQL in [migrations/](migrations/), run by hand and
+numbered. There is deliberately no migration tool: the database is shared with
+the Laravel application and has no foreign keys protecting 22,103 certificates,
+and a tool that can diff a schema can also drop a table.
 
 ## Layout
 
@@ -497,11 +511,16 @@ npx tsx src/verify-auth.ts
 
 ## Still to build
 
-Certificate rendering — smart and classic cards, currently DomPDF plus
-simple-qrcode inside a 532-line controller. The plan is Puppeteer over the
-original card CSS, with QR codes pointing at the same verification URL so printed
-certificates keep resolving.
+[FEATURE-GAP.md](FEATURE-GAP.md) compares this API against the Laravel
+application it replaces, derived by parsing all 195 of its routes.
 
-Pricing is also unfinished: `total_amount`, `discount` and `payable_amt` are
-written by the admin screens rather than at order creation, so the rules need
-extracting from `PriceController` before the write API is complete.
+Six areas block cutover — file uploads, role permissions, laboratory and staff
+records, receipts and invoices, attendance, and profile editing. Six more are
+wanted but not blocking, mostly content management for the public site.
+
+Phase 07 parity is done — [PARITY.md](PARITY.md) records the result. It found
+two defects, both fixed: the dashboard was summing the wrong column over the
+wrong set and overstating revenue by 7,808, and certificate numbering could
+issue a duplicate. Three findings remain that need a decision rather than code.
+
+Cutover is phase 08.

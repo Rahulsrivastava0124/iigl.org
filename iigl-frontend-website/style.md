@@ -34,18 +34,42 @@ tracking-normal
 text-[#061948]
 ```
 
+All section headings must use Title Case display text, such as `Our Report Categories`. Do not force section headings to all caps with uppercase text or the `uppercase` utility. Keep the same section heading size across the website unless the user explicitly asks for a special hero treatment.
+
 Hero heading size:
 
 ```jsx
-text-[clamp(36px,3.2vw,54px)]
-leading-[1.04]
+text-[46px]
+leading-[1.06]
+max-[560px]:text-[32px]
 ```
 
 Section heading size:
 
 ```jsx
-text-[clamp(30px,3.2vw,46px)]
+text-[46px]
+font-medium
 leading-[1.08]
+max-[640px]:text-[34px]
+```
+
+Standard centered section header:
+
+```jsx
+<div className="mx-auto max-w-[820px] text-center">
+  <h2 className="m-0 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[46px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[34px]">
+    Section Heading
+  </h2>
+  <p className="mx-auto mt-3 max-w-[760px] text-[15px] font-normal leading-[1.65] text-[#4a5265]">
+    Section supporting copy.
+  </p>
+</div>
+```
+
+For sections that introduce a card grid, keep the grid close to the header:
+
+```jsx
+<div className="mt-7 grid ...">
 ```
 
 Use manual line breaks with block spans when exact wrapping matters.
@@ -148,9 +172,82 @@ shadow-[0_15px_38px_rgba(44,59,100,0.08)]
 
 Avoid nested cards and decorative ornament layers.
 
+For image-led cards, do not put padding on the outer `article` if the image should sit flush with the card edge. Put padding only on the text/content wrapper.
+
+```jsx
+<article className="overflow-hidden rounded-xl border border-[#e6e8ee] bg-white shadow-[0_15px_38px_rgba(44,59,100,0.08)]">
+  <div className="h-[136px] overflow-hidden bg-[#f8f9fb]">
+    <img className="h-full w-full object-cover" src={imageUrl} alt="" />
+  </div>
+  <div className="px-5 pb-5 pt-[50px]">
+    Card text content.
+  </div>
+</article>
+```
+
+## Wide Report Image Sections
+
+For large report/certificate presentation sections, keep the layout editorial and image-led:
+
+```jsx
+<section className="bg-white px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
+  <div className="mx-auto max-w-[1390px]">
+    <div className="grid items-end gap-8 lg:grid-cols-[0.88fr_1.12fr] lg:gap-14">
+      <div>
+        <h2 className="m-0 flex flex-wrap items-end gap-x-4 gap-y-2 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[46px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[34px]">
+          <img className="h-auto w-[clamp(112px,10vw,154px)] translate-y-[2px]" src={logoTextUrl} alt="IIGL" />
+          <span>Reports</span>
+        </h2>
+      </div>
+      <p className="max-w-[650px] text-[17px] font-normal leading-[1.8] text-[#3c4252]">
+        Supporting report copy.
+      </p>
+    </div>
+
+    <figure className="mt-9 h-[clamp(300px,34vw,520px)] overflow-hidden rounded-[22px] border border-[#e6e8ee] bg-[#edf3f7] shadow-[0_20px_46px_rgba(44,59,100,0.12)]">
+      <img className="h-full w-full object-cover" src={certificateUrl} alt="" />
+    </figure>
+  </div>
+</section>
+```
+
+Keep this report-heading pattern clean: do not add a standalone logo above it, and do not add a decorative divider below it.
+
+## Education Image Sections
+
+For education/course sections that use a wide background image, place the supplied image as the primary visual and layer the copy only over the intentionally blank side of the image. Keep the content readable with a light overlay and avoid adding extra nested cards.
+
+```jsx
+<section className="bg-[#f8f9fb] px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
+  <div className="mx-auto max-w-[1390px]">
+    <div className="relative min-h-[560px] overflow-hidden rounded-[26px] bg-white shadow-[0_18px_50px_rgba(44,59,100,0.10)] ring-1 ring-[#e6e8ee]">
+      <img className="absolute inset-y-0 left-0 h-full w-[104%] max-w-none object-cover object-left" src={educationUrl} alt="" />
+      <div className="relative z-10 w-[min(51%,640px)] px-8 py-11 sm:px-10 lg:px-12">
+        <p className="text-[12px] font-medium uppercase tracking-[0.08em] text-[#bd7724]">IIGL Education</p>
+        <h2 className="mt-7 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[46px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[34px]">
+          Your Journey to Excellence Starts Here
+        </h2>
+      </div>
+    </div>
+  </div>
+</section>
+```
+
+Feature rows inside this section should use `lucide-react` icons in soft gold circles, small Playfair headings, and compact Montserrat descriptions.
+
+Do not add decorative text divider lines, faint watermark icons, or a separate right-side royal-blue brand panel in the education section unless explicitly requested.
+
 ## Icons
 
 Use `lucide-react` icons.
+
+Do not use custom inline SVG icons for card or section UI when a `lucide-react` icon is available. For card icon badges, use one direct imported lucide component per icon slot instead of drawing or composing custom SVG shapes.
+
+```jsx
+import { Gem } from 'lucide-react';
+
+<Gem className="h-[26px] w-[26px]" strokeWidth={1.6} />
+```
 
 Icon color:
 
@@ -166,7 +263,7 @@ h-[58px] w-[58px] rounded-full bg-[#f7efe7] text-[#d58a2b]
 
 ## Decorative Elements
 
-Do not use ornaments, decorative divider lines, faint watermark icons, or corner arc graphics unless the user explicitly asks for them.
+Do not use ornaments, decorative divider lines below headings, faint watermark icons, or corner arc graphics unless the user explicitly asks for them.
 
 Keep sections clean, spacious, and focused on text, imagery, and cards.
 

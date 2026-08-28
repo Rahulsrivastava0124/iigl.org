@@ -12,7 +12,8 @@
     "check:spec": "tsx src/docs/check-spec.ts",
     "sweep": "tsx src/docs/sweep.ts",
     "check:pricing": "tsx src/docs/price-parity.ts",
-    "routes": "tsx src/docs/routes-file.ts"
+    "docs": "tsx src/docs/api-doc.ts",
+    "parity": "tsx src/docs/parity.ts"
   },
   "keywords": [],
   "author": "",
@@ -40,6 +41,7 @@
     "@types/ejs": "^3.1.5",
     "@types/express": "^5.0.6",
     "@types/express-session": "^1.19.0",
+    "@types/multer": "^2.2.0",
     "@types/node": "^26.4.0",
     "@types/qrcode": "^1.5.6",
     "@types/swagger-ui-express": "^4.1.8",

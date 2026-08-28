@@ -188,12 +188,34 @@ export async function createReport(user: SessionUser, input: CreateReportInput) 
       input.subcategory_id,
     );
 
-    const count = (await dailyCountForLab(labId, trx as unknown as typeof db)) + 1;
+    /**
+     * The number is a running count, so two certificates created in the same
+     * second can read the same count and be issued the same number. That has
+     * already happened once in the live data: 043100002110 belongs to two
+     * different stones, issued 81 seconds apart on 2021-11-01.
+     *
+     * There is no unique index on report_no to catch it, so the collision is
+     * checked for here and the count stepped past it. A unique index should
+     * follow once the existing duplicate is resolved.
+     */
+    let count = (await dailyCountForLab(labId, trx as unknown as typeof db)) + 1;
+    let reportNo = buildReportNo(labId, count);
+
+    for (let attempt = 0; attempt < 25; attempt++) {
+      const clash = await trx
+        .selectFrom('reports')
+        .select('id')
+        .where('report_no', '=', reportNo)
+        .executeTakeFirst();
+      if (!clash) break;
+      count++;
+      reportNo = buildReportNo(labId, count);
+    }
 
     const result = await trx
       .insertInto('reports')
       .values({
-        report_no: buildReportNo(labId, count),
+        report_no: reportNo,
         order_no: String(input.order_id),
         order_detail_id: String(input.order_detail_id),
         subcategory_id: String(input.subcategory_id),

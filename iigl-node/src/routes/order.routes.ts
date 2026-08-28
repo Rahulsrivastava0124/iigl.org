@@ -1,3 +1,4 @@
+import { sql } from 'kysely';
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
@@ -11,6 +12,7 @@ import {
   validateUpdateOrderInput,
 } from '../services/order.service.js';
 import { quoteOrder, settleAndDeliver, validateSettleInput } from '../services/pricing.service.js';
+import { orderVisibility } from '../services/permission.service.js';
 import { numericId, numericParams } from '../middleware/params.js';
 
 export const orderRoutes = Router();
@@ -27,6 +29,9 @@ orderRoutes.get(
   wrap(async (req, res) => {
     const p = readPage(req);
     const status = req.query.status ? String(req.query.status) : null;
+    // The dues list: delivered, but not paid in full. Laravel calls this
+    // EmpOrderDuesList and it is its own screen; here it is a filter.
+    const duesOnly = req.query.dues === '1';
 
     let q = db.selectFrom('orders').selectAll();
     let c = db.selectFrom('orders').select(db.fn.countAll().as('n'));
@@ -34,9 +39,28 @@ orderRoutes.get(
     q = scopeToLab(q, req.user);
     c = scopeToLab(c, req.user);
 
+    // Staff without product_collection view and create rights see only the
+    // orders they took or were assigned, matching the Laravel behaviour.
+    if ((await orderVisibility(req.user)) === 'own') {
+      const me = req.user.id;
+      const mine = (eb: any) =>
+        eb.or([eb('received_by', '=', me), eb('assigned_to', '=', me)]);
+      q = q.where(mine);
+      c = c.where(mine);
+    }
+
     if (status) {
       q = q.where('status', '=', status);
       c = c.where('status', '=', status);
+    }
+
+    if (duesOnly) {
+      // dues_amount is a varchar. Comparing it as a string would put '100'
+      // and '0.00' on the wrong side, so it is coerced the way MySQL coerces
+      // it for the Laravel query this replaces.
+      const owing = sql<boolean>`dues_amount + 0 > 0`;
+      q = q.where('status', '=', 'delivered').where(owing);
+      c = c.where('status', '=', 'delivered').where(owing);
     }
 
     const [rows, count] = await Promise.all([

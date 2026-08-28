@@ -5,6 +5,8 @@
  * files, so the contract can be read end to end and diffed in one place.
  */
 
+import { extraPaths, extraTags } from './openapi.extra.js';
+
 const errorResponse = (description: string) => ({
   description,
   content: {
@@ -1060,6 +1062,13 @@ const document = {
             in: 'query',
             schema: { type: 'string', enum: ['preparing', 'not assigned', 'delivered'] },
           },
+          {
+            name: 'dues',
+            in: 'query',
+            schema: { type: 'string', enum: ['1'] },
+            description:
+              'Delivered orders still carrying a balance. Laravel gives this its own screen, EmpOrderDuesList.',
+          },
         ],
         responses: {
           200: {
@@ -1726,6 +1735,17 @@ function operationIdFor(method: string, path: string): string {
       .join('')
   );
 }
+
+// The document is written in two files for length; they are one contract.
+// Merged per path rather than per file: a path may carry a GET in one half and
+// a PATCH in the other, and a wholesale assign would drop the first.
+for (const [path, operations] of Object.entries(extraPaths)) {
+  const existing = (document.paths as Record<string, unknown>)[path];
+  (document.paths as Record<string, unknown>)[path] = existing
+    ? { ...(existing as object), ...(operations as object) }
+    : operations;
+}
+document.tags.push(...(extraTags as typeof document.tags));
 
 for (const [path, operations] of Object.entries(document.paths)) {
   for (const [method, operation] of Object.entries(operations as Record<string, Record<string, unknown>>)) {

@@ -55,7 +55,7 @@ export default function HeroSection() {
                   <p className="m-0 text-[15px] font-medium leading-none tracking-normal text-[#d58a2b] max-[560px]:text-[11px]">{slide.eyebrow}</p>
                 </div>
 
-                <h1 className="m-0 max-w-[760px] font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[clamp(36px,3.2vw,54px)] font-medium leading-[1.04] tracking-normal text-[#061948] max-[900px]:max-w-[560px] max-[900px]:text-[clamp(32px,8vw,46px)] max-[560px]:max-w-[360px] max-[560px]:text-[32px]">
+                <h1 className="m-0 max-w-[760px] font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[46px] font-medium leading-[1.06] tracking-normal text-[#061948] max-[900px]:max-w-[560px] max-[560px]:max-w-[360px] max-[560px]:text-[32px]">
                   {slide.titleLines.map((line) => (
                     <span className="block" key={line}>
                       {line}

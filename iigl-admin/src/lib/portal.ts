@@ -73,6 +73,19 @@ export function currentPortal(): Portal {
   return 'admin';
 }
 
+/** The roles as the data numbers them. */
+export const ROLE = { ADMIN: 1, LAB: 2, EMPLOYEE: 3 } as const;
+
+/**
+ * Role narrowing, named.
+ *
+ * These say what the number means; they are not permission decisions — a write
+ * control needs `can()` from the matrix as well. An administrator runs the
+ * business, a laboratory runs a counter, and everyone else works at one.
+ */
+export const isAdmin = (user?: { roleId: number } | null) => user?.roleId === ROLE.ADMIN;
+export const isLab = (user?: { roleId: number } | null) => user?.roleId === ROLE.LAB;
+
 export const ROLE_NAMES: Record<number, string> = {
   1: 'Administrator',
   2: 'Laboratory',

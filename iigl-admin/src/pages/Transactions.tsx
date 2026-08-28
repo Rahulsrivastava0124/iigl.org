@@ -1,6 +1,6 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
-  Button,
   MenuItem,
   Stack,
   Table,
@@ -13,13 +13,46 @@ import {
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import { Notice, PageHead, Pager, Panel, StatusChip, TableFrame, money } from '../components/ui';
+import { Notice, PageHead, Pager, Panel, StatusChip, TableFrame, Tile, ToneAction, money } from '../components/ui';
 import type { Paged, Transaction } from '../lib/api';
+import { isAdmin } from '../lib/portal';
+import ApproveIcon from '@mui/icons-material/CheckCircleOutlined';
+import DeclineIcon from '@mui/icons-material/CancelOutlined';
+
+/** One line of the running account, as /transactions/ledger returns it. */
+interface LedgerEntry {
+  id: number;
+  date: string | null;
+  type: string | null;
+  direction: 'credit' | 'debit';
+  amount: number;
+  status: number;
+  order_id: number | null;
+  transaction_no: string | null;
+  remark: string | null;
+  balance: number;
+}
+
+interface LedgerPage {
+  entries: LedgerEntry[];
+  credit_total: number;
+  debit_total: number;
+  balance: number;
+  pending_out: number;
+  pending_in: number;
+  total: number;
+}
 
 export default function Transactions() {
   const { user } = useAuth();
+
+  // The menu points here three ways: the history, the pending queue awaiting a
+  // decision, and the running account. The URL says which.
+  const [params, setParams] = useSearchParams();
+  const ledgerView = params.get('view') === 'ledger';
+
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState(params.get('status') ?? '');
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -28,9 +61,14 @@ export default function Transactions() {
   if (status !== '') query.set('status', status);
 
   const { data, loading, error: loadError, reload } = useFetch<Paged<Transaction>>(
-    `/transactions?${query}`,
+    ledgerView ? null : `/transactions?${query}`,
+  );
+  const ledger = useFetch<{ data: LedgerPage }>(
+    ledgerView ? `/transactions/ledger?page=${page}&per_page=100` : null,
   );
   const rows = data?.data ?? [];
+  const account = ledger.data?.data;
+  const entries = account?.entries ?? [];
 
   const decide = async (id: number, next: 1 | 2) => {
     setBusyId(id);
@@ -50,15 +88,74 @@ export default function Transactions() {
   return (
     <>
       <PageHead
-        title="Transactions"
-        subtitle={`${
-          data ? `${data.meta.total.toLocaleString()} records` : 'Loading…'
-        } · you can decide only what was sent to you`}
+        title={ledgerView ? 'Ledger' : status === '0' ? 'Commission approval' : 'Commission history'}
+        subtitle={
+          ledgerView
+            ? 'Your running account. Only approved entries move the balance.'
+            : `${
+                data ? `${data.meta.total.toLocaleString()} records` : 'Loading…'
+              } · you can decide only what was sent to you`
+        }
       />
 
       {done && <Notice kind="ok">{done}</Notice>}
       {error && <Notice kind="error">{error}</Notice>}
 
+      {ledgerView ? (
+        <>
+          <Stack direction="row" spacing={2} sx={{ mb: 2, flexWrap: 'wrap' }}>
+            <Tile label="Balance" value={money(account?.balance ?? 0)} />
+            <Tile label="Received" value={money(account?.credit_total ?? 0)} />
+            <Tile label="Sent" value={money(account?.debit_total ?? 0)} />
+            <Tile label="Awaiting approval" value={money(account?.pending_out ?? 0)} />
+          </Stack>
+
+          <Panel>
+            <TableFrame
+              loading={ledger.loading}
+              error={ledger.error}
+              empty={entries.length === 0}
+            >
+              <Table size="small" stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Date</TableCell>
+                    <TableCell>Reference</TableCell>
+                    <TableCell>Remark</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell align="right">Credit</TableCell>
+                    <TableCell align="right">Debit</TableCell>
+                    <TableCell align="right">Balance</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {entries.map((e) => (
+                    <TableRow key={e.id} hover>
+                      <TableCell>{e.date?.slice(0, 10) ?? '—'}</TableCell>
+                      <TableCell className="mono">{e.transaction_no ?? `#${e.id}`}</TableCell>
+                      <TableCell sx={{ whiteSpace: 'normal', minWidth: 180 }}>
+                        {e.remark ?? e.type ?? '—'}
+                      </TableCell>
+                      <TableCell>
+                        <StatusChip status={e.status} />
+                      </TableCell>
+                      <TableCell align="right" className="tabular">
+                        {e.direction === 'credit' ? money(e.amount) : '—'}
+                      </TableCell>
+                      <TableCell align="right" className="tabular">
+                        {e.direction === 'debit' ? money(e.amount) : '—'}
+                      </TableCell>
+                      <TableCell align="right" className="tabular">
+                        {money(e.balance)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableFrame>
+          </Panel>
+        </>
+      ) : (
       <Panel
         actions={
           <TextField
@@ -68,6 +165,7 @@ export default function Transactions() {
             onChange={(e) => {
               setStatus(e.target.value);
               setPage(1);
+              setParams(e.target.value === '' ? {} : { status: e.target.value });
             }}
             sx={{ minWidth: 150 }}
           >
@@ -95,7 +193,7 @@ export default function Transactions() {
             </TableHead>
             <TableBody>
               {rows.map((t) => {
-                const mine = t.received_by === user?.id || user?.roleId === 1;
+                const mine = t.received_by === user?.id || isAdmin(user);
                 const pending = t.status === 0;
                 return (
                   <TableRow key={t.id} hover>
@@ -113,23 +211,21 @@ export default function Transactions() {
                     </TableCell>
                     <TableCell>
                       {pending && mine ? (
-                        <Stack direction="row" spacing={0.5}>
-                          <Button
-                            size="small"
-                            variant="contained"
+                        <Stack direction="row" spacing={0.75} sx={{ justifyContent: 'flex-end' }}>
+                          <ToneAction
+                            label="Approve"
+                            icon={ApproveIcon}
+                            tone="settled"
                             disabled={busyId === t.id}
                             onClick={() => decide(t.id, 1)}
-                          >
-                            Approve
-                          </Button>
-                          <Button
-                            size="small"
-                            color="error"
+                          />
+                          <ToneAction
+                            label="Decline"
+                            icon={DeclineIcon}
+                            tone="refused"
                             disabled={busyId === t.id}
                             onClick={() => decide(t.id, 2)}
-                          >
-                            Decline
-                          </Button>
+                          />
                         </Stack>
                       ) : (
                         '—'
@@ -143,6 +239,7 @@ export default function Transactions() {
         </TableFrame>
         <Pager meta={data?.meta} onPage={setPage} />
       </Panel>
+      )}
     </>
   );
 }

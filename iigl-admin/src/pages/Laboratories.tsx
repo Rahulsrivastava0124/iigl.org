@@ -1,7 +1,5 @@
 import { useState } from 'react';
 import {
-  Button,
-  Stack,
   Table,
   TableBody,
   TableCell,
@@ -11,14 +9,21 @@ import {
   Typography,
 } from '@mui/material';
 import { useFetch } from '../lib/useFetch';
+import { usePermissions } from '../lib/permissions';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import { Dialog, Notice, PageHead, Panel, TableFrame, YesNo } from '../components/ui';
+import { Dialog, IconAction, Notice, PageHead, Panel, RowActions, TableFrame, YesNo } from '../components/ui';
 import type { Lab } from '../lib/api';
+import { isAdmin } from '../lib/portal';
+import CommissionIcon from '@mui/icons-material/PercentOutlined';
+import ActiveIcon from '@mui/icons-material/ToggleOnOutlined';
+import InactiveIcon from '@mui/icons-material/ToggleOffOutlined';
 
 export default function Laboratories() {
   const { user } = useAuth();
-  const isAdmin = user?.roleId === 1;
+  const { can } = usePermissions();
+  const admin = isAdmin(user);
+  const mayEdit = admin && can('laboratory', 'update');
   const { data, loading, error, reload } = useFetch<{ data: Lab[] }>('/users/laboratories');
   const rows = data?.data ?? [];
 
@@ -59,7 +64,7 @@ export default function Laboratories() {
     <>
       <PageHead
         title="Laboratories"
-        subtitle={isAdmin ? `${rows.length} in the network` : 'Your laboratory'}
+        subtitle={admin ? `${rows.length} in the network` : 'Your laboratory'}
       />
 
       {msg && <Notice kind="ok">{msg}</Notice>}
@@ -76,7 +81,7 @@ export default function Laboratories() {
                 <TableCell>City</TableCell>
                 <TableCell align="right">Commission</TableCell>
                 <TableCell>Active</TableCell>
-                {isAdmin && <TableCell />}
+                {mayEdit && <TableCell />}
               </TableRow>
             </TableHead>
             <TableBody>
@@ -92,22 +97,24 @@ export default function Laboratories() {
                   <TableCell>
                     <YesNo on={l.is_active} />
                   </TableCell>
-                  {isAdmin && (
+                  {mayEdit && (
                     <TableCell>
-                      <Stack direction="row" spacing={0.5}>
-                        <Button
-                          size="small"
+                      <RowActions>
+                        <IconAction
+                          label="Set commission"
+                          icon={CommissionIcon}
                           onClick={() => {
                             setEditing(l);
                             setRate(String(l.commision ?? 0));
                           }}
-                        >
-                          Commission
-                        </Button>
-                        <Button size="small" color="inherit" onClick={() => toggleActive(l)}>
-                          {l.is_active ? 'Deactivate' : 'Activate'}
-                        </Button>
-                      </Stack>
+                        />
+                        <IconAction
+                          label={l.is_active ? 'Deactivate' : 'Activate'}
+                          icon={l.is_active ? ActiveIcon : InactiveIcon}
+                          danger={Boolean(l.is_active)}
+                          onClick={() => toggleActive(l)}
+                        />
+                      </RowActions>
                     </TableCell>
                   )}
                 </TableRow>

@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { AuthProvider, useAuth } from './lib/auth';
+import { PermissionProvider } from './lib/permissions';
 import { basenameFor, currentPortal } from './lib/portal';
 import Shell from './components/Shell';
 import Login from './pages/Login';
@@ -14,6 +15,13 @@ import Staff from './pages/Staff';
 import Categories from './pages/Categories';
 import Attributes from './pages/Attributes';
 import Pricing from './pages/Pricing';
+import Roles from './pages/Roles';
+import Attendance from './pages/Attendance';
+import Profile from './pages/Profile';
+import Content from './pages/Content';
+import NewReport from './pages/NewReport';
+import NewOrder from './pages/NewOrder';
+import Customers from './pages/Customers';
 
 /**
  * Administrator-only screens. Other roles are sent back to the dashboard.
@@ -39,13 +47,19 @@ function Routed() {
   if (!user) return <Login />;
 
   return (
-    <Routes>
+    <PermissionProvider>
+      <Routes>
       <Route element={<Shell />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/orders" element={<Orders />} />
+        <Route path="/orders/new" element={<NewOrder />} />
         <Route path="/orders/:id" element={<OrderDetail />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/reports/new" element={<NewReport />} />
         <Route path="/transactions" element={<Transactions />} />
+        <Route path="/attendance" element={<Attendance />} />
+        <Route path="/customers" element={<Customers />} />
+        <Route path="/profile" element={<Profile />} />
         <Route path="/laboratories" element={<Laboratories />} />
         <Route path="/staff" element={<Staff />} />
         <Route
@@ -72,9 +86,26 @@ function Routed() {
             </AdminOnly>
           }
         />
+        <Route
+          path="/content"
+          element={
+            <AdminOnly>
+              <Content />
+            </AdminOnly>
+          }
+        />
+        <Route
+          path="/roles"
+          element={
+            <AdminOnly>
+              <Roles />
+            </AdminOnly>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
-    </Routes>
+      </Routes>
+    </PermissionProvider>
   );
 }
 

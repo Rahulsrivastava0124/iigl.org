@@ -5,6 +5,7 @@ import { badRequest, notFound } from '../lib/errors.js';
 import { assertLabOwnership, requireLabScope, ROLE } from '../middleware/auth.js';
 import { cardDataFor, loadChrome } from '../services/card.service.js';
 import { renderCardsHtml, renderCardsPdf, type CardKind } from '../services/pdf.service.js';
+import { orderDocumentHtml, orderDocumentPdf, type DocumentKind } from '../services/document.service.js';
 import { numericId, numericParams } from '../middleware/params.js';
 
 export const cardRoutes = Router();
@@ -138,3 +139,39 @@ cardRoutes.post(
 );
 
 export { ROLE };
+
+/**
+ * Order paperwork: a receipt when items are taken in, an invoice when the order
+ * is settled. Registered before /:kind/:id so "receipt" and "invoice" are not
+ * mistaken for a card type.
+ */
+cardRoutes.get(
+  '/order/:kind/:id',
+  numericId,
+  wrap(async (req, res) => {
+    const kind = String(req.params.kind);
+    if (kind !== 'receipt' && kind !== 'invoice') {
+      throw badRequest('Document must be a receipt or an invoice.');
+    }
+
+    const id = Number(req.params.id);
+    const order = await db
+      .selectFrom('orders')
+      .select(['id', 'lab_id', 'order_no'])
+      .where('id', '=', id)
+      .executeTakeFirst();
+    if (!order) throw notFound('Order not found.');
+    assertLabOwnership(req.user, Number(order.lab_id));
+
+    if (req.query.format === 'html') {
+      res.type('html').send(await orderDocumentHtml(id, kind as DocumentKind));
+      return;
+    }
+
+    send(
+      res,
+      await orderDocumentPdf(id, kind as DocumentKind),
+      `${order.order_no}-${kind}.pdf`,
+    );
+  }),
+);

@@ -14,6 +14,9 @@ import { transactionRoutes } from './routes/transaction.routes.js';
 import { userRoutes } from './routes/user.routes.js';
 import { dashboardRoutes } from './routes/dashboard.routes.js';
 import { cardRoutes } from './routes/card.routes.js';import { adminRoutes } from './routes/admin.routes.js';
+import { uploadRoutes } from './routes/upload.routes.js';
+import { attendanceRoutes } from './routes/attendance.routes.js';
+import { contentRoutes } from './routes/content.routes.js';import { customerRoutes } from './routes/customer.routes.js';
 import { requireAuth } from './middleware/auth.js';
 import { loginLimiter, verifyLogLimiter, renderLimiter } from './middleware/limits.js';
 import { openApiDocument } from './docs/openapi.js';
@@ -106,6 +109,10 @@ export function createApp() {
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/cards', cardRoutes);
   app.use('/api/admin', adminRoutes);
+  app.use('/api/uploads', uploadRoutes);
+  app.use('/api/attendance', attendanceRoutes);
+  app.use('/api/content', contentRoutes);
+  app.use('/api/customers', customerRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

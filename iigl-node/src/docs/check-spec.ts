@@ -20,6 +20,9 @@ import { transactionRoutes } from '../routes/transaction.routes.js';
 import { userRoutes } from '../routes/user.routes.js';
 import { dashboardRoutes } from '../routes/dashboard.routes.js';
 import { cardRoutes } from '../routes/card.routes.js';import { adminRoutes } from '../routes/admin.routes.js';
+import { uploadRoutes } from '../routes/upload.routes.js';
+import { attendanceRoutes } from '../routes/attendance.routes.js';
+import { contentRoutes } from '../routes/content.routes.js';import { customerRoutes } from '../routes/customer.routes.js';
 import { db } from '../db/index.js';
 
 const MOUNTS: Array<[string, Router]> = [
@@ -33,6 +36,10 @@ const MOUNTS: Array<[string, Router]> = [
   ['/api/dashboard', dashboardRoutes],
   ['/api/cards', cardRoutes],
   ['/api/admin', adminRoutes],
+  ['/api/uploads', uploadRoutes],
+  ['/api/attendance', attendanceRoutes],
+  ['/api/content', contentRoutes],
+  ['/api/customers', customerRoutes],
 ];
 
 /** Routes registered directly on the app rather than through a router. */
