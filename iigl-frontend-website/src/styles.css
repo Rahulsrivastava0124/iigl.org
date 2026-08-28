@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    font-family:
+      Montserrat, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+      "Segoe UI", sans-serif;
+    color: #2c3b64;
+    background: #ffffff;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    min-width: 320px;
+    min-height: 100vh;
+    margin: 0;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+}
+
+.hero-swiper .swiper-pagination {
+  bottom: 16px;
+}
+
+.hero-swiper .swiper-pagination-bullet {
+  width: 28px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(44, 59, 100, 0.24);
+  opacity: 1;
+}
+
+.hero-swiper .swiper-pagination-bullet-active {
+  background: #d58a2b;
+}

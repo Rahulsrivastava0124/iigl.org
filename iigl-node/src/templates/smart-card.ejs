@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IIGL Smart Card</title>
+<style>
+  /*
+    Ported from resources/views/common/card/smart.blade.php.
+    Two panels of 3.4in x 2.2in, front and back, printed side by side.
+    Dimensions are load-bearing: cards are guillotined to these marks.
+  */
+  @page {
+    size: 7.2in 2.5in;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .sheet {
+    display: flex;
+    gap: 0.1in;
+    padding: 0.15in;
+    page-break-after: always;
+  }
+  .sheet:last-child { page-break-after: auto; }
+
+  .panel {
+    width: 3.4in;
+    height: 2.2in;
+    position: relative;
+    background-repeat: no-repeat;
+    flex: 0 0 auto;
+  }
+
+  .panel.front {
+    background-position: center center;
+    background-size: 110px 110px;
+  }
+
+  .panel.back {
+    background-position: 200px -20px;
+    background-size: 180px 180px;
+  }
+
+  /* Corner crop marks, as in the original. */
+  .panel.front::before,
+  .panel.front::after,
+  .panel.front .corners::before,
+  .panel.front .corners::after {
+    position: absolute;
+    width: 15px;
+    height: 15px;
+    border-color: rgb(100, 100, 100);
+    border-style: solid;
+    content: ' ';
+  }
+  .panel.front::before { top: 0; left: 0; border-width: 1px 0 0 1px; }
+  .panel.front::after { top: 0; right: 0; border-width: 1px 1px 0 0; }
+  .panel.front .corners::before { top: 195px; left: 310px; border-width: 0 1px 1px 0; }
+  .panel.front .corners::after { top: 195px; left: -2px; border-width: 0 0 1px 1px; }
+
+  .inner { padding: 0.5rem; }
+
+  .logo { height: 38px; }
+
+  .body-row { display: flex; }
+
+  table {
+    width: 2.3in;
+    padding-left: 5px;
+    border-collapse: collapse;
+  }
+
+  th, td, li {
+    font-size: 8px;
+    position: relative;
+    padding: 0;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  th {
+    width: 40%;
+    text-transform: uppercase;
+    font-weight: 400;
+    white-space: nowrap;
+  }
+  th::after { content: ':'; position: absolute; right: 0; }
+
+  td { padding-left: 5px; }
+
+  .comment { color: rgb(19, 80, 19); font-weight: 700; }
+
+  .side {
+    text-align: center;
+    margin-left: auto;
+  }
+  .side img { display: block; margin: 5px auto 0; }
+  .qr, .item { height: 50px; width: 50px; }
+  .sign { height: 25px; width: 60px; }
+
+  .footer {
+    position: absolute;
+    top: 192px;
+    left: 100px;
+    font-size: 9px;
+  }
+  .footer p { margin: 0; }
+
+  .back-title { font-size: 13px; padding-left: 32px; margin: 0 0 2px; }
+  .panel.back ul { margin: 0; padding-left: 14px; }
+  .panel.back li { margin-bottom: 2px; }
+  .back-logo { height: 40px; width: 100%; }
+
+  .band {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 22px;
+    line-height: 22px;
+    background: #bc8f53;
+    color: #fff;
+    font-size: 12px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<% for (const card of cards) { %>
+  <div class="sheet">
+
+    <section class="panel front" <% if (chrome.watermark) { %>style="background-image:url('<%= chrome.watermark %>')"<% } %>>
+      <div class="corners"></div>
+      <div class="inner">
+        <% if (chrome.cardLogo) { %><img class="logo" src="<%= chrome.cardLogo %>" alt="IIGL"><% } %>
+
+        <div class="body-row">
+          <table>
+            <tbody>
+              <tr><th>Report No</th><td><b><%= card.report_no %></b></td></tr>
+              <tr><th>Gross Wt</th><td><%= card.gross_weight %><%= card.gross_wt_unit ? ' ' + card.gross_wt_unit : '' %></td></tr>
+              <tr><th>Carat Wt</th><td><%= card.carat_weight %><%= card.stone_wt_unit ? ' ' + card.stone_wt_unit : '' %></td></tr>
+              <% for (const attr of card.smart_attributes) { %>
+                <tr><th><%= attr.name %></th><td><%= attr.value %></td></tr>
+              <% } %>
+              <% if (card.comments) { %>
+                <tr><th>Comment</th><td class="comment"><%= card.comments %></td></tr>
+              <% } %>
+            </tbody>
+          </table>
+
+          <div class="side">
+            <img class="qr" src="<%= card.qr %>" alt="Verify <%= card.report_no %>">
+            <% if (card.item_image) { %><img class="item" src="<%= card.item_image %>" alt=""><% } %>
+            <% if (card.signature) { %><img class="sign" src="<%= card.signature %>" alt=""><% } %>
+          </div>
+        </div>
+
+        <div class="footer">
+          <p>&copy; IIGL <%= new Date().getFullYear() %> &mdash; terms at www.iigl.org</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel back" <% if (chrome.watermark) { %>style="background-image:url('<%= chrome.watermark %>')"<% } %>>
+      <div class="inner">
+        <h6 class="back-title">Important Information</h6>
+        <ul>
+          <li>IIGL laboratory examines each gem, jewellery item and diamond using advanced equipment. Experienced gemologists grade characteristics according to the international system. A report issued by an IIGL gemologist may differ from others.</li>
+          <li>We do not claim other reports to be false.</li>
+          <li>Our services do not determine the price of any gemstone.</li>
+          <li>For more information contact www.iigl.org or info@iigl.org</li>
+        </ul>
+        <% if (chrome.backLogo) { %><img class="back-logo" src="<%= chrome.backLogo %>" alt=""><% } %>
+      </div>
+      <div class="band">Giving an Identity of Pureness</div>
+    </section>
+
+  </div>
+<% } %>
+</body>
+</html>

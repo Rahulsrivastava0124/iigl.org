@@ -1,0 +1,51 @@
+{
+  "name": "iigl-node",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "tsx --test src/lib/money.test.ts",
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "codegen": "kysely-codegen --dialect mysql --url $DATABASE_URL --out-file src/db/types.ts",
+    "check:spec": "tsx src/docs/check-spec.ts",
+    "sweep": "tsx src/docs/sweep.ts",
+    "check:pricing": "tsx src/docs/price-parity.ts",
+    "routes": "tsx src/docs/routes-file.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "ejs": "^6.0.1",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.6.2",
+    "express-session": "^1.19.0",
+    "helmet": "^8.3.0",
+    "kysely": "^0.29.5",
+    "multer": "^2.2.0",
+    "mysql2": "^3.24.2",
+    "puppeteer": "^25.9.0",
+    "qrcode": "^1.5.4",
+    "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "@redocly/cli": "^2.48.0",
+    "@types/cors": "^2.8.19",
+    "@types/ejs": "^3.1.5",
+    "@types/express": "^5.0.6",
+    "@types/express-session": "^1.19.0",
+    "@types/node": "^26.4.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/swagger-ui-express": "^4.1.8",
+    "kysely-codegen": "^0.20.0",
+    "nodemon": "^3.1.14",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
+  }
+}
