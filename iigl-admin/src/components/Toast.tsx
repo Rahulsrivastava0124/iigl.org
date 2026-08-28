@@ -1,85 +1,79 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-import { Alert, Snackbar } from '@mui/material';
+import hot, { Toaster } from 'react-hot-toast';
+import { BRAND, TONE } from '../lib/theme';
 
 /**
- * Toasts — Material UI calls them Snackbars — for the result of an action.
+ * Toasts for the result of an action, on react-hot-toast.
  *
- * Nothing new was installed for this: `Snackbar` wrapping an `Alert` is the
- * documented pattern for a severity-carrying toast, so notistack would have
- * been a dependency for a queue and a hook, which is what this file is.
+ * Pages call `useToast()` and get `ok` / `error` / `info`. That façade is the
+ * point of this file: it was a Snackbar before and the thirteen pages behind it
+ * did not have to know, and they will not have to know next time either.
  *
- * A saved record used to be reported by an `Alert` pushed in above the panel,
- * which moved the whole page down and then sat there until something else
- * replaced it. Failures still belong beside the field that caused them —
- * validation, a sign-in that did not match — and those stay inline.
+ * The library's own look is a white pill with an emoji-ish tick, which belongs
+ * to no product in particular. Everything below dresses it in the panel's own
+ * palette — the tone colours from `theme.ts`, the same ones a `StateChip` and a
+ * `Notice` use — so a saved record reads as this panel rather than as a
+ * dependency's default.
  *
- * ponytail: one toast at a time, the queue holds the rest. Stacking several is
- * against the Material guidelines and nothing here fires two at once.
+ * ponytail: no promise toasts, no per-call duration, no undo action. Add one
+ * when a screen actually needs it; `hot` is exported for that.
  */
 
-type Kind = 'success' | 'error' | 'info';
+const base = {
+  // A toast is one sentence. Wider than this and it reads as a paragraph
+  // floating over the table; narrower and every message wraps three times.
+  maxWidth: 460,
+  padding: '10px 14px',
+  borderRadius: 8,
+  fontSize: 13.5,
+  fontWeight: 500,
+  boxShadow: '0 6px 24px rgba(6, 25, 72, 0.16)',
+};
 
-interface Toasted {
-  key: number;
-  message: string;
-  kind: Kind;
+/** Filled in the tone's colour, the way `Notice` and `StateChip` are. */
+const toned = (tone: keyof typeof TONE) => ({
+  style: { ...base, background: TONE[tone].main, color: TONE[tone].on },
+  iconTheme: { primary: TONE[tone].on, secondary: TONE[tone].main },
+});
+
+export function ToastProvider({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      {children}
+      <Toaster
+        position="top-center"
+        gutter={8}
+        toastOptions={{
+          // Long enough to read a sentence; a failure stays up longer because
+          // it is the one worth reading twice.
+          duration: 4000,
+          success: { ...toned('settled') },
+          error: { ...toned('refused'), duration: 8000 },
+          blank: { style: { ...base, background: BRAND.navy, color: '#ffffff' } },
+        }}
+      />
+    </>
+  );
 }
 
-interface ToastApi {
+export interface ToastApi {
   ok: (message: string) => void;
   error: (message: string) => void;
   info: (message: string) => void;
 }
 
-const ToastContext = createContext<ToastApi | null>(null);
+const api: ToastApi = {
+  ok: (message) => void hot.success(message),
+  error: (message) => void hot.error(message),
+  info: (message) => void hot(message),
+};
 
-export function ToastProvider({ children }: { children: ReactNode }) {
-  const [queue, setQueue] = useState<Toasted[]>([]);
-  const current = queue[0];
-
-  const push = useCallback(
-    (kind: Kind) => (message: string) =>
-      setQueue((q) => [...q, { key: Date.now() + q.length, message, kind }]),
-    [],
-  );
-
-  const api = useMemo<ToastApi>(
-    () => ({ ok: push('success'), error: push('error'), info: push('info') }),
-    [push],
-  );
-
-  return (
-    <ToastContext.Provider value={api}>
-      {children}
-      <Snackbar
-        key={current?.key}
-        open={Boolean(current)}
-        // Long enough to read a sentence; failures stay up longer because they
-        // are the ones worth reading twice.
-        autoHideDuration={current?.kind === 'error' ? 8000 : 4000}
-        onClose={(_e, reason) => {
-          // Clicking anywhere else must not swallow a message the user has not
-          // read yet. Escape and the close button still dismiss it.
-          if (reason === 'clickaway') return;
-          setQueue((q) => q.slice(1));
-        }}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      >
-        <Alert
-          severity={current?.kind ?? 'info'}
-          variant="filled"
-          onClose={() => setQueue((q) => q.slice(1))}
-          sx={{ maxWidth: 480 }}
-        >
-          {current?.message}
-        </Alert>
-      </Snackbar>
-    </ToastContext.Provider>
-  );
-}
-
+/**
+ * react-hot-toast is imperative and needs no context, so this is a hook only
+ * because every page already calls it as one.
+ */
 export function useToast(): ToastApi {
-  const api = useContext(ToastContext);
-  if (!api) throw new Error('useToast must be used inside <ToastProvider>');
   return api;
 }
+
+/** The library itself, for the rare call this façade does not cover. */
+export { hot };

@@ -25,6 +25,7 @@ two interpretations.
 | Writes | `api` (`src/lib/api.ts`) | `get` / `post` / `patch` / `put` / `del`, always `credentials: include` |
 | Uploads | `FileField` | Uploads on choose, hands back a path; the form saves it |
 | Results | `messageOf(err)` into `toast.error` | Never a bare thrown string, never a banner |
+| Toasts | **react-hot-toast**, behind `useToast()` | Never `hot.success(…)` at a call site |
 | Charts | Inline SVG (`TrendChart`) | No charting library is installed, and none is wanted |
 
 ### MUI v9 differs from v7 in three ways
@@ -365,7 +366,10 @@ returns `undefined`, and a save guarded on that object silently does nothing.
 ## Messages
 
 **The result of an action is a toast.** `useToast()` from
-`src/components/Toast.tsx`, mounted once in `App.tsx`:
+`src/components/Toast.tsx`, mounted once in `App.tsx`. It runs on
+**react-hot-toast**, dressed in the panel's own tone colours — a page never
+imports the library directly, so the implementation can change again without
+touching thirteen screens:
 
 ```tsx
 const toast = useToast();
@@ -379,9 +383,10 @@ try {
 }
 ```
 
-`ok` · `error` · `info`. Bottom right, 4s for a success and 8s for a failure,
-one at a time with the rest queued. Click-away does not dismiss it — a message
-must not disappear because someone clicked the table behind it.
+`ok` · `error` · `info`. Top centre, 4s for a success and 8s for a failure,
+stacking with an 8px gutter. Filled in `TONE.settled` and `TONE.refused`, the
+same greens and reds a `StateChip` uses — the library's own white pill belongs
+to no product in particular.
 
 There is no `msg` / `err` state pair on a page any more, and no
 `{msg && <Notice kind="ok">…}` above the panel. That pattern moved the whole
