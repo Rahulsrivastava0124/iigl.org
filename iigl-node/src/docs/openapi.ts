@@ -92,6 +92,7 @@ const document = {
     { name: 'Users', description: 'Laboratories, staff and account administration.' },
     { name: 'Dashboard', description: 'Aggregate counts and totals.' },
     { name: 'Cards', description: 'Printed certificates: smart cards and classic reports.' },
+    { name: 'Coupons', description: 'Discount coupons against course fees: the codes, and the enrolments each one was spent on.' },
   ],
 
   components: {
@@ -156,6 +157,14 @@ const document = {
           city: { type: ['string', 'null'] },
           state: { type: ['string', 'null'] },
           gst_no: { type: ['string', 'null'] },
+          bank_name: { type: ['string', 'null'] },
+          ifsc_code: { type: ['string', 'null'] },
+          account_no: { type: ['string', 'null'] },
+          // Laravel's spelling, which is what the columns are called.
+          adhar_no: { type: ['string', 'null'] },
+          adhar_photo: { type: ['string', 'null'] },
+          pan_no: { type: ['string', 'null'] },
+          pan_photo: { type: ['string', 'null'] },
           commision: { type: ['number', 'null'] },
           is_active: { type: 'integer', examples: [1] },
           role_id: { type: 'integer' },
@@ -688,16 +697,21 @@ const document = {
       post: {
         tags: ['Auth'],
         summary: 'Change your own password',
-        description: 'Rehashes at bcrypt cost 10, matching the existing rows.',
+        description:
+          'Rehashes at bcrypt cost 10, matching the existing rows. `current_password` is **optional**: sent, it is verified and a wrong one is refused; omitted, the session is the authority. That means anybody who reaches an open session can change the password — a deliberate choice for the panel, recorded here rather than left to be discovered.',
         requestBody: {
           required: true,
           content: {
             'application/json': {
               schema: {
                 type: 'object',
-                required: ['current_password', 'new_password'],
+                required: ['new_password'],
                 properties: {
-                  current_password: { type: 'string', format: 'password' },
+                  current_password: {
+                    type: 'string',
+                    format: 'password',
+                    description: 'Optional. Verified when present.',
+                  },
                   new_password: { type: 'string', format: 'password', minLength: 8 },
                 },
               },
@@ -706,7 +720,7 @@ const document = {
         },
         responses: {
           200: { description: 'Password updated.' },
-          400: errorResponse('Current password wrong, or the new one is under 8 characters.'),
+          400: errorResponse('No new password, one under 8 characters, or a current password that was sent and is wrong.'),
           401: guarded[401],
         },
       },
@@ -1678,9 +1692,11 @@ const document = {
       get: {
         tags: ['Users'],
         summary: 'Your account record',
+        description:
+          'Carries `employment` — the posting you currently hold, with the employer named and resolved to a user id, their mobile, your joining date and your salary. Null for a laboratory, for head office, and for anybody whose employment was ended.',
         responses: {
           200: {
-            description: 'Account.',
+            description: 'Account, with your current employment.',
             content: { 'application/json': { schema: dataOf({ $ref: '#/components/schemas/User' }) } },
           },
           ...guarded,
@@ -1692,7 +1708,8 @@ const document = {
       get: {
         tags: ['Users'],
         summary: 'List laboratories',
-        description: 'Administrators see every laboratory; a laboratory sees only itself.',
+        description:
+          'Head office sees every laboratory; a laboratory sees only itself. Each row carries a `staff` count — how many working employments point at it through `employements.parent_id`, which holds the laboratory’s `empid`.',
         responses: {
           200: {
             description: 'Laboratories.',
@@ -1711,7 +1728,8 @@ const document = {
       get: {
         tags: ['Users'],
         summary: 'List staff',
-        description: 'Joined through the employements table, filtered to currently working staff.',
+        description:
+          'Joined through `employements`, filtered to people currently working. Each row carries the person’s own `empid` and `lab_empid` — the `employements.parent_id` as stored, the employer’s **`empid`** — alongside `lab_id`, that employer resolved to a **user id**, with `lab_name` and `employer_role_id`, so the caller can name the employer without a second request. An `employer_role_id` of 1 means they work for head office rather than for a laboratory. `lab_id`, `lab_name` and `employer_role_id` are null when no account holds the stored `empid`; `npm run check:parents` names those rows.',
         parameters: [
           ...pageParams,
           {
@@ -1729,7 +1747,8 @@ const document = {
       post: {
         tags: ['Users'],
         summary: 'Create an account',
-        description: 'Administrators only. Hashes at bcrypt cost 10, matching the existing rows.',
+        description:
+          'Administrators only. Hashes at bcrypt cost 10, matching the existing rows.\n\nThe account arrives usable rather than half-made. It is given an `empid` — `LAB0001` for a laboratory, `EMP0007` for anybody else, the next free number for that prefix — because `employements.parent_id` and `users.parent_id` name an employer by empid, and an account without one can neither employ anybody nor be found by the staff list.\n\nSend `empid` to choose it instead; one another account already holds is refused.\n\nA staff account is employed in the same request: an employment row is written and `users.parent_id` set. The employer is `lab_id` when given, otherwise whoever asked — head office creating staff gets head office employees, a laboratory gets its own. A laboratory is nobody’s employee, so none is written for one and `employment` comes back null.',
         requestBody: {
           required: true,
           content: {
@@ -1741,8 +1760,13 @@ const document = {
                   fullname: { type: 'string', examples: ['IIGL-PATNA'] },
                   mobile: { type: 'string', examples: ['9800000001'] },
                   password: { type: 'string', format: 'password', minLength: 8 },
-                  role_id: { type: 'integer', enum: [1, 2, 3, 4, 5] },
+                  role_id: { type: ['integer', 'null'], examples: [3] },
                   email: { type: ['string', 'null'] },
+                  empid: { type: 'string', examples: ['EMP00012'] },
+                  lab_id: { type: 'integer', examples: [4] },
+                  joining_date: { type: 'string', format: 'date' },
+                  salary: { type: 'string', examples: ['12000'] },
+                  remark: { type: 'string' },
                 },
               },
             },
@@ -1753,24 +1777,29 @@ const document = {
             description: 'Created.',
             content: {
               'application/json': {
-                schema: dataOf({ type: 'object', properties: { id: { type: 'integer' } } }),
+                schema: dataOf({
+                  type: 'object',
+                  properties: {
+                    id: { type: 'integer' },
+                    empid: { type: 'string', examples: ['EMP00012'] },
+                    employment: {
+                      type: ['integer', 'null'],
+                      description: 'The employment row written, or null for a laboratory.',
+                    },
+                  },
+                }),
               },
             },
           },
-          400: errorResponse('A required field is missing, or the password is under 8 characters.'),
-          409: errorResponse('An account with that mobile number already exists.'),
+          400: errorResponse(
+            'A required field is missing, the password is under 8 characters, or the employer is not head office or a laboratory.',
+          ),
+          409: errorResponse('That mobile number or employee ID is already in use.'),
           ...guarded,
         },
       },
     },
 
-    '/api/users/roles': {
-      get: {
-        tags: ['Users'],
-        summary: 'List roles',
-        responses: { 200: { description: 'The five roles.' }, ...guarded },
-      },
-    },
 
     '/api/users/{id}/active': {
       patch: {

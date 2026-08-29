@@ -16,7 +16,14 @@ import { dashboardRoutes } from './routes/dashboard.routes.js';
 import { cardRoutes } from './routes/card.routes.js';import { adminRoutes } from './routes/admin.routes.js';
 import { uploadRoutes } from './routes/upload.routes.js';
 import { attendanceRoutes } from './routes/attendance.routes.js';
-import { contentRoutes } from './routes/content.routes.js';import { customerRoutes } from './routes/customer.routes.js';
+import { contentRoutes } from './routes/content.routes.js';
+import { customerRoutes } from './routes/customer.routes.js';
+import { roleRoutes } from './routes/role.routes.js';
+import { studentRoutes } from './routes/student.routes.js';
+import { courseRoutes } from './routes/course.routes.js';
+import { studentCertificateRoutes } from './routes/student-certificate.routes.js';
+import { enquiryRoutes } from './routes/enquiry.routes.js';
+import { couponRoutes } from './routes/coupon.routes.js';
 import { requireAuth } from './middleware/auth.js';
 import { loginLimiter, resetLimiter, verifyLogLimiter, renderLimiter } from './middleware/limits.js';
 import { openApiDocument } from './docs/openapi.js';
@@ -97,6 +104,7 @@ export function createApp() {
   app.use('/api/cards', cardRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/uploads', uploadRoutes);
+  app.use('/api/coupons', couponRoutes);
 
   // Reading back what was uploaded. Every image path in the database is
   // `public/uploads/<bucket>/<file>`, and until now nothing served those files
@@ -113,6 +121,11 @@ export function createApp() {
   app.use('/api/attendance', attendanceRoutes);
   app.use('/api/content', contentRoutes);
   app.use('/api/customers', customerRoutes);
+  app.use('/api/roles', roleRoutes);
+  app.use('/api/students', studentRoutes);
+  app.use('/api/courses', courseRoutes);
+  app.use('/api/student-certificates', studentCertificateRoutes);
+  app.use('/api/enquiries', enquiryRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

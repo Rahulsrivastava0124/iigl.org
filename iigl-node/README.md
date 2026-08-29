@@ -132,14 +132,29 @@ skipped outside production so local work and the sweep are not throttled.
 wildcard cannot be combined with credentials, and reflecting whatever origin
 arrives would let any site call the API with a visitor's session.
 
+## Migrations
+
+```bash
+npm run migrate:status   # what is applied here, what is pending
+npm run migrate -- --dry # print what would run, touch nothing
+npm run migrate          # apply the pending files
+```
+
+Numbered SQL files in `migrations/`, applied by a runner that only runs them —
+it cannot generate SQL or diff a schema. It refuses to run a file that drops
+something without `--allow-drop`, refuses everything if an applied file has been
+edited since, and skips a file marked `-- @blocked`. See `migrations/README.md`.
+
 ## Checks
 
 ```bash
 npm test               # 14 unit tests, no database needed
-npm run sweep          # 113 checks across four roles against a live database
+npm run sweep          # 132 checks across four roles against a live database
 npm run check:spec     # OpenAPI document matches the mounted routers
 npm run check:pricing  # pricing matches the totals already stored
 npm run parity         # phase 07: every figure against the Laravel queries
+npm run check:parents  # users.parent_id still agrees with employements,
+                       # and both still name an empid somebody holds
 npm run docs           # regenerate API.md
 ```
 

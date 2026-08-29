@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  Box,
   Button,
   MenuItem,
   Table,
@@ -16,6 +17,7 @@ import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
 import {
+  ConfirmDialog,
   FormPanel,
   IconAction,
   Panel,
@@ -48,6 +50,8 @@ const BLANK = {
   classic_price: '',
 };
 
+type PriceWithCategory = Price & { category_name?: string };
+
 export default function Pricing() {
   const toast = useToast();
   const [params] = useSearchParams();
@@ -61,6 +65,7 @@ export default function Pricing() {
   const prices = useFetch<{ data: Price[] }>(`/admin/prices?lab_id=${scope}`);
 
   const [form, setForm] = useState(BLANK);
+  const [deleting, setDeleting] = useState<PriceWithCategory | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -108,13 +113,18 @@ export default function Pricing() {
     }
   };
 
-  const remove = async (p: Price) => {
+  const remove = async () => {
+    if (!deleting) return;
+    setBusy(true);
     try {
-      await api.del(`/admin/prices/${p.id}`);
+      await api.del(`/admin/prices/${deleting.id}`);
       toast.ok('Price band removed.');
+      setDeleting(null);
       prices.reload();
     } catch (e) {
       toast.error(messageOf(e));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -146,28 +156,33 @@ export default function Pricing() {
             </MenuItem>
           ))}
         </TextField>
-        <TextField
-          label="From (carat)"
-          type="number"
-          value={form.min_wt}
-          onChange={(e) => setForm({ ...form, min_wt: e.target.value })}
-          slotProps={{ htmlInput: { min: 0, step: 0.001 } }}
-          required
-        />
-        <TextField
-          label="To (carat)"
-          type="number"
-          value={form.max_wt}
-          onChange={(e) => setForm({ ...form, max_wt: e.target.value })}
-          slotProps={{ htmlInput: { min: 0, step: 0.001 } }}
-          required
-        />
+        <Box sx={{ gridColumn: { sm: 'span 2' }, display: 'flex', gap: 2 }}>
+          <TextField
+            label="From (carat)"
+            type="number"
+            value={form.min_wt}
+            onChange={(e) => setForm({ ...form, min_wt: e.target.value })}
+            slotProps={{ htmlInput: { min: 0, step: 0.001 } }}
+            sx={{ flex: 1 }}
+            required
+          />
+          <TextField
+            label="To (carat)"
+            type="number"
+            value={form.max_wt}
+            onChange={(e) => setForm({ ...form, max_wt: e.target.value })}
+            slotProps={{ htmlInput: { min: 0, step: 0.001 } }}
+            sx={{ flex: 1 }}
+            required
+          />
+        </Box>
         <TextField
           label="Smart card price"
           type="number"
           value={form.smart_price}
           onChange={(e) => setForm({ ...form, smart_price: e.target.value })}
-          slotProps={{ htmlInput: { min: 0 } }}
+          slotProps={{ htmlInput: { min: 0, style: { width: '100%' } } }}
+          sx={{ minWidth: 150 }}
           required
         />
         <TextField
@@ -175,7 +190,8 @@ export default function Pricing() {
           type="number"
           value={form.classic_price}
           onChange={(e) => setForm({ ...form, classic_price: e.target.value })}
-          slotProps={{ htmlInput: { min: 0 } }}
+          slotProps={{ htmlInput: { min: 0, style: { width: '100%' } } }}
+          sx={{ minWidth: 150 }}
           required
         />
         </FormPanel>
@@ -258,7 +274,12 @@ export default function Pricing() {
                           })
                         }
                       />
-                      <IconAction label="Delete band" icon={DeleteIcon} danger onClick={() => remove(p)} />
+                      <IconAction
+                        label="Delete band"
+                        icon={DeleteIcon}
+                        danger
+                        onClick={() => setDeleting({ ...p, category_name: catName(p.category_id) })}
+                      />
                     </RowActions>
                   </TableCell>
                 </TableRow>
@@ -274,6 +295,21 @@ export default function Pricing() {
         be created first.
       </Typography>
 
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        title="Delete Price Band"
+        message={
+          <>
+            Delete the price band for <strong>{deleting?.category_name}</strong> ({deleting?.min_wt}–{deleting?.max_wt} carat)?
+          </>
+        }
+        warning="This action cannot be undone."
+        onClose={() => setDeleting(null)}
+        onConfirm={remove}
+        confirmLabel="Delete"
+        confirmIcon={DeleteIcon}
+        busy={busy}
+      />
     </>
   );
 }

@@ -26,7 +26,7 @@ reportRoutes.get(
     let q = db.selectFrom('reports').selectAll();
     let c = db.selectFrom('reports').select(db.fn.countAll().as('n'));
 
-    if (req.user.roleId !== ROLE.ADMIN) {
+    if (req.user.roleId !== ROLE.SUPER) {
       q = q.where('lab_id', '=', req.user.labId);
       c = c.where('lab_id', '=', req.user.labId);
     }

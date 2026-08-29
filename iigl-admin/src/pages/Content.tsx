@@ -19,6 +19,7 @@ import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
 import {
+  ConfirmDialog,
   FormPanel,
   IconAction,
   Panel,
@@ -81,6 +82,7 @@ export default function Content() {
   const section = (params.get('tab') as Section) ?? 'articles';
   const setSection = (next: Section) => setParams({ tab: next });
   const [editing, setEditing] = useState<Editing | null>(null);
+  const [deletingBanner, setDeletingBanner] = useState<{ id: number; name: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const articles = useFetch<{ data: any[] }>(section === 'articles' ? '/public/blogs' : null);
@@ -146,13 +148,18 @@ export default function Content() {
     }
   };
 
-  const removeBanner = async (id: number) => {
+  const removeBanner = async () => {
+    if (!deletingBanner) return;
+    setBusy(true);
     try {
-      await api.del(`/content/banners/${id}`);
+      await api.del(`/content/banners/${deletingBanner.id}`);
       toast.ok('Banner removed.');
+      setDeletingBanner(null);
       banners.reload();
     } catch (e) {
       toast.error(messageOf(e));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -346,7 +353,7 @@ export default function Content() {
                           label="Delete banner"
                           icon={DeleteIcon}
                           danger
-                          onClick={() => removeBanner(r.id)}
+                          onClick={() => setDeletingBanner({ id: r.id, name: r.name })}
                         />
                       )}
                     </RowActions>
@@ -365,6 +372,17 @@ export default function Content() {
         </Typography>
       )}
 
+      <ConfirmDialog
+        open={Boolean(deletingBanner)}
+        title="Delete Banner"
+        message={<>Are you sure you want to delete <strong>{deletingBanner?.name}</strong>?</>}
+        warning="This action cannot be undone."
+        onClose={() => setDeletingBanner(null)}
+        onConfirm={removeBanner}
+        confirmLabel="Delete"
+        confirmIcon={DeleteIcon}
+        busy={busy}
+      />
     </>
   );
 }

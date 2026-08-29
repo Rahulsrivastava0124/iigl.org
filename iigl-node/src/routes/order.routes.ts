@@ -20,7 +20,7 @@ orderRoutes.use(requireLabScope);
 
 /** Restricts a query to the caller's lab. Admins are unrestricted. */
 function scopeToLab<Q extends { where: any }>(q: Q, user: Express.Request['user']): Q {
-  if (user.roleId === ROLE.ADMIN) return q;
+  if (user.roleId === ROLE.SUPER) return q;
   return q.where('orders.lab_id', '=', user.labId) as Q;
 }
 
@@ -127,7 +127,7 @@ orderRoutes.get(
       .select(['customer_name', 'mobile', 'alt_mobile', 'email', 'gst', 'address'])
       .where((eb) => eb.or([eb('mobile', '=', mobile), eb('alt_mobile', '=', mobile)]));
 
-    if (req.user.roleId !== ROLE.ADMIN) q = q.where('lab_id', '=', req.user.labId);
+    if (req.user.roleId !== ROLE.SUPER) q = q.where('lab_id', '=', req.user.labId);
 
     const row = await q.orderBy('id', 'desc').executeTakeFirst();
     res.json({ data: row ?? null });

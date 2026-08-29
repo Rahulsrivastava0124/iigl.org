@@ -6,7 +6,7 @@ import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
 import { Panel, PasswordField } from '../components/ui';
 import FileField from '../components/FileField';
-import { ROLE_NAMES } from '../lib/portal';
+import { isLab, ROLE_NAMES } from '../lib/portal';
 
 interface Account {
   id: number;
@@ -27,6 +27,17 @@ interface Account {
   signature: string | null;
   commision: number | null;
   role_id: number;
+  /** The posting you hold. Null for a laboratory and for head office. */
+  employment: {
+    id: number;
+    lab_empid: string;
+    joining_date: string;
+    salary: string;
+    lab_id: number | null;
+    lab_name: string | null;
+    lab_mobile: string | null;
+    employer_role_id: number | null;
+  } | null;
 }
 
 const TEXT_FIELDS = [
@@ -87,22 +98,23 @@ export default function Profile() {
     }
   };
 
-  const [passwords, setPasswords] = useState({ current_password: '', new_password: '', confirm: '' });
+  /**
+   * One field, by decision: the new password and nothing else.
+   *
+   * No current password — the session is the authority, so anybody who reaches
+   * an open one can change it. No repeat field either, so a typo becomes a
+   * password nobody knows; the eye toggle is what stands in for the second
+   * field, and the sentence under the button says the rest.
+   */
+  const [newPassword, setNewPassword] = useState('');
   const [pwBusy, setPwBusy] = useState(false);
 
   const changePassword = async () => {
-    if (passwords.new_password !== passwords.confirm) {
-      toast.error('The two new passwords do not match.');
-      return;
-    }
     setPwBusy(true);
     try {
-      await api.post('/auth/change-password', {
-        current_password: passwords.current_password,
-        new_password: passwords.new_password,
-      });
+      await api.post('/auth/change-password', { new_password: newPassword });
       toast.ok('Password changed.');
-      setPasswords({ current_password: '', new_password: '', confirm: '' });
+      setNewPassword('');
     } catch (e) {
       toast.error(messageOf(e));
     } finally {
@@ -111,7 +123,7 @@ export default function Profile() {
   };
 
   const a = account.data?.data;
-  const isLab = user?.roleId === 2;
+  const lab = isLab(user);
 
   return (
     <>
@@ -120,9 +132,18 @@ export default function Profile() {
         title="Details"
         // Which account this is: the breadcrumb says "Your profile" but not
         // whose role or number, and that is the part worth having on screen.
+        // Which account this is, and — for anybody employed — who they work
+        // under. A team member or a custom-role account is defined by their
+        // employer as much as by their own number, and the screen said nothing
+        // about it: `Team · 9507981943 · EMP0001` names nobody to ask.
         subtitle={
           a
-            ? `${ROLE_NAMES[a.role_id] ?? 'Account'} · ${a.mobile}${a.empid ? ` · ${a.empid}` : ''}`
+            ? `${ROLE_NAMES[a.role_id] ?? 'Account'} · ${a.mobile}${a.empid ? ` · ${a.empid}` : ''}` +
+              (a.employment?.lab_name
+                ? ` · under ${a.employment.lab_name}${
+                    a.employment.lab_mobile ? ` (${a.employment.lab_mobile})` : ''
+                  }`
+                : '')
             : 'Loading…'
         }
         actions={
@@ -148,7 +169,7 @@ export default function Profile() {
           <Grid size={{ xs: 12, sm: 4 }}>
             <FileField label="Profile photo" bucket="employee" value={photo} onChange={setPhoto} />
           </Grid>
-          {isLab && (
+          {lab && (
             <>
               <Grid size={{ xs: 12, sm: 4 }}>
                 <FileField label="Company logo" bucket="icon" value={logo} onChange={setLogo} />
@@ -166,9 +187,35 @@ export default function Profile() {
           )}
         </Grid>
 
+        {a?.employment && (
+          // Read-only, and deliberately so: pay is agreed with an employer, not
+          // typed by the person being paid. It is here because "what am I on"
+          // is a question the profile should answer without asking anybody.
+          <Grid container spacing={2} sx={{ px: 2, pb: 2 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+              <TextField
+                label="Salary"
+                value={a.employment.salary ? `₹${Number(a.employment.salary).toLocaleString('en-IN')}` : '—'}
+                disabled
+                helperText="Set by your employer."
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+              <TextField
+                label="Joined"
+                value={a.employment.joining_date || '—'}
+                disabled
+                helperText={
+                  a.employment.lab_name ? `Working under ${a.employment.lab_name}.` : undefined
+                }
+              />
+            </Grid>
+          </Grid>
+        )}
+
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', px: 2, pb: 2 }}>
           Your mobile number is how you sign in and cannot be changed here. Ask an administrator.
-          {isLab && a?.commision != null && ` Your commission rate is ${a.commision}%.`}
+          {lab && a?.commision != null && ` Your commission rate is ${a.commision}%.`}
         </Typography>
       </Panel>
 
@@ -179,39 +226,23 @@ export default function Profile() {
       <Panel>
         <Stack spacing={2} sx={{ p: 2, maxWidth: 380 }}>
           <PasswordField
-            label="Current password"
-            autoComplete="current-password"
-            value={passwords.current_password}
-            onChange={(e) => setPasswords({ ...passwords, current_password: e.target.value })}
-          />
-          <PasswordField
             label="New password"
             autoComplete="new-password"
-            helperText="Eight characters or more."
-            value={passwords.new_password}
-            onChange={(e) => setPasswords({ ...passwords, new_password: e.target.value })}
-          />
-          <PasswordField
-            label="Repeat new password"
-            autoComplete="new-password"
-            value={passwords.confirm}
-            onChange={(e) => setPasswords({ ...passwords, confirm: e.target.value })}
+            helperText="Eight characters or more. Check it with the eye before saving — it is not asked for twice."
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
           />
           <Button
             variant="contained"
-            disabled={
-              pwBusy ||
-              !passwords.current_password ||
-              passwords.new_password.length < 8 ||
-              !passwords.confirm
-            }
+            disabled={pwBusy || newPassword.length < 8}
             onClick={changePassword}
             sx={{ alignSelf: 'flex-start' }}
           >
             {pwBusy ? 'Changing…' : 'Change password'}
           </Button>
           <Typography variant="caption" color="text.secondary">
-            Changing your password does not sign out other devices. Sessions last eight hours.
+            This takes effect at once and does not sign out other devices. Sessions last eight
+            hours.
           </Typography>
         </Stack>
       </Panel>

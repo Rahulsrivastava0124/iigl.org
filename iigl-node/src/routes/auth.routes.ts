@@ -81,7 +81,8 @@ authRoutes.post(
     const user: SessionUser = {
       id: Number(row.id),
       fullname: row.fullname,
-      roleId: Number(row.role_id),
+      // Null stays null. Number(null) is 0, and 0 is head office.
+      roleId: row.role_id === null ? null : Number(row.role_id),
       labId: await resolveLabId(Number(row.id), Number(row.role_id)),
     };
 
@@ -196,17 +197,31 @@ authRoutes.post(
   requireAuth,
   wrap(async (req, res) => {
     const { current_password, new_password } = req.body ?? {};
-    if (!current_password || !new_password) throw badRequest('Enter your current and new password.');
+    if (!new_password) throw badRequest('Enter a new password.');
     if (String(new_password).length < 8) throw badRequest('New password must be at least 8 characters.');
 
-    const row = await db
-      .selectFrom('users')
-      .select('password')
-      .where('id', '=', req.user.id)
-      .executeTakeFirstOrThrow();
+    /*
+     * The current password is **optional**, by decision.
+     *
+     * Asked for, it is still checked — a wrong one is refused rather than
+     * ignored, so an old client cannot be waved through by sending rubbish.
+     * Omitted, the session alone is the authority.
+     *
+     * What that costs: anybody who reaches an open session — a shared machine,
+     * an unlocked screen, a stolen cookie — can take the account over, because
+     * knowing the old password is what otherwise stands in the way. It was
+     * asked for and it is written down here rather than left to be discovered.
+     */
+    if (current_password !== undefined && current_password !== null && current_password !== '') {
+      const row = await db
+        .selectFrom('users')
+        .select('password')
+        .where('id', '=', req.user.id)
+        .executeTakeFirstOrThrow();
 
-    if (!(await bcrypt.compare(String(current_password), row.password))) {
-      throw badRequest('Your current password is incorrect.');
+      if (!(await bcrypt.compare(String(current_password), row.password))) {
+        throw badRequest('Your current password is incorrect.');
+      }
     }
 
     // Cost 10 matches the existing Laravel hashes, so old and new rows stay uniform.

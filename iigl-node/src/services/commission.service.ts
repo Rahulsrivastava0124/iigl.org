@@ -96,7 +96,7 @@ export async function sendCommission(
       attachment: input.attachment,
       send_by: user.id,
       // Commission always goes to the administrator, user 1.
-      received_by: ROLE.ADMIN,
+      received_by: ROLE.SUPER,
       status: STATUS.PENDING,
       seen_by_sender: 1,
       seen_by_receiver: 0,

@@ -37,6 +37,34 @@ trail, `Drawer` for the sidebar, `DataGrid`-shaped tables built from `Table`.
 The panel's own wrappers live in `iigl-admin/src/components/ui.tsx` — reach for
 those before writing a new one.
 
+## Roles
+
+Three: **super admin** (head office, `role_id` 1), **admin** (`role_id` 2 — a
+laboratory; the laboratory account *is* its admin, so `isAdmin` and `isLab` are
+the same test) and **team** (their staff, role 3, plus the older 4 and 5,
+attached to an employer through `employements.parent_id`, which holds that
+employer's `users.empid` rather than their id). `role_id` is
+nullable, and NULL is **no role at all**: that person holds only the grants in
+`user_permissions`. One sign-in door each — `super.` (or the bare
+domain), `admin.`, `team.` — and `ROLES.md` at the repo root has the structure,
+what each role sees and where each rule is enforced.
+
+## Admin Panel Patterns
+
+Key UI patterns documented in `iigl-admin/style.md`:
+
+- **Full-page forms** (Create/Edit): Flat 3-column grid (`spacing={2}`), no
+  section headers. Submit/Cancel buttons right-aligned with
+  `justifyContent: 'flex-end'`.
+- **Active/Inactive status**: Filled `Chip` with `success.main` (green) or
+  `error.main` (red) background, white text.
+- **Toggle actions**: IconButton color matches state — green when active, red
+  when inactive. Hover fills with the same color.
+- **Delete confirmation**: Narrow dialog (`maxWidth="xs"`), red header
+  `#d32f2f`, red delete button. Always confirm destructive actions.
+- **Sidebar menu**: Group labels 13.5px/500, sub-items 13.5px. No "Your profile"
+  in sidebar — profile accessed via avatar menu only.
+
 ## Working here
 
 - The database is a copy of production. Reads are free; check before writing.

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { sql } from 'kysely';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
-import { requireLabScope, ROLE } from '../middleware/auth.js';
+import { empidOf, requireLabScope, ROLE } from '../middleware/auth.js';
 import { ddmmyyyy } from '../services/order.service.js';
 import { TRANSACTION_TYPE } from '../services/commission.service.js';
 
@@ -22,7 +22,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 dashboardRoutes.get(
   '/summary',
   wrap(async (req, res) => {
-    const isAdmin = req.user.roleId === ROLE.ADMIN;
+    const isAdmin = req.user.roleId === ROLE.SUPER;
     const labId = req.user.labId;
     const today = ddmmyyyy();
 
@@ -170,7 +170,14 @@ dashboardRoutes.get(
         .selectFrom('employements')
         .select(db.fn.countAll().as('n'))
         .where('is_working', '=', '1');
-      if (!isAdmin) q = q.where('parent_id', '=', labId!);
+      if (!isAdmin) {
+        // `parent_id` names the employer by empid, and the session carries a
+        // user id. No empid means nobody can be employed here, so the count is
+        // zero rather than a query matching NULL.
+        const empid = await empidOf(labId!);
+        if (!empid) return 0;
+        q = q.where('parent_id', '=', empid);
+      }
       const row = await q.executeTakeFirstOrThrow();
       return Number(row.n);
     };
@@ -259,7 +266,7 @@ dashboardRoutes.get(
 dashboardRoutes.get(
   '/trend',
   wrap(async (req, res) => {
-    const isAdmin = req.user.roleId === ROLE.ADMIN;
+    const isAdmin = req.user.roleId === ROLE.SUPER;
     const labId = req.user.labId ?? 0;
     const scope = (column: string) =>
       isAdmin ? sql`1 = 1` : sql`${sql.raw(column)} = ${labId}`;

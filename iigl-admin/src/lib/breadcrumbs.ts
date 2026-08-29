@@ -1,5 +1,6 @@
 import { useLocation, useParams } from 'react-router-dom';
 import { useFetch } from './useFetch';
+import { PORTAL_LABEL, type Portal } from './portal';
 
 /**
  * Breadcrumbs, derived from the route.
@@ -36,6 +37,12 @@ const SECTIONS: Record<string, string> = {
   content: 'Website Setup',
   roles: 'Roles & Permissions',
   customers: 'Customer',
+  'student-enquiries': 'Enquiry',
+  students: 'Registration',
+  courses: 'Course',
+  coupons: 'Discount Coupons',
+  'student-certificates': 'Certificates',
+  enquiries: 'Enquiry',
 };
 
 /**
@@ -44,6 +51,13 @@ const SECTIONS: Record<string, string> = {
  * person actually clicked rather than the screen it happens to share.
  */
 const VIEWS: Record<string, Record<string, string>> = {
+  courses: { 'tab=enrolments': 'Enrolments' },
+  enquiries: {
+    'kind=ask': 'Ask Me',
+    'kind=visit': "Visitor's Diary",
+    'kind=lead': 'Lead Followup',
+    'kind=complaint': 'Complaints',
+  },
   orders: {
     'status=preparing': 'In Progress',
     'status=delivered': 'Paid & Delivered',
@@ -95,6 +109,7 @@ const LEAVES: Record<string, string> = {
 const RECORD_PATH: Record<string, (id: string) => string> = {
   orders: (id) => `/orders/${id}`,
   reports: (id) => `/reports/${id}`,
+  staff: (id) => `/users/${id}`,
 };
 
 export function useBreadcrumbs(portal: string): Crumb[] {
@@ -109,14 +124,20 @@ export function useBreadcrumbs(portal: string): Crumb[] {
   // Resolved unconditionally: a hook cannot live inside a branch. When the
   // route is not a record, the path is null and useFetch does nothing.
   const recordPath = id && RECORD_PATH[section] ? RECORD_PATH[section](id) : null;
-  const record = useFetch<{ data: { order_no?: string; report_no?: string } }>(recordPath);
-  const recordName = record.data?.data.order_no ?? record.data?.data.report_no ?? `#${id}`;
+  const record = useFetch<{ data: { order_no?: string; report_no?: string; fullname?: string } }>(
+    recordPath,
+  );
+  // A person is named, like an order is numbered. `#96` in the trail says
+  // nothing about whose page you are on.
+  const recordName =
+    record.data?.data.order_no ?? record.data?.data.report_no ?? record.data?.data.fullname ?? `#${id}`;
 
   // The dashboard is the root. "Super Admin › Dashboard" says the same thing
   // twice, so the trail stops at one crumb.
   if (segments.length === 0) return [{ label: 'Dashboard' }];
 
-  const root: Crumb = { label: portal === 'team' ? 'Team' : 'Super Admin', to: '/' };
+  // The trail starts where the person signed in: Super Admin, Admin or Team.
+  const root: Crumb = { label: PORTAL_LABEL[portal as Portal] ?? 'Super Admin', to: '/' };
   const sectionLabel = SECTIONS[section];
 
   // An unknown path. The router sends these to the dashboard, so the trail

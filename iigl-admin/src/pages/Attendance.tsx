@@ -1,36 +1,18 @@
 import { useState } from 'react';
-import {
-  Box,
-  Button,
-  MenuItem,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Box, Button, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import LoginIcon from '@mui/icons-material/LoginOutlined';
 import LogoutIcon from '@mui/icons-material/LogoutOutlined';
 import BreakIcon from '@mui/icons-material/FreeBreakfastOutlined';
 import { useToast } from '../components/Toast';
+import { isSuper, isLab } from '../lib/portal';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import { Pager, Panel, StateChip, TableFrame, attendanceState } from '../components/ui';
+import MonthCalendar, { monthRange, thisMonth } from '../components/MonthCalendar';
+import { Panel, StateChip, attendanceState } from '../components/ui';
+import { attendanceDay, dayKey, hours, isOpen, minutesWorked, time } from '../lib/attendance';
+import type { Day } from '../lib/attendance';
 import type { Paged } from '../lib/api';
-
-interface Day {
-  id: number;
-  date: string;
-  clockIn: string;
-  clockOut: string | null;
-  break_begin: string | null;
-  break_end: string | null;
-  status: string | null;
-}
 
 interface Today {
   date: string;
@@ -45,35 +27,31 @@ interface StaffRow {
   fullname: string;
 }
 
-/** Both ends present and in order, otherwise nothing to show. */
-function worked(day: Day): string {
-  if (!day.clockIn || !day.clockOut || day.clockOut === '00:00:00') return '—';
-  const [a, b] = [day.clockIn, day.clockOut].map((t) => {
-    const [h, m, s] = t.split(':').map(Number);
-    return h * 3600 + m * 60 + (s || 0);
-  });
-  if (b <= a) return '—';
-  const minutes = Math.round((b - a) / 60);
-  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
-}
-
-const time = (v: string | null) => (!v || v === '00:00:00' ? '—' : v.slice(0, 5));
-const stamp = (v: string | null) => (v ? String(v).slice(11, 16) : '—');
-
+/**
+ * Attendance: today's clock, and the month behind it.
+ *
+ * The history used to be a paged table. A month of days is a calendar — the
+ * thing anybody opens attendance to find is an absence, and an absence is a gap
+ * rather than a row. The same `MonthCalendar` draws an employee's month on
+ * their own page.
+ */
 export default function Attendance() {
   const toast = useToast();
   const { user } = useAuth();
-  const canReadOthers = (user?.roleId ?? 0) <= 2;
+  // Head office and a laboratory may read somebody else's days; a team member
+  // reads their own.
+  const canReadOthers = isSuper(user) || isLab(user);
 
-  const [page, setPage] = useState(1);
   // 'me' rather than '' — an empty MUI select value leaves the label
   // unshrunk, so the field shows its label where the choice should be.
   const [empId, setEmpId] = useState('me');
+  const [month, setMonth] = useState(thisMonth());
+  const { from, to, days: daysInMonth } = monthRange(month);
 
   const today = useFetch<{ data: Today }>('/attendance/today');
   const staff = useFetch<{ data: StaffRow[] }>(canReadOthers ? '/users/staff?per_page=200' : null);
 
-  const query = new URLSearchParams({ page: String(page), per_page: '31' });
+  const query = new URLSearchParams({ from, to, per_page: '200' });
   if (empId !== 'me') query.set('emp_id', empId);
   const history = useFetch<Paged<Day>>(`/attendance?${query}`);
 
@@ -95,135 +73,121 @@ export default function Attendance() {
 
   const t = today.data?.data;
   const rows = history.data?.data ?? [];
+  const byDate = new Map(rows.map((d) => [dayKey(d), d]));
+  const workedMinutes = rows.reduce((total, d) => total + minutesWorked(d), 0);
+  const stillOpen = rows.filter(isOpen).length;
 
   return (
     <>
-
       {t && (
-        <Panel title="Today">
+        <Panel title="Today" sx={{ mb: 2 }}>
           <Box sx={{ p: 2.5 }}>
             <Stack
               direction="row"
               spacing={2}
               sx={{ alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}
             >
-            <div>
-              <Typography variant="overline" color="text.secondary" sx={{ display: 'block' }}>
-                Today · {t.date}
-              </Typography>
-              <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mt: 0.5 }}>
-                {t.record ? (
-                  <>
-                    <Typography className="tabular" sx={{ fontSize: 18, fontWeight: 600 }}>
-                      {time(t.record.clockIn)}
-                      {t.record.clockOut && t.record.clockOut !== '00:00:00'
-                        ? ` — ${time(t.record.clockOut)}`
-                        : ''}
-                    </Typography>
-                    {t.on_break && <StateChip tone="waiting" label="On break" />}
-                    {!t.can_clock_out && !t.can_clock_in && (
-                      <StateChip tone="settled" label="Day closed" />
-                    )}
-                  </>
-                ) : (
-                  <Typography color="text.secondary">Not clocked in.</Typography>
-                )}
-              </Stack>
-            </div>
+              <div>
+                <Typography variant="overline" color="text.secondary" sx={{ display: 'block' }}>
+                  Today · {t.date}
+                </Typography>
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mt: 0.5 }}>
+                  {t.record ? (
+                    <>
+                      <Typography className="tabular" sx={{ fontSize: 18, fontWeight: 600 }}>
+                        {time(t.record.clockIn)}
+                        {t.record.clockOut && t.record.clockOut !== '00:00:00'
+                          ? ` — ${time(t.record.clockOut)}`
+                          : ''}
+                      </Typography>
+                      {t.on_break && <StateChip tone="waiting" label="On break" />}
+                      {!t.can_clock_out && !t.can_clock_in && (
+                        <StateChip tone="settled" label="Day closed" />
+                      )}
+                    </>
+                  ) : (
+                    <Typography color="text.secondary">Not clocked in.</Typography>
+                  )}
+                </Stack>
+              </div>
 
-            <Stack direction="row" spacing={1}>
-              <Button
-                variant="contained"
-                startIcon={<LoginIcon />}
-                disabled={busy || !t.can_clock_in}
-                onClick={() => act('/attendance/clock-in', {}, 'Clocked in.')}
-              >
-                Clock in
-              </Button>
-              <Button
-                startIcon={<BreakIcon />}
-                disabled={busy || !t.record || !t.can_clock_out}
-                onClick={() =>
-                  act(
-                    '/attendance/break',
-                    { on_break: !t.on_break },
-                    t.on_break ? 'Break ended.' : 'Break started.',
-                  )
-                }
-              >
-                {t.on_break ? 'End break' : 'Start break'}
-              </Button>
-              <Button
-                startIcon={<LogoutIcon />}
-                disabled={busy || !t.can_clock_out}
-                onClick={() => act('/attendance/clock-out', {}, 'Clocked out.')}
-              >
-                Clock out
-              </Button>
-            </Stack>
+              <Stack direction="row" spacing={1}>
+                <Button
+                  variant="contained"
+                  startIcon={<LoginIcon />}
+                  disabled={busy || !t.can_clock_in}
+                  onClick={() => act('/attendance/clock-in', {}, 'Clocked in.')}
+                >
+                  Clock in
+                </Button>
+                <Button
+                  startIcon={<BreakIcon />}
+                  disabled={busy || !t.record || !t.can_clock_out}
+                  onClick={() =>
+                    act(
+                      '/attendance/break',
+                      { on_break: !t.on_break },
+                      t.on_break ? 'Break ended.' : 'Break started.',
+                    )
+                  }
+                >
+                  {t.on_break ? 'End break' : 'Start break'}
+                </Button>
+                <Button
+                  startIcon={<LogoutIcon />}
+                  disabled={busy || !t.can_clock_out}
+                  onClick={() => act('/attendance/clock-out', {}, 'Clocked out.')}
+                >
+                  Clock out
+                </Button>
+              </Stack>
             </Stack>
           </Box>
         </Panel>
       )}
 
-      <Panel
-        footer={<Pager meta={history.data?.meta} onPage={setPage} />}
-        title="History"
+      <MonthCalendar
+        value={month}
+        onChange={setMonth}
+        subtitle="Attendance"
         actions={
-          canReadOthers && (
+          canReadOthers ? (
             <TextField
               select
+              size="small"
               label="Person"
               value={empId}
-              onChange={(e) => {
-                setEmpId(e.target.value);
-                setPage(1);
-              }}
-              sx={{ minWidth: 210 }}
+              onChange={(e) => setEmpId(e.target.value)}
+              sx={{ minWidth: 210, mr: 1 }}
             >
               <MenuItem value="me">Me</MenuItem>
               {(staff.data?.data ?? []).map((s) => (
-                <MenuItem key={s.id} value={s.id}>
+                <MenuItem key={s.id} value={String(s.id)}>
                   {s.fullname}
                 </MenuItem>
               ))}
             </TextField>
-          )
+          ) : undefined
         }
-      >
-        <TableFrame loading={history.loading} error={history.error} empty={rows.length === 0}>
-          <Table size="small" stickyHeader>
-            <TableHead>
-              <TableRow>
-                <TableCell>Date</TableCell>
-                <TableCell>In</TableCell>
-                <TableCell>Out</TableCell>
-                <TableCell>Break</TableCell>
-                <TableCell align="right">Worked</TableCell>
-                <TableCell>Status</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((d) => (
-                <TableRow key={d.id} hover>
-                  <TableCell>{String(d.date).slice(0, 10)}</TableCell>
-                  <TableCell className="tabular">{time(d.clockIn)}</TableCell>
-                  <TableCell className="tabular">{time(d.clockOut)}</TableCell>
-                  <TableCell className="tabular">
-                    {d.break_begin ? `${stamp(d.break_begin)} — ${stamp(d.break_end)}` : '—'}
-                  </TableCell>
-                  <TableCell align="right" className="tabular">
-                    {worked(d)}
-                  </TableCell>
-                  <TableCell>
-                    <StateChip {...attendanceState(d.status === '1')} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableFrame>
-      </Panel>
+        dayFor={(date) => {
+          const record = byDate.get(date);
+          return record ? attendanceDay(record) : null;
+        }}
+        legend={
+          <>
+            <StateChip {...attendanceState(true)} />
+            <StateChip {...attendanceState(false)} />
+          </>
+        }
+        note={
+          history.loading
+            ? 'Loading the month…'
+            : rows.length === 0
+              ? 'No attendance recorded this month.'
+              : `${rows.length} of ${daysInMonth} days · ${hours(workedMinutes)} worked` +
+                (stillOpen > 0 ? ` · ${stillOpen} still open` : '')
+        }
+      />
     </>
   );
 }

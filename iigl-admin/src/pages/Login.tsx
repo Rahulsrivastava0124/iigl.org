@@ -2,27 +2,31 @@ import { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { Box, Button, Link, Stack, TextField } from '@mui/material';
 import { useAuth, messageOf } from '../lib/auth';
-import { PORTALS } from '../lib/portal';
-import { Notice, PasswordField } from '../components/ui';
+import { OTHER_DOORS, PORTALS } from '../lib/portal';
+import { PasswordField } from '../components/ui';
+import { useToast } from '../components/Toast';
 import AuthCard from '../components/AuthCard';
 
 export default function Login() {
   const { signIn, portal } = useAuth();
+  const toast = useToast();
   const config = PORTALS[portal];
 
   const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    setError(null);
     try {
       await signIn(mobile.trim(), password);
     } catch (err) {
-      setError(messageOf(err));
+      // A toast, like every other failed action in the panel. The card used to
+      // grow a red block above the fields, which pushed them down the moment
+      // somebody mistyped — the one moment the fields should stay where the
+      // eye left them.
+      toast.error(messageOf(err));
     } finally {
       setBusy(false);
     }
@@ -33,18 +37,8 @@ export default function Login() {
       title={config.title}
       subtitle={config.subtitle}
       onSubmit={submit}
-      footer={
-        portal === 'team'
-          ? 'Administrators sign in at the admin address.'
-          : 'Laboratories and staff sign in at the team address.'
-      }
+      footer={OTHER_DOORS[portal]}
     >
-      {error && (
-        <Notice kind="error" sx={{ mb: 3, textAlign: 'left' }}>
-          {error}
-        </Notice>
-      )}
-
       <Stack spacing={2.5} sx={{ textAlign: 'left' }}>
         <TextField
           label="Mobile number"

@@ -25,7 +25,7 @@ import {
   money,
 } from '../components/ui';
 import type { Paged, Transaction } from '../lib/api';
-import { isAdmin } from '../lib/portal';
+import { isSuper } from '../lib/portal';
 import ApproveIcon from '@mui/icons-material/CheckCircleOutlined';
 import DeclineIcon from '@mui/icons-material/CancelOutlined';
 
@@ -204,7 +204,7 @@ export default function Transactions() {
             </TableHead>
             <TableBody>
               {rows.map((t) => {
-                const mine = t.received_by === user?.id || isAdmin(user);
+                const mine = t.received_by === user?.id || isSuper(user);
                 const pending = t.status === 0;
                 return (
                   <TableRow key={t.id} hover>

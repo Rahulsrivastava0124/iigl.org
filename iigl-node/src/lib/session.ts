@@ -5,7 +5,12 @@ import { env } from './env.js';
 export interface SessionUser {
   id: number;
   fullname: string;
-  roleId: number;
+  /**
+   * The role, or null for somebody who has none and holds only their own
+   * grants. **Not** 0 — 0 is head office, and `Number(null)` is 0, which is
+   * how a no-role account would otherwise be handed the whole system.
+   */
+  roleId: number | null;
   /** Lab this user belongs to: itself for a lab, the employer for staff. */
   labId: number | null;
 }
@@ -73,7 +78,9 @@ export function readSession(req: Request): SessionUser | null {
     return {
       id: Number(claims.id),
       fullname: String(claims.fullname),
-      roleId: Number(claims.roleId),
+      // Null stays null. `Number(null)` is 0, and 0 is head office — decoding a
+      // role-less session with Number() would hand it the whole system.
+      roleId: claims.roleId === null || claims.roleId === undefined ? null : Number(claims.roleId),
       labId: claims.labId === null ? null : Number(claims.labId),
     };
   } catch {

@@ -5,17 +5,21 @@ import {
   Checkbox,
   Chip,
   CircularProgress,
-  MenuItem,
+  Dialog as MuiDialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
   TextField,
-  Tooltip,
   Typography,
 } from '@mui/material';
 import { useToast } from '../components/Toast';
+import { useAuth } from '../lib/auth';
+import { isSuper, ROLE } from '../lib/portal';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
@@ -38,11 +42,32 @@ const hits = (term: string, ...fields: (string | number | null | undefined)[]) =
 
 import AddIcon from '@mui/icons-material/AddOutlined';
 import PermissionsIcon from '@mui/icons-material/KeyOutlined';
-import RenameIcon from '@mui/icons-material/DriveFileRenameOutlineOutlined';
+import EditIcon from '@mui/icons-material/EditOutlined';
+import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
+import CloseIcon from '@mui/icons-material/CloseOutlined';
 
 interface Role {
   id: number;
   role_name: string;
+  description: string | null;
+  /** Null for a head-office role; a laboratory id for one it created. */
+  owner_id: number | null;
+  /** One of the five that shipped: grantable, never renamed or deleted. */
+  is_system: boolean;
+  /** Created by the laboratory signed in. */
+  mine: boolean;
+  /** How many people hold it. */
+  users: number;
+}
+
+/** A permission that can be granted, from `permission_actions`. */
+interface Action {
+  name: string;
+  label: string;
+  description: string | null;
+  is_system: boolean;
+  /** False when nothing in the API reads this name yet. */
+  enforced: boolean;
 }
 
 interface Permission {
@@ -82,37 +107,51 @@ const LABELS: Record<string, { name: string; note?: string }> = {
   website_report: { name: 'Website — certificate lookup' },
 };
 
-const labelFor = (action: string) =>
-  LABELS[action] ?? { name: action.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()) };
+const labelFor = (action: string, known?: Action) =>
+  LABELS[action] ??
+  (known
+    ? { name: known.label, note: known.description ?? undefined }
+    : { name: action.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()) });
 
-/** Roles 1 and 2 are the administrator and the laboratory. */
-const isBuiltIn = (id: number) => id <= 2;
+/**
+ * Only super admin (#1) and laboratory (#2) are truly built-in.
+ * All other roles (team variants, custom roles) can be edited/deleted.
+ */
+const isBuiltIn = (r: Role) => r.id <= 2;
 
 export default function Roles() {
   const toast = useToast();
-  const roles = useFetch<{ data: Role[] }>('/users/roles');
+  const { user } = useAuth();
+  const roles = useFetch<{ data: Role[] }>('/roles');
+  const actions = useFetch<{ data: Action[] }>('/roles/actions');
   const list = roles.data?.data ?? [];
   // `list` itself stays whole: it resolves the selected role and drives the
   // permission matrix below, neither of which a search of the table should touch.
   const [search, setSearch] = useState('');
-  const shown = list.filter((r) => hits(search, r.id, r.role_name));
+  // Show only head office roles: filter out super admin (#1) and lab-owned roles
+  const shown = list.filter(
+    (r) => r.id !== ROLE.SUPER && r.owner_id === null && hits(search, r.id, r.role_name),
+  );
 
   const [roleId, setRoleId] = useState<string>('');
-  const chosen = roleId || (list.find((r) => !isBuiltIn(r.id))?.id ?? list[0]?.id ?? '');
+  const chosen = roleId || (list.find((r) => !isBuiltIn(r))?.id ?? list[0]?.id ?? '');
   const role = list.find((r) => String(r.id) === String(chosen));
 
   const permissions = useFetch<{ data: Permission[] }>(
-    chosen ? `/users/roles/${chosen}/permissions` : null,
+    chosen ? `/roles/${chosen}/permissions` : null,
   );
 
   const [saving, setSaving] = useState<string | null>(null);
 
   // No `open`: the form is a panel on the page, empty to add and filled to
   // rename, with `id` the only thing telling the two apart.
-  const [form, setForm] = useState<{ open: boolean; id?: number; name: string }>({
-    open: false,
-    name: '',
-  });
+  const [form, setForm] = useState<{
+    open: boolean;
+    id?: number;
+    name: string;
+    description: string;
+  }>({ open: false, name: '', description: '' });
+
   const [busy, setBusy] = useState(false);
 
   /**
@@ -123,7 +162,7 @@ export default function Roles() {
     const next = { ...permission, [ability]: !permission[ability] };
     setSaving(`${permission.action_type}:${ability}`);
     try {
-      await api.put(`/users/roles/${chosen}/permissions`, {
+      await api.put(`/roles/${chosen}/permissions`, {
         action_type: permission.action_type,
         view: next.view,
         create: next.create,
@@ -142,13 +181,13 @@ export default function Roles() {
     setBusy(true);
     try {
       if (form.id) {
-        await api.patch(`/content/roles/${form.id}`, { role_name: form.name });
+        await api.patch(`/roles/${form.id}`, { name: form.name, description: form.description });
         toast.ok('Role renamed.');
       } else {
-        await api.post('/content/roles', { role_name: form.name });
+        await api.post('/roles', { name: form.name, description: form.description });
         toast.ok(`${form.name} added. It starts with no permissions — grant them before anyone signs in.`);
       }
-      setForm({ open: false, name: '' });
+      setForm({ open: false, name: '', description: '' });
       roles.reload();
     } catch (e) {
       toast.error(messageOf(e));
@@ -156,6 +195,37 @@ export default function Roles() {
       setBusy(false);
     }
   };
+
+  const removeRole = async (r: Role) => {
+    try {
+      await api.del(`/roles/${r.id}`);
+      toast.ok(`${r.role_name} deleted.`);
+      roles.reload();
+    } catch (e) {
+      toast.error(messageOf(e));
+    }
+  };
+
+  /**
+   * The three the system is built on. Everything branches on these numbers —
+   * which door admits whom, which menu is drawn, which scope a query takes — so
+   * they can be renamed but never deleted. The API refuses them too; this is so
+   * the control says why before it is pressed.
+   */
+  const ESSENTIAL = [ROLE.SUPER, ROLE.ADMIN, ROLE.TEAM] as number[];
+
+  /** A name is a label — head office may rename any role, a laboratory its own. */
+  const mayRename = (r: Role) => isSuper(user) || r.mine;
+
+  /** Why delete is unavailable, or "Delete role" when it is. */
+  const deleteReason = (r: Role) =>
+    ESSENTIAL.includes(r.id)
+      ? 'One of the three roles the system is built on'
+      : !mayRename(r)
+        ? 'A shared role — ask head office'
+        : r.users > 0
+          ? `${r.users} ${r.users === 1 ? 'person holds' : 'people hold'} this role`
+          : 'Delete role';
 
   const rows = permissions.data?.data ?? [];
   const granted = rows.filter((p) => ABILITIES.some((a) => p[a])).length;
@@ -166,7 +236,7 @@ export default function Roles() {
       {form.open && (
         <FormPanel
           title={form.id ? 'Rename role' : 'Add role'}
-          onClose={() => setForm({ open: false, name: '' })}
+          onClose={() => setForm({ open: false, name: '', description: '' })}
           onSubmit={saveRole}
           submitLabel={form.id ? 'Save changes' : 'Add role'}
           busy={busy}
@@ -177,19 +247,29 @@ export default function Roles() {
             onChange={(e) => setForm({ ...form, name: e.target.value })}
             required
           />
+          <TextField
+            label="What it is for"
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            helperText={
+              isSuper(user)
+                ? 'A head office role: every laboratory can put somebody in it.'
+                : 'Your laboratory\'s own role. No other laboratory sees it.'
+            }
+          />
         </FormPanel>
       )}
 
       <Panel
         title="Roles"
-        count={roles.loading ? 'Loading…' : `${shown.length} of ${list.length} roles`}
+        count={roles.loading ? 'Loading…' : `${shown.length} roles`}
         actions={
           <>
             <SearchField placeholder="Role name…" value={search} onChange={setSearch} width={200} />
             <Button
               variant="contained"
               startIcon={<AddIcon />}
-              onClick={() => setForm({ open: true, name: '' })}
+              onClick={() => setForm({ open: true, name: '', description: '' })}
             >
               Add role
             </Button>
@@ -200,25 +280,40 @@ export default function Roles() {
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Id</TableCell>
+                <TableCell>SN.</TableCell>
                 <TableCell>Name</TableCell>
-                <TableCell>Kind</TableCell>
+                <TableCell>Type</TableCell>
+                <TableCell align="right">Holders</TableCell>
                 <TableCell />
               </TableRow>
             </TableHead>
             <TableBody>
-              {shown.map((r) => (
+              {shown.map((r, index) => (
                 <TableRow key={r.id} hover selected={String(r.id) === String(chosen)}>
-                  <TableCell className="mono">#{r.id}</TableCell>
-                  <TableCell>{r.role_name}</TableCell>
-                  <TableCell>
-                    {r.id === 1 ? (
-                      <Chip size="small" variant="outlined" label="Administrator" />
-                    ) : r.id === 2 ? (
-                      <Chip size="small" variant="outlined" label="Laboratory" />
-                    ) : (
-                      <Chip size="small" variant="outlined" color="primary" label="Staff" />
+                  <TableCell className="mono">{index + 1}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'normal', minWidth: 160 }}>
+                    {r.id === ROLE.ADMIN ? 'Laboratory' : r.role_name}
+                    {r.description && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: 'block' }}
+                      >
+                        {r.description}
+                      </Typography>
                     )}
+                  </TableCell>
+                  <TableCell>
+                    {r.id === ROLE.ADMIN ? (
+                      <Chip size="small" variant="outlined" label="Built-in" />
+                    ) : r.is_system ? (
+                      <Chip size="small" variant="outlined" label="System" />
+                    ) : (
+                      <Chip size="small" variant="outlined" color="primary" label="Custom" />
+                    )}
+                  </TableCell>
+                  <TableCell align="right" className="tabular">
+                    {r.users || '—'}
                   </TableCell>
                   <TableCell>
                     <RowActions>
@@ -228,9 +323,19 @@ export default function Roles() {
                         onClick={() => setRoleId(String(r.id))}
                       />
                       <IconAction
-                        label="Rename role"
-                        icon={RenameIcon}
-                        onClick={() => setForm({ open: true, id: r.id, name: r.role_name })}
+                        label={
+                          mayRename(r) ? 'Edit role' : 'A shared role — ask head office'
+                        }
+                        icon={EditIcon}
+                        disabled={!mayRename(r)}
+                        to={mayRename(r) ? `/roles/${r.id}/edit` : undefined}
+                      />
+                      <IconAction
+                        label={deleteReason(r)}
+                        icon={DeleteIcon}
+                        danger
+                        disabled={deleteReason(r) !== 'Delete role'}
+                        onClick={() => removeRole(r)}
                       />
                     </RowActions>
                   </TableCell>
@@ -241,108 +346,86 @@ export default function Roles() {
         </TableFrame>
       </Panel>
 
-      <Typography variant="h2" sx={{ mt: 4, mb: 1.5 }}>
-        Permissions
-      </Typography>
-
-      <Panel
-        actions={
-          <>
-            <TextField
-              select
-              label="Role"
-              value={chosen}
-              onChange={(e) => setRoleId(e.target.value)}
-              sx={{ minWidth: 210 }}
-            >
-              {list.map((r) => (
-                <MenuItem key={r.id} value={r.id}>
-                  {r.role_name}
-                </MenuItem>
-              ))}
-            </TextField>
-            <Typography variant="body2" color="text.secondary">
-              {granted} of {rows.length} areas granted
-            </Typography>
-          </>
-        }
-      >
-        {role && role.id === 1 && (
-          <Box sx={{ p: 2, pb: 0 }}>
-            <Notice kind="info" sx={{ mb: 0 }}>
-              Administrators are granted everything unconditionally, whatever this matrix says.
-              Editing it here has no effect on them — it is kept visible so the rows are not
-              mistaken for a lockout.
-            </Notice>
-          </Box>
-        )}
-
-        <TableFrame
-          loading={permissions.loading}
-          error={permissions.error}
-          empty={rows.length === 0}
+      {/* Permissions Modal */}
+      {role && roleId && (
+        <MuiDialog
+          open
+          onClose={() => setRoleId('')}
+          maxWidth="md"
+          fullWidth
         >
-          <Table size="small" stickyHeader>
-            <TableHead>
-              <TableRow>
-                <TableCell>Area</TableCell>
-                {ABILITIES.map((a) => (
-                  <TableCell key={a} align="center" sx={{ width: 88 }}>
-                    {a}
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((p) => {
-                const label = labelFor(p.action_type);
-                return (
-                  <TableRow key={p.action_type} hover>
-                    <TableCell sx={{ whiteSpace: 'normal', minWidth: 260 }}>
-                      <Typography sx={{ fontSize: 13.5 }}>{label.name}</Typography>
-                      {label.note && (
-                        <Typography variant="caption" color="text.secondary">
-                          {label.note}
-                        </Typography>
-                      )}
-                      <Typography variant="caption" color="text.secondary" className="mono" sx={{ display: 'block' }}>
-                        {p.action_type}
-                      </Typography>
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box>
+              <Typography variant="h6" component="span">
+                Permissions — {role.id === ROLE.ADMIN ? 'Laboratory' : role.role_name}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {granted} of {rows.length} areas granted
+              </Typography>
+            </Box>
+            <IconButton onClick={() => setRoleId('')} size="small">
+              <CloseIcon />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent dividers>
+            {role.id === ROLE.ADMIN && (
+              <Notice kind="info" sx={{ mb: 2 }}>
+                Laboratory accounts have full access to their own laboratory data.
+              </Notice>
+            )}
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Area</TableCell>
+                  {ABILITIES.map((a) => (
+                    <TableCell key={a} align="center" sx={{ width: 80 }}>
+                      {a.charAt(0).toUpperCase() + a.slice(1)}
                     </TableCell>
-                    {ABILITIES.map((a) => {
-                      const key = `${p.action_type}:${a}`;
-                      return (
-                        <TableCell key={a} align="center">
-                          {saving === key ? (
-                            <CircularProgress size={16} />
-                          ) : (
-                            <Tooltip title={`${a} ${label.name.toLowerCase()}`}>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {rows.map((p) => {
+                  const known = (actions.data?.data ?? []).find((a) => a.name === p.action_type);
+                  const label = labelFor(p.action_type, known);
+                  return (
+                    <TableRow key={p.action_type} hover>
+                      <TableCell sx={{ whiteSpace: 'normal' }}>
+                        <Typography sx={{ fontSize: 13.5 }}>{label.name}</Typography>
+                        {known && !known.enforced && (
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            label="not enforced"
+                            sx={{ ml: 1, height: 18, fontSize: 10 }}
+                          />
+                        )}
+                      </TableCell>
+                      {ABILITIES.map((a) => {
+                        const key = `${p.action_type}:${a}`;
+                        return (
+                          <TableCell key={a} align="center">
+                            {saving === key ? (
+                              <CircularProgress size={16} />
+                            ) : (
                               <Checkbox
                                 size="small"
                                 checked={p[a]}
                                 onChange={() => toggle(p, a)}
                                 disabled={Boolean(saving)}
-                                slotProps={{
-                                  input: { 'aria-label': `${a} ${label.name}` },
-                                }}
                               />
-                            </Tooltip>
-                          )}
-                        </TableCell>
-                      );
-                    })}
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </TableFrame>
-      </Panel>
-
-      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
-        A change applies immediately — the cached matrix is dropped when it is saved. Order intake
-        is the one that visibly changes what a person sees; the rest gate screens and actions.
-      </Typography>
+                            )}
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </DialogContent>
+        </MuiDialog>
+      )}
 
     </>
   );

@@ -5,6 +5,8 @@
 
 import type { ColumnType } from "kysely";
 
+export type Decimal = ColumnType<string, number | string>;
+
 export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   ? ColumnType<S, I | undefined, U>
   : ColumnType<T, T | undefined, T>;
@@ -117,17 +119,86 @@ export interface Categories {
   updated_at: Date | null;
 }
 
+export interface CouponRedemptions {
+  code: string;
+  coupon_id: number;
+  course_id: number | null;
+  created_at: Date | null;
+  discount: Generated<Decimal>;
+  enrolment_id: number;
+  fee: Generated<Decimal>;
+  final_fee: Generated<Decimal>;
+  id: Generated<number>;
+  note: string | null;
+  redeemed_by: number | null;
+  student_id: number | null;
+  updated_at: Date | null;
+}
+
+export interface Courses {
+  added_by: number | null;
+  code: string | null;
+  created_at: Date | null;
+  description: string | null;
+  duration: string | null;
+  fee: Generated<Decimal>;
+  id: Generated<number>;
+  is_active: Generated<number>;
+  name: string;
+  updated_at: Date | null;
+}
+
+export interface DiscountCoupons {
+  code: string;
+  course_id: number | null;
+  created_at: Date | null;
+  created_by: number | null;
+  description: string | null;
+  discount_type: Generated<string>;
+  discount_value: Generated<Decimal>;
+  id: Generated<number>;
+  is_active: Generated<number>;
+  max_discount: Decimal | null;
+  min_amount: Generated<Decimal>;
+  per_student_limit: number | null;
+  title: string | null;
+  updated_at: Date | null;
+  usage_limit: number | null;
+  used_count: Generated<number>;
+  valid_from: Date | null;
+  valid_to: Date | null;
+}
+
 export interface Employements {
   created_at: Date | null;
   id: Generated<number>;
   is_working: string;
   joining_date: string;
   leave_date: string | null;
-  parent_id: number;
+  parent_id: string;
   remark: string | null;
   salary: string;
   updated_at: Date | null;
   user_id: number;
+}
+
+export interface Enquiries {
+  added_by: number | null;
+  assigned_to: number | null;
+  closed_at: Date | null;
+  created_at: Date | null;
+  email: string | null;
+  id: Generated<number>;
+  kind: Generated<string>;
+  lab_id: number | null;
+  message: string | null;
+  mobile: string;
+  name: string;
+  remark: string | null;
+  source: string | null;
+  status: Generated<string>;
+  subject: string | null;
+  updated_at: Date | null;
 }
 
 export interface FailedJobs {
@@ -216,6 +287,17 @@ export interface PasswordResets {
   token: string;
 }
 
+export interface PermissionActions {
+  added_by: number | null;
+  created_at: Date | null;
+  description: string | null;
+  id: Generated<number>;
+  is_system: Generated<number>;
+  label: string;
+  name: string;
+  updated_at: Date | null;
+}
+
 export interface Prices {
   category_id: string;
   classic_price: number;
@@ -291,8 +373,105 @@ export interface RolePermissions {
 
 export interface Roles {
   created_at: Date | null;
+  description: string | null;
   id: Generated<number>;
+  is_system: Generated<number>;
+  owner_id: number | null;
   role_name: string;
+  updated_at: Date | null;
+}
+
+export interface SchemaMigrations {
+  applied_at: Generated<Date>;
+  checksum: string;
+  name: string;
+  statements: number;
+}
+
+export interface StudentCertificates {
+  certificate_no: string;
+  created_at: Date | null;
+  file: string | null;
+  grade: string | null;
+  id: Generated<number>;
+  issued_by: number | null;
+  issued_on: Date | null;
+  remark: string | null;
+  student_course_id: number;
+  student_id: number;
+  updated_at: Date | null;
+}
+
+export interface StudentCourses {
+  added_by: number | null;
+  batch: string | null;
+  completed_on: Date | null;
+  course_id: number;
+  created_at: Date | null;
+  discount_amount: Generated<Decimal>;
+  discount_applied_on: Date | null;
+  discount_approved_by: number | null;
+  discount_reason: string | null;
+  discount_type: string | null;
+  discount_value: Generated<Decimal>;
+  end_date: Date | null;
+  fee: Generated<Decimal>;
+  fee_paid: Generated<Decimal>;
+  final_fee: Generated<Decimal>;
+  id: Generated<number>;
+  remark: string | null;
+  result: string | null;
+  start_date: Date | null;
+  status: Generated<string>;
+  student_id: number;
+  updated_at: Date | null;
+}
+
+export interface StudentEnquiries {
+  added_by: number | null;
+  converted_at: Date | null;
+  course_id: number | null;
+  course_interested: string | null;
+  created_at: Date | null;
+  email: string | null;
+  enquiry_date: Date | null;
+  follow_up_on: Date | null;
+  id: Generated<number>;
+  lab_id: number | null;
+  mobile: string;
+  name: string;
+  remarks: string | null;
+  source: string | null;
+  status: Generated<string>;
+  student_id: number | null;
+  updated_at: Date | null;
+}
+
+export interface Students {
+  added_by: number | null;
+  address: string | null;
+  alt_mobile: string | null;
+  city: string | null;
+  course_id: number | null;
+  created_at: Date | null;
+  dob: Date | null;
+  email: string | null;
+  enquiry_id: number | null;
+  father_name: string | null;
+  gender: string | null;
+  id: Generated<number>;
+  id_proof: string | null;
+  lab_id: number | null;
+  mobile: string;
+  name: string;
+  photo: string | null;
+  pincode: string | null;
+  qualification_doc: string | null;
+  registration_date: Date | null;
+  registration_no: string;
+  remark: string | null;
+  state: string | null;
+  status: Generated<string>;
   updated_at: Date | null;
 }
 
@@ -336,6 +515,19 @@ export interface Units {
   updated_at: Date | null;
 }
 
+export interface UserPermissions {
+  action_type: string;
+  create: Generated<number>;
+  created_at: Date | null;
+  delete: Generated<number>;
+  granted_by: number | null;
+  id: Generated<number>;
+  update: Generated<number>;
+  updated_at: Date | null;
+  user_id: number;
+  view: Generated<number>;
+}
+
 export interface Users {
   account_no: string | null;
   address: string | null;
@@ -361,11 +553,12 @@ export interface Users {
   owner_name: string | null;
   pan_no: string | null;
   pan_photo: string | null;
+  parent_id: string | null;
   password: string;
   pincode: string | null;
   profile_photo: string | null;
   remember_token: string | null;
-  role_id: number;
+  role_id: number | null;
   signature: string | null;
   state: string | null;
   status: number;
@@ -393,7 +586,11 @@ export interface DB {
   blogs: Blogs;
   branches: Branches;
   categories: Categories;
+  coupon_redemptions: CouponRedemptions;
+  courses: Courses;
+  discount_coupons: DiscountCoupons;
   employements: Employements;
+  enquiries: Enquiries;
   failed_jobs: FailedJobs;
   formlayouts: Formlayouts;
   holidays: Holidays;
@@ -401,15 +598,22 @@ export interface DB {
   order_details: OrderDetails;
   orders: Orders;
   password_resets: PasswordResets;
+  permission_actions: PermissionActions;
   prices: Prices;
   reports: Reports;
   reportsearches: Reportsearches;
   reporttypes: Reporttypes;
   role_permissions: RolePermissions;
   roles: Roles;
+  schema_migrations: SchemaMigrations;
+  student_certificates: StudentCertificates;
+  student_courses: StudentCourses;
+  student_enquiries: StudentEnquiries;
+  students: Students;
   subcategories: Subcategories;
   transactions: Transactions;
   units: Units;
+  user_permissions: UserPermissions;
   users: Users;
   websites: Websites;
 }

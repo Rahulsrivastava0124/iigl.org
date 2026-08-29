@@ -108,7 +108,8 @@ const cases: Case[] = [
   { name: 'login wrong password', method: 'POST', path: '/api/auth/login', as: 'anon', body: { mobile: ACCOUNTS.lab.mobile, password: 'wrong' }, expect: [401] },
   { name: 'login missing field', method: 'POST', path: '/api/auth/login', as: 'anon', body: { mobile: ACCOUNTS.lab.mobile }, expect: [400] },
   { name: 'session user', method: 'GET', path: '/api/auth/me', as: 'staff', expect: [200] },
-  { name: 'change password wrong current', method: 'POST', path: '/api/auth/change-password', as: 'staff', body: { current_password: 'wrong', new_password: 'abcdefgh' }, expect: [400] },
+  { name: 'change password wrong current', method: 'POST', path: '/api/auth/change-password', as: 'staff', body: { current_password: 'wrong', new_password: 'abcdefgh' }, expect: [400], note: 'optional, but checked when sent' },
+  { name: 'change password no current', method: 'POST', path: '/api/auth/change-password', as: 'staff', body: { new_password: 'short' }, expect: [400], note: 'the length rule still applies' },
   { name: 'change password too short', method: 'POST', path: '/api/auth/change-password', as: 'staff', body: { current_password: 'smoketest123', new_password: 'short' }, expect: [400] },
 
   // ---- Catalog ----
@@ -204,7 +205,18 @@ const cases: Case[] = [
   { name: 'laboratories (staff)', method: 'GET', path: '/api/users/laboratories', as: 'staff', expect: [200] },
   { name: 'laboratories (admin)', method: 'GET', path: '/api/users/laboratories', as: 'admin', expect: [200] },
   { name: 'staff list', method: 'GET', path: '/api/users/staff?per_page=3', as: 'staff', expect: [200] },
-  { name: 'roles', method: 'GET', path: '/api/users/roles', as: 'staff', expect: [200] },
+  { name: 'roles', method: 'GET', path: '/api/roles', as: 'staff', expect: [200] },
+  { name: 'roles as admin', method: 'GET', path: '/api/roles', as: 'admin', expect: [200] },
+  { name: 'permission list', method: 'GET', path: '/api/roles/actions', as: 'staff', expect: [200], note: 'must not resolve to a {id} route' },
+  { name: 'add permission AS LAB', method: 'POST', path: '/api/roles/actions', as: 'lab', body: { name: 'x', label: 'X' }, expect: [403], note: 'head office only' },
+  { name: 'rename system role', method: 'PATCH', path: '/api/roles/3', as: 'admin', body: { name: 'Nope' }, expect: [403] },
+  { name: 'delete system role', method: 'DELETE', path: '/api/roles/1', as: 'admin', expect: [403] },
+  { name: 'role permissions', method: 'GET', path: '/api/roles/3/permissions', as: 'staff', expect: [200] },
+  { name: 'role permissions missing role', method: 'GET', path: '/api/roles/99999999/permissions', as: 'admin', expect: [404] },
+  { name: 'set role permission bad action', method: 'PUT', path: '/api/roles/3/permissions', as: 'admin', body: { action_type: 'nonsense' }, expect: [400] },
+  { name: 'my permissions', method: 'GET', path: '/api/users/me/permissions', as: 'staff', expect: [200] },
+  { name: 'user permissions missing user', method: 'GET', path: '/api/users/99999999/permissions', as: 'admin', expect: [404] },
+  { name: 'grant to another lab staff', method: 'PUT', path: '/api/users/1/permissions', as: 'lab', body: { action_type: 'report', view: true }, expect: [403], note: 'a laboratory cannot grant to head office' },
   { name: 'create user AS STAFF', method: 'POST', path: '/api/users', as: 'staff', body: { fullname: 'X', mobile: '1', password: 'abcdefgh', role_id: 3 }, expect: [403], note: 'admin only' },
   { name: 'create user duplicate mobile', method: 'POST', path: '/api/users', as: 'admin', body: { fullname: 'X', mobile: ACCOUNTS.lab.mobile, password: 'abcdefgh', role_id: 3 }, expect: [409] },
   { name: 'create user short password', method: 'POST', path: '/api/users', as: 'admin', body: { fullname: 'X', mobile: '9111100000', password: 'short', role_id: 3 }, expect: [400] },
@@ -214,6 +226,31 @@ const cases: Case[] = [
   // ---- Dashboard ----
   { name: 'dashboard (lab scope)', method: 'GET', path: '/api/dashboard/summary', as: 'staff', expect: [200] },
   { name: 'dashboard (admin, all labs)', method: 'GET', path: '/api/dashboard/summary', as: 'admin', expect: [200] },
+
+  // ---- Students: the pipeline ----
+  { name: 'student enquiries', method: 'GET', path: '/api/students/enquiries?per_page=3', as: 'admin', expect: [200] },
+  { name: 'student enquiries AS STAFF', method: 'GET', path: '/api/students/enquiries', as: 'staff', expect: [403], note: 'admin only' },
+  { name: 'student enquiry bad status', method: 'GET', path: '/api/students/enquiries?status=maybe', as: 'admin', expect: [400] },
+  { name: 'student enquiry no mobile', method: 'POST', path: '/api/students/enquiries', as: 'admin', body: { name: 'X' }, expect: [400] },
+  { name: 'convert missing enquiry', method: 'POST', path: '/api/students/enquiries/99999999/convert', as: 'admin', body: {}, expect: [404] },
+
+  { name: 'registrations', method: 'GET', path: '/api/students?per_page=3', as: 'admin', expect: [200] },
+  { name: 'student summary', method: 'GET', path: '/api/students/summary', as: 'admin', expect: [200], note: 'must not resolve to a {id} route' },
+  { name: 'registration missing', method: 'GET', path: '/api/students/99999999', as: 'admin', expect: [404] },
+  { name: 'registration no name', method: 'POST', path: '/api/students', as: 'admin', body: { mobile: '9000000009' }, expect: [400] },
+
+  { name: 'courses', method: 'GET', path: '/api/courses?per_page=3', as: 'admin', expect: [200] },
+  { name: 'courses AS STAFF', method: 'GET', path: '/api/courses', as: 'staff', expect: [403], note: 'admin only' },
+  { name: 'course no name', method: 'POST', path: '/api/courses', as: 'admin', body: { fee: 100 }, expect: [400] },
+  { name: 'enrolments', method: 'GET', path: '/api/courses/enrolments?per_page=3', as: 'admin', expect: [200], note: 'must not resolve to a {id} route' },
+  { name: 'enrolment missing student', method: 'POST', path: '/api/courses/enrolments', as: 'admin', body: { student_id: 99999999, course_id: 99999999 }, expect: [404] },
+  { name: 'discount on missing enrolment', method: 'PATCH', path: '/api/courses/enrolments/99999999/discount', as: 'admin', body: { type: 'fixed', value: 100 }, expect: [404] },
+
+  { name: 'student certificates', method: 'GET', path: '/api/student-certificates?per_page=3', as: 'admin', expect: [200] },
+  { name: 'certificates pending', method: 'GET', path: '/api/student-certificates/pending', as: 'admin', expect: [200], note: 'must not resolve to a {id} route' },
+  { name: 'certificate no enrolment', method: 'POST', path: '/api/student-certificates', as: 'admin', body: {}, expect: [400] },
+  { name: 'certificate missing enrolment', method: 'POST', path: '/api/student-certificates', as: 'admin', body: { student_course_id: 99999999 }, expect: [404] },
+
 ];
 
 async function run(): Promise<void> {

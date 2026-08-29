@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { Link as RouterLink, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   AppBar,
@@ -36,7 +36,6 @@ import DashboardIcon from '@mui/icons-material/SpaceDashboardOutlined';
 import OrdersIcon from '@mui/icons-material/ReceiptLongOutlined';
 import CertificatesIcon from '@mui/icons-material/WorkspacePremiumOutlined';
 import TransactionsIcon from '@mui/icons-material/PaymentsOutlined';
-import AttendanceIcon from '@mui/icons-material/EventAvailableOutlined';
 import LabsIcon from '@mui/icons-material/ScienceOutlined';
 import StaffIcon from '@mui/icons-material/BadgeOutlined';
 import ProfileIcon from '@mui/icons-material/PersonOutlineOutlined';
@@ -44,12 +43,14 @@ import CustomerIcon from '@mui/icons-material/GroupsOutlined';
 import CategoriesIcon from '@mui/icons-material/CategoryOutlined';
 import PricingIcon from '@mui/icons-material/SellOutlined';
 import ContentIcon from '@mui/icons-material/ArticleOutlined';
+import StudentIcon from '@mui/icons-material/SchoolOutlined';
+import EnquiryIcon from '@mui/icons-material/SupportAgentOutlined';
 import LogoutIcon from '@mui/icons-material/LogoutOutlined';
 import { alpha } from '@mui/material/styles';
 import { BRAND } from '../lib/theme';
 import { useAuth } from '../lib/auth';
 import { useFetch } from '../lib/useFetch';
-import { ROLE_NAMES } from '../lib/portal';
+import { PORTAL_LABEL, ROLE, ROLE_NAMES } from '../lib/portal';
 import { api } from '../lib/api';
 import { useBreadcrumbs } from '../lib/breadcrumbs';
 import { usePermissions } from '../lib/permissions';
@@ -98,17 +99,23 @@ interface Group {
   items: Item[];
   adminOnly?: boolean;
   labOnly?: boolean;
-  /**
-   * Hidden behind the super administrator door.
-   *
-   * Both doors admit role 1, so the difference is not what the account may do —
-   * the API decides that and does not change — but what the door is for. The
-   * admin address runs the day: the order queue and the certificates coming off
-   * it. The super address is the business above that, so the two operational
-   * lists are left off it.
-   */
-  hideInSuper?: boolean;
 }
+
+/*
+ * There is no Orders group on this menu, deliberately.
+ *
+ * An order is taken at a counter, and head office has no counter: it cannot
+ * collect one, and the queue of orders in progress is a laboratory's work to
+ * run, not the business's to watch. So the order queue is a laboratory menu
+ * (`FIELD_GROUPS`) and is left off this one.
+ *
+ * It is **not** a permission change. Head office may still read every
+ * laboratory's orders — `GET /api/orders` is unscoped for role 1, and the row
+ * in ROLES.md still holds — and `/orders` is still a route: the certificate and
+ * customer search in the header lands on it, and a dashboard tile or a link
+ * opens it. What changed is that the sidebar no longer offers it as somewhere
+ * to go.
+ */
 
 /**
  * The administrator menu.
@@ -121,8 +128,10 @@ interface Group {
  *     carries its own Add button, so a separate Create entry is a second door
  *     to the same room;
  *   - **nothing is listed that has nothing behind it.** Student and Enquiry
- *     appear in the reference but exist nowhere in IIGL — no table, no route,
- *     no view, in either the old application or this one.
+ *     were in that position until they were built: the Laravel sidebar carried
+ *     both menus with every entry an `href="#"`, over no table and no
+ *     controller. They are listed now because migrations/003 gave them one
+ *     each, and the entries below open real screens.
  *
  * Sub-items deep-link into a screen's section rather than duplicating it, so
  * "Category" and "Sub Category" are one screen opened at different tabs.
@@ -130,16 +139,9 @@ interface Group {
 const ADMIN_GROUPS: Group[] = [
   { label: 'Dashboard', icon: DashboardIcon, items: [{ to: '/', label: 'Dashboard', end: true }] },
   {
-    label: 'Orders',
-    icon: OrdersIcon,
-    hideInSuper: true,
-    items: [{ to: '/orders', label: 'Order Management' }],
-  },
-  {
-    label: 'Certificates',
-    icon: CertificatesIcon,
-    hideInSuper: true,
-    items: [{ to: '/reports', label: 'Certificates' }],
+    label: 'Laboratory',
+    icon: LabsIcon,
+    items: [{ to: '/laboratories', label: 'View Franchise' }],
   },
   {
     label: 'Report Master',
@@ -162,16 +164,13 @@ const ADMIN_GROUPS: Group[] = [
     ],
   },
   {
-    label: 'Laboratory',
-    icon: LabsIcon,
-    items: [{ to: '/laboratories', label: 'View Franchise' }],
-  },
-  {
     label: 'Employee Management',
     icon: StaffIcon,
     items: [
       { to: '/staff', label: 'Employee List' },
-      { to: '/attendance', label: 'Attendance' },
+      // Roles sit with the people who hold them. They had a group of their own
+      // — "Admin Employee", one entry, the same icon — which read as a second
+      // employee menu rather than as part of this one.
       { to: '/roles', label: 'Roles & Permissions', adminOnly: true },
     ],
   },
@@ -205,7 +204,36 @@ const ADMIN_GROUPS: Group[] = [
       { to: '/content?tab=banners', label: 'Banners' },
     ],
   },
-  { label: 'Your profile', icon: ProfileIcon, items: [{ to: '/profile', label: 'Your profile' }] },
+  {
+    // The pipeline, in the order a student passes through it:
+    // enquiry -> registration -> course -> certificate, with the discount
+    // sitting on the course fee rather than being a stage of its own.
+    label: 'Student',
+    icon: StudentIcon,
+    adminOnly: true,
+    items: [
+      { to: '/student-enquiries', label: 'Enquiry' },
+      { to: '/students', label: 'Registration' },
+      { to: '/courses', label: 'Course' },
+      // A coupon is money off a course fee. The reduction itself is applied on
+      // the enrolment, under Course › Enrolments, which is where the fee is —
+      // there is no separate Discount screen any more.
+      { to: '/coupons', label: 'Discount Coupons' },
+      { to: '/student-certificates', label: 'Certificates' },
+    ],
+  },
+  {
+    label: 'Enquiry',
+    icon: EnquiryIcon,
+    adminOnly: true,
+    items: [
+      { to: '/enquiries', label: 'All Enquiries' },
+      { to: '/enquiries?kind=ask', label: 'Ask Me' },
+      { to: '/enquiries?kind=visit', label: "Visitor's Diary" },
+      { to: '/enquiries?kind=lead', label: 'Lead Followup' },
+      { to: '/enquiries?kind=complaint', label: 'Complaints' },
+    ],
+  },
 ];
 
 
@@ -272,17 +300,8 @@ const FIELD_GROUPS: Group[] = [
     label: 'Employee',
     icon: StaffIcon,
     labOnly: true,
-    items: [
-      { to: '/staff', label: 'Employee List' },
-      { to: '/attendance', label: 'Attendance' },
-    ],
+    items: [{ to: '/staff', label: 'Employee List' }],
   },
-  {
-    label: 'Attendance',
-    icon: AttendanceIcon,
-    items: [{ to: '/attendance', label: 'Attendance', staffOnly: true }],
-  },
-  { label: 'Your profile', icon: ProfileIcon, items: [{ to: '/profile', label: 'Your profile' }] },
 ];
 
 const initials = (name: string) =>
@@ -317,15 +336,27 @@ export default function Shell() {
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
-  const isAdmin = user?.roleId === 1;
-  const isLab = user?.roleId === 2;
+  // Head office runs the business; a laboratory (role 2) is its own admin and
+  // runs a counter. The menu follows that split, not a rank.
+  const isSuper = user?.roleId === ROLE.SUPER;
+  const isLab = user?.roleId === ROLE.ADMIN;
 
   /**
    * An administrator runs the business; a laboratory and its employees run the
    * counter. They are different jobs, so they get different menus rather than
    * one menu with most of it hidden.
    */
-  const groups = isAdmin ? ADMIN_GROUPS : FIELD_GROUPS;
+  const groups = isSuper ? ADMIN_GROUPS : FIELD_GROUPS;
+
+  // Set document title based on role
+  useLayoutEffect(() => {
+    const roleTitle = isSuper
+      ? 'IIGL Super Admin'
+      : isLab
+        ? 'IIGL Laboratory'
+        : 'IIGL Team';
+    document.title = roleTitle;
+  }, [isSuper, isLab]);
 
   /**
    * Issuing a certificate belongs to a laboratory and its staff, not to an
@@ -340,7 +371,13 @@ export default function Shell() {
    * The role decides whether the concept applies; the matrix decides whether
    * this particular person may. Both have to say yes.
    */
-  const canIssue = (user?.roleId ?? 0) >= 2 && can('report', 'create');
+  // Head office is 0 and has no laboratory to issue against, so this is a test
+  // of "works at a laboratory", not of rank.
+  // A certificate is written against the issuer's laboratory, and head office
+  // has none — so this asks "works at a laboratory", not "is senior".
+  const canIssue = (user?.roleId ?? -1) >= ROLE.ADMIN && can('report', 'create');
+  /** May take an order at the counter — the header button and the menu entry. */
+  const canCollect = (user?.roleId ?? -1) >= ROLE.ADMIN && can('product_collection', 'create');
 
   /**
    * What is waiting on this person: transactions sent to them and still
@@ -425,19 +462,26 @@ export default function Shell() {
             gap: 1.25,
           }}
         >
-          <Box component="img" src="/logo.png" alt="" sx={{ height: 34, flexShrink: 0 }} />
-          {open && (
-            <Box sx={{ minWidth: 0 }}>
+          <Box
+            component={RouterLink}
+            to="/"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.25,
+              textDecoration: 'none',
+              color: 'inherit',
+            }}
+          >
+            <Box component="img" src="/logo.png" alt="IIGL" sx={{ height: 44, flexShrink: 0 }} />
+            {open && (
               <Typography
-                sx={{ fontWeight: 700, fontSize: 17, lineHeight: 1.15, color: 'primary.main' }}
+                sx={{ fontWeight: 700, fontSize: 20, lineHeight: 1.15, color: 'primary.main' }}
               >
                 IIGL
               </Typography>
-              <Typography sx={{ fontSize: 12 }} color="text.secondary" noWrap>
-                {portal === 'team' ? 'Team' : 'Administration'}
-              </Typography>
-            </Box>
-          )}
+            )}
+          </Box>
         </Toolbar>
 
         {/*
@@ -458,19 +502,18 @@ export default function Shell() {
           {groups
             .filter(
               (g) =>
-                (!g.adminOnly || isAdmin) &&
-                (!g.labOnly || isLab) &&
-                (!g.hideInSuper || portal !== 'super'),
+                (!g.adminOnly || isSuper) &&
+                (!g.labOnly || isLab),
             )
             .map((group) => {
               const Icon = group.icon;
 
               const items = group.items.filter(
                 (item) =>
-                  (!item.adminOnly || isAdmin) &&
+                  (!item.adminOnly || isSuper) &&
                   (!item.labOnly || isLab) &&
                   (!item.staffOnly || !isLab) &&
-                  (item.needs !== 'order-create' || can('product_collection', 'create')) &&
+                  (item.needs !== 'order-create' || canCollect) &&
                   (item.needs !== 'report-create' || canIssue),
               );
               if (items.length === 0) return null;
@@ -527,7 +570,7 @@ export default function Shell() {
                     <>
                       <ListItemText
                         primary={group.label}
-                        slotProps={{ primary: { sx: { fontSize: 15, fontWeight: 600 } } }}
+                        slotProps={{ primary: { sx: { fontSize: 13.5, fontWeight: 500 } } }}
                       />
                       {!single && (
                         <ExpandIcon
@@ -620,7 +663,7 @@ export default function Shell() {
                             <ListItemText
                               primary={item.label}
                               slotProps={{
-                                primary: { sx: { fontSize: 14, fontWeight: 'inherit' } },
+                                primary: { sx: { fontSize: 13.5, fontWeight: 'inherit' } },
                               }}
                             />
                           </ListItemButton>
@@ -693,16 +736,24 @@ export default function Shell() {
 
             <Box sx={{ flex: { xs: 1, md: 0 } }} />
 
-            {/* The reference layout carries a cart here. A laboratory has no
-                basket — the equivalent daily action is issuing a certificate. */}
-            {canIssue && (
+            {/*
+              The reference layout carries a cart here. A laboratory has no
+              basket — the equivalent daily action is taking an order at the
+              counter, which is where the work starts. It used to open the
+              certificate form instead, which is the step after.
+
+              Shown only to somebody who may actually collect one: the same
+              `product_collection` create grant that decides whether Orders ›
+              Collect New is in the menu, so the two cannot disagree.
+            */}
+            {canCollect && (
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
-                onClick={() => navigate('/reports/new')}
+                onClick={() => navigate('/orders/new')}
                 sx={{ whiteSpace: 'nowrap', px: 2 }}
               >
-                Add report
+                Collect New
               </Button>
             )}
 
@@ -751,7 +802,7 @@ export default function Shell() {
                   {user?.fullname}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" noWrap>
-                  {ROLE_NAMES[user?.roleId ?? 0] ?? 'Account'}
+                  {user?.roleId == null ? 'No role' : (ROLE_NAMES[user.roleId] ?? 'Account')}
                 </Typography>
               </Box>
             </Stack>

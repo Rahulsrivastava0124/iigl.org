@@ -2,7 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { AuthProvider, useAuth } from './lib/auth';
 import { PermissionProvider } from './lib/permissions';
-import { basenameFor, currentPortal } from './lib/portal';
+import { basenameFor, currentPortal, isSuper } from './lib/portal';
 import Shell from './components/Shell';
 import { ToastProvider } from './components/Toast';
 import ForgotPassword from './pages/ForgotPassword';
@@ -14,17 +14,29 @@ import OrderDetail from './pages/OrderDetail';
 import Reports from './pages/Reports';
 import Transactions from './pages/Transactions';
 import Laboratories from './pages/Laboratories';
+import LaboratoryCreate from './pages/LaboratoryCreate';
+import LaboratoryEdit from './pages/LaboratoryEdit';
 import Staff from './pages/Staff';
 import Categories from './pages/Categories';
 import Attributes from './pages/Attributes';
 import Pricing from './pages/Pricing';
 import Roles from './pages/Roles';
+import RoleEdit from './pages/RoleEdit';
 import Attendance from './pages/Attendance';
+import EmployeeView from './pages/EmployeeView';
+import Coupons from './pages/Coupons';
 import Profile from './pages/Profile';
 import Content from './pages/Content';
 import NewReport from './pages/NewReport';
 import NewOrder from './pages/NewOrder';
 import Customers from './pages/Customers';
+import Students from './pages/Students';
+import StudentCreate from './pages/StudentCreate';
+import StudentEdit from './pages/StudentEdit';
+import StudentEnquiries from './pages/StudentEnquiries';
+import Courses from './pages/Courses';
+import StudentCertificates from './pages/StudentCertificates';
+import Enquiries from './pages/Enquiries';
 
 /**
  * Administrator-only screens. Other roles are sent back to the dashboard.
@@ -33,7 +45,7 @@ import Customers from './pages/Customers';
  */
 function AdminOnly({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  if (user?.roleId !== 1) return <Navigate to="/" replace />;
+  if (!isSuper(user)) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -75,7 +87,80 @@ function Routed() {
         <Route path="/customers" element={<Customers />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/laboratories" element={<Laboratories />} />
+        <Route
+          path="/laboratories/create"
+          element={
+            <AdminOnly>
+              <LaboratoryCreate />
+            </AdminOnly>
+          }
+        />
+        <Route
+          path="/laboratories/:id/edit"
+          element={
+            <AdminOnly>
+              <LaboratoryEdit />
+            </AdminOnly>
+          }
+        />
         <Route path="/staff" element={<Staff />} />
+        <Route path="/staff/:id" element={<EmployeeView />} />
+        <Route
+          path="/student-enquiries"
+          element={
+            <AdminOnly>
+              <StudentEnquiries />
+            </AdminOnly>
+          }
+        />
+        <Route
+          path="/students"
+          element={
+            <AdminOnly>
+              <Students />
+            </AdminOnly>
+          }
+        />
+        <Route
+          path="/students/create"
+          element={
+            <AdminOnly>
+              <StudentCreate />
+            </AdminOnly>
+          }
+        />
+        <Route
+          path="/students/:id/edit"
+          element={
+            <AdminOnly>
+              <StudentEdit />
+            </AdminOnly>
+          }
+        />
+        <Route
+          path="/courses"
+          element={
+            <AdminOnly>
+              <Courses />
+            </AdminOnly>
+          }
+        />
+        <Route
+          path="/student-certificates"
+          element={
+            <AdminOnly>
+              <StudentCertificates />
+            </AdminOnly>
+          }
+        />
+        <Route
+          path="/enquiries"
+          element={
+            <AdminOnly>
+              <Enquiries />
+            </AdminOnly>
+          }
+        />
         <Route
           path="/categories"
           element={
@@ -89,6 +174,14 @@ function Routed() {
           element={
             <AdminOnly>
               <Attributes />
+            </AdminOnly>
+          }
+        />
+        <Route
+          path="/coupons"
+          element={
+            <AdminOnly>
+              <Coupons />
             </AdminOnly>
           }
         />
@@ -113,6 +206,14 @@ function Routed() {
           element={
             <AdminOnly>
               <Roles />
+            </AdminOnly>
+          }
+        />
+        <Route
+          path="/roles/:id/edit"
+          element={
+            <AdminOnly>
+              <RoleEdit />
             </AdminOnly>
           }
         />

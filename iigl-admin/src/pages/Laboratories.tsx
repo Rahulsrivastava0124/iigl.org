@@ -1,11 +1,19 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
+  Button,
+  Chip,
+  Dialog as MuiDialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
-  TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import { useToast } from '../components/Toast';
@@ -14,13 +22,11 @@ import { usePermissions } from '../lib/permissions';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
 import {
-  Dialog,
   IconAction,
   Panel,
   RowActions,
   SearchField,
   TableFrame,
-  YesNo,
 } from '../components/ui';
 
 /** True when the row's text contains the term. Case-insensitive; blank matches all. */
@@ -31,40 +37,29 @@ const hits = (term: string, ...fields: (string | number | null | undefined)[]) =
 };
 
 import type { Lab } from '../lib/api';
-import { isAdmin } from '../lib/portal';
-import CommissionIcon from '@mui/icons-material/PercentOutlined';
+import { isSuper } from '../lib/portal';
 import ActiveIcon from '@mui/icons-material/ToggleOnOutlined';
 import InactiveIcon from '@mui/icons-material/ToggleOffOutlined';
+import AddIcon from '@mui/icons-material/AddOutlined';
+import EditIcon from '@mui/icons-material/EditOutlined';
+import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 
 export default function Laboratories() {
+  const navigate = useNavigate();
   const toast = useToast();
   const { user } = useAuth();
   const { can } = usePermissions();
-  const admin = isAdmin(user);
+  const admin = isSuper(user);
+  const mayAdd = admin && can('laboratory', 'create');
   const mayEdit = admin && can('laboratory', 'update');
+  const mayDelete = admin && can('laboratory', 'delete');
   const { data, loading, error, reload } = useFetch<{ data: Lab[] }>('/users/laboratories');
   const all = data?.data ?? [];
   const [search, setSearch] = useState('');
   const rows = all.filter((l) => hits(search, l.id, l.fullname, l.mobile, l.city));
 
-  const [editing, setEditing] = useState<Lab | null>(null);
-  const [rate, setRate] = useState('');
+  const [deleting, setDeleting] = useState<Lab | null>(null);
   const [busy, setBusy] = useState(false);
-
-  const saveRate = async () => {
-    if (!editing) return;
-    setBusy(true);
-    try {
-      await api.patch(`/admin/laboratories/${editing.id}/commission`, { commision: Number(rate) });
-      toast.ok(`Commission for ${editing.fullname} set to ${rate}%.`);
-      setEditing(null);
-      reload();
-    } catch (e) {
-      toast.error(messageOf(e));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const toggleActive = async (lab: Lab) => {
     try {
@@ -76,18 +71,43 @@ export default function Laboratories() {
     }
   };
 
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    setBusy(true);
+    try {
+      await api.del(`/users/${deleting.id}`);
+      toast.ok(`Laboratory "${deleting.fullname}" deleted.`);
+      setDeleting(null);
+      reload();
+    } catch (e) {
+      toast.error(messageOf(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <>
-
       <Panel
         title="Laboratories"
         count={admin ? `${rows.length} of ${all.length} in the network` : undefined}
         actions={
-          <SearchField
-            placeholder="Name, mobile, city…"
-            value={search}
-            onChange={setSearch}
-          />
+          <>
+            <SearchField
+              placeholder="Name, mobile, city…"
+              value={search}
+              onChange={setSearch}
+            />
+            {mayAdd && (
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => navigate('/laboratories/create')}
+              >
+                Add Laboratory
+              </Button>
+            )}
+          </>
         }
       >
         <TableFrame loading={loading} error={error} empty={rows.length === 0}>
@@ -95,44 +115,77 @@ export default function Laboratories() {
             <TableHead>
               <TableRow>
                 <TableCell>Id</TableCell>
+                <TableCell>Emp ID</TableCell>
                 <TableCell>Name</TableCell>
                 <TableCell>Mobile</TableCell>
                 <TableCell>City</TableCell>
+                <TableCell align="right">Staff</TableCell>
                 <TableCell align="right">Commission</TableCell>
                 <TableCell>Active</TableCell>
-                {mayEdit && <TableCell />}
+                {(mayEdit || mayDelete) && <TableCell />}
               </TableRow>
             </TableHead>
             <TableBody>
               {rows.map((l) => (
                 <TableRow key={l.id} hover>
                   <TableCell className="mono">#{l.id}</TableCell>
+                  <TableCell className="mono">{l.empid ?? '—'}</TableCell>
                   <TableCell>{l.fullname}</TableCell>
                   <TableCell className="mono">{l.mobile}</TableCell>
                   <TableCell>{l.city ?? '—'}</TableCell>
                   <TableCell align="right" className="tabular">
+                    {l.staff || '—'}
+                  </TableCell>
+                  <TableCell align="right" className="tabular">
                     {l.commision == null ? '—' : `${l.commision}%`}
                   </TableCell>
                   <TableCell>
-                    <YesNo on={l.is_active} />
+                    <Chip
+                      label={l.is_active ? 'Active' : 'Inactive'}
+                      size="small"
+                      sx={{
+                        bgcolor: l.is_active ? 'success.main' : 'error.main',
+                        color: 'common.white',
+                        fontWeight: 600,
+                        fontSize: 12,
+                      }}
+                    />
                   </TableCell>
-                  {mayEdit && (
+                  {(mayEdit || mayDelete) && (
                     <TableCell>
                       <RowActions>
-                        <IconAction
-                          label="Set commission"
-                          icon={CommissionIcon}
-                          onClick={() => {
-                            setEditing(l);
-                            setRate(String(l.commision ?? 0));
-                          }}
-                        />
-                        <IconAction
-                          label={l.is_active ? 'Deactivate' : 'Activate'}
-                          icon={l.is_active ? ActiveIcon : InactiveIcon}
-                          danger={Boolean(l.is_active)}
-                          onClick={() => toggleActive(l)}
-                        />
+                        {mayEdit && (
+                          <IconAction
+                            label="Edit laboratory"
+                            icon={EditIcon}
+                            onClick={() => navigate(`/laboratories/${l.id}/edit`)}
+                          />
+                        )}
+                        {mayEdit && (
+                          <Tooltip title={l.is_active ? 'Deactivate' : 'Activate'}>
+                            <IconButton
+                              size="small"
+                              onClick={() => toggleActive(l)}
+                              sx={{
+                                color: l.is_active ? 'success.main' : 'error.main',
+                                '&:hover': {
+                                  bgcolor: l.is_active ? 'success.main' : 'error.main',
+                                  color: 'common.white',
+                                },
+                              }}
+                            >
+                              {l.is_active ? <ActiveIcon fontSize="small" /> : <InactiveIcon fontSize="small" />}
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        {mayDelete && (
+                          <IconAction
+                            label="Delete laboratory"
+                            icon={DeleteIcon}
+                            danger
+                            onClick={() => setDeleting(l)}
+                          />
+                        )}
                       </RowActions>
                     </TableCell>
                   )}
@@ -143,26 +196,42 @@ export default function Laboratories() {
         </TableFrame>
       </Panel>
 
-      {editing && (
-        <Dialog
-          title={`Commission — ${editing.fullname}`}
-          onClose={() => setEditing(null)}
-          onSubmit={saveRate}
-          busy={busy}
-        >
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            The percentage this laboratory owes on what it collects. Commission payments are
-            calculated from this rate rather than entered by the laboratory.
-          </Typography>
-          <TextField
-            label="Rate (%)"
-            type="number"
-            value={rate}
-            onChange={(e) => setRate(e.target.value)}
-            slotProps={{ htmlInput: { min: 0, max: 100, step: 0.01 } }}
-            required
-          />
-        </Dialog>
+      {/* Delete Confirmation Dialog */}
+      {deleting && (
+        <MuiDialog open onClose={() => setDeleting(null)} maxWidth="xs" fullWidth>
+          <DialogTitle
+            sx={{
+              bgcolor: '#d32f2f',
+              color: '#fff',
+              fontSize: '1rem',
+              fontWeight: 600,
+            }}
+          >
+            Delete Laboratory
+          </DialogTitle>
+          <DialogContent sx={{ pt: 3, pb: 2 }}>
+            <Typography variant="body1" sx={{ mb: 2 }}>
+              Are you sure you want to delete <strong>{deleting.fullname}</strong>?
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              This action cannot be undone. All data associated with this laboratory will be
+              permanently removed.
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button onClick={() => setDeleting(null)} color="inherit">
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              sx={{ bgcolor: '#d32f2f', '&:hover': { bgcolor: '#b71c1c' } }}
+              onClick={confirmDelete}
+              disabled={busy}
+            >
+              {busy ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogActions>
+        </MuiDialog>
       )}
     </>
   );

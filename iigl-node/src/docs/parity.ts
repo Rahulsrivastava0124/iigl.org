@@ -137,7 +137,8 @@ console.log('  The per-lab loop in adminindex\n');
       SELECT COALESCE(SUM(tr.amount),0) AS total FROM transactions tr
       WHERE tr.received_by IN (
         SELECT emp.user_id FROM employements emp
-        WHERE emp.parent_id=${Number(lab.id)} AND emp.is_working=1
+        JOIN users p ON p.empid = emp.parent_id
+        WHERE p.id=${Number(lab.id)} AND emp.is_working=1
       ) AND tr.status=1
     `);
     phpTotal += (Number(r.total) * Number(lab.commision ?? 0)) / 100;

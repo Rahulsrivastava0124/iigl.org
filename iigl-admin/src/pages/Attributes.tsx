@@ -20,6 +20,7 @@ import FileField from '../components/FileField';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
 import {
+  ConfirmDialog,
   FormPanel,
   IconAction,
   Pager,
@@ -143,6 +144,7 @@ export default function Attributes() {
   const [valueForm, setValueForm] = useState(BLANK_VALUE);
 
   const [form, setForm] = useState(BLANK);
+  const [retiring, setRetiring] = useState<Attribute | null>(null);
   const [busy, setBusy] = useState(false);
 
   const sub = subs.find((s) => String(s.id) === chosen);
@@ -185,13 +187,18 @@ export default function Attributes() {
     }
   };
 
-  const retire = async (a: Attribute) => {
+  const retire = async () => {
+    if (!retiring) return;
+    setBusy(true);
     try {
-      await api.del(`/admin/attributes/${a.id}`);
-      toast.ok(`${a.attr_name} retired. Certificates already issued keep their values.`);
+      await api.del(`/admin/attributes/${retiring.id}`);
+      toast.ok(`${retiring.attr_name} retired. Certificates already issued keep their values.`);
+      setRetiring(null);
       attributes.reload();
     } catch (e) {
       toast.error(messageOf(e));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -620,7 +627,7 @@ export default function Attributes() {
                           setParams({ tab: 'values' });
                         }}
                       />
-                      <IconAction label="Retire" icon={RetireIcon} danger onClick={() => retire(a)} />
+                      <IconAction label="Retire" icon={RetireIcon} danger onClick={() => setRetiring(a)} />
                     </RowActions>
                   </TableCell>
                 </TableRow>
@@ -632,6 +639,17 @@ export default function Attributes() {
       </>
       )}
 
+      <ConfirmDialog
+        open={Boolean(retiring)}
+        title="Retire Attribute"
+        message={<>Are you sure you want to retire <strong>{retiring?.attr_name}</strong>?</>}
+        warning="Certificates already issued keep their values."
+        onClose={() => setRetiring(null)}
+        onConfirm={retire}
+        confirmLabel="Retire"
+        confirmIcon={RetireIcon}
+        busy={busy}
+      />
     </>
   );
 }

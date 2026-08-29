@@ -19,7 +19,14 @@ import { ROLE, type SessionUser } from '../middleware/auth.js';
  * instantly; that is the trade for not querying it on every request.
  */
 
-/** The action types present in the live data. */
+/**
+ * The action types the API itself enforces.
+ *
+ * The full list now lives in `permission_actions`, which head office can add to
+ * without a deployment. These are the names the server checks in code — a new
+ * one added through the panel is a label on a screen until somebody writes the
+ * check that reads it, and the panel says so where it is added.
+ */
 export const ACTION_TYPES = [
   'account',
   'admin_employee',
@@ -37,7 +44,8 @@ export const ACTION_TYPES = [
   'website_report',
 ] as const;
 
-export type ActionType = (typeof ACTION_TYPES)[number];
+/** An action type is any name in `permission_actions`, not only the built-in ones. */
+export type ActionType = string;
 export type Ability = 'view' | 'create' | 'update' | 'delete';
 
 export interface Permission {
@@ -48,32 +56,94 @@ export interface Permission {
   delete: boolean;
 }
 
+export interface PermissionAction {
+  name: string;
+  label: string;
+  description: string | null;
+  is_system: boolean;
+  /** False when nothing in the API reads this name yet. */
+  enforced: boolean;
+}
+
 const CACHE_MS = 60_000;
-let cache: { at: number; byRole: Map<number, Map<string, Permission>> } | null = null;
 
-async function matrix(): Promise<Map<number, Map<string, Permission>>> {
-  if (cache && Date.now() - cache.at < CACHE_MS) return cache.byRole;
+interface Cache {
+  at: number;
+  byRole: Map<number, Map<string, Permission>>;
+  byUser: Map<number, Map<string, Permission>>;
+  actions: PermissionAction[];
+}
 
-  const rows = await db
-    .selectFrom('role_permissions')
-    .select(['role_id', 'action_type', 'view', 'create', 'update', 'delete'])
-    .execute();
+let cache: Cache | null = null;
+
+const asPermission = (r: {
+  action_type: string;
+  view: unknown;
+  create: unknown;
+  update: unknown;
+  delete: unknown;
+}): Permission => ({
+  action_type: r.action_type,
+  view: Boolean(r.view),
+  create: Boolean(r.create),
+  update: Boolean(r.update),
+  delete: Boolean(r.delete),
+});
+
+/**
+ * The whole matrix — roles, individual grants and the action list — in three
+ * queries, cached for a minute.
+ *
+ * Individual grants are small: one row per person per action, and only for
+ * people who have been given something outside their role. Loading them with
+ * the roles keeps `can()` a map lookup, which matters because it is called on
+ * routes that already do real work.
+ */
+async function load(): Promise<Cache> {
+  if (cache && Date.now() - cache.at < CACHE_MS) return cache;
+
+  const [roleRows, userRows, actionRows] = await Promise.all([
+    db
+      .selectFrom('role_permissions')
+      .select(['role_id', 'action_type', 'view', 'create', 'update', 'delete'])
+      .execute(),
+    db
+      .selectFrom('user_permissions')
+      .select(['user_id', 'action_type', 'view', 'create', 'update', 'delete'])
+      .execute(),
+    db
+      .selectFrom('permission_actions')
+      .select(['name', 'label', 'description', 'is_system'])
+      .orderBy('is_system', 'desc')
+      .orderBy('label')
+      .execute(),
+  ]);
 
   const byRole = new Map<number, Map<string, Permission>>();
-  for (const r of rows) {
+  for (const r of roleRows) {
     const roleId = Number(r.role_id);
     if (!byRole.has(roleId)) byRole.set(roleId, new Map());
-    byRole.get(roleId)!.set(r.action_type, {
-      action_type: r.action_type,
-      view: Boolean(r.view),
-      create: Boolean(r.create),
-      update: Boolean(r.update),
-      delete: Boolean(r.delete),
-    });
+    byRole.get(roleId)!.set(r.action_type, asPermission(r));
   }
 
-  cache = { at: Date.now(), byRole };
-  return byRole;
+  const byUser = new Map<number, Map<string, Permission>>();
+  for (const r of userRows) {
+    const userId = Number(r.user_id);
+    if (!byUser.has(userId)) byUser.set(userId, new Map());
+    byUser.get(userId)!.set(r.action_type, asPermission(r));
+  }
+
+  const enforced = new Set<string>(ACTION_TYPES);
+  const actions: PermissionAction[] = actionRows.map((a) => ({
+    name: a.name,
+    label: a.label,
+    description: a.description,
+    is_system: Boolean(a.is_system),
+    enforced: enforced.has(a.name),
+  }));
+
+  cache = { at: Date.now(), byRole, byUser, actions };
+  return cache;
 }
 
 /** Drops the cache so a permission edit is visible immediately. */
@@ -81,20 +151,73 @@ export function invalidatePermissions(): void {
   cache = null;
 }
 
+/** Every action a permission can be granted on, in the order a screen shows them. */
+export async function actionTypes(): Promise<PermissionAction[]> {
+  return (await load()).actions;
+}
+
+/** Whether a name exists in `permission_actions`. */
+export async function isActionType(name: string): Promise<boolean> {
+  return (await load()).actions.some((a) => a.name === name);
+}
+
+/** A blank row, for an action nobody has been granted. */
+const none = (action_type: string): Permission => ({
+  action_type,
+  view: false,
+  create: false,
+  update: false,
+  delete: false,
+});
+
+/** The matrix for one role, one row per action, with the gaps filled in. */
 export async function permissionsFor(roleId: number): Promise<Permission[]> {
-  const byRole = await matrix();
+  const { byRole, actions } = await load();
   const own = byRole.get(roleId);
-  // A role with no rows is treated as having no rights rather than all of them.
-  return ACTION_TYPES.map(
-    (action_type) =>
-      own?.get(action_type) ?? {
-        action_type,
-        view: false,
-        create: false,
-        update: false,
-        delete: false,
-      },
-  );
+  return actions.map((a) => own?.get(a.name) ?? none(a.name));
+}
+
+/**
+ * What one person has been granted individually — every action, with `own`
+ * saying which of them they actually have a row for.
+ *
+ * The gaps are filled in so a screen can list every action, but a filled gap
+ * and a stored row of four zeros are **not** the same thing: the first means
+ * "whatever the role says", the second means "not this, whatever the role
+ * says". Both look like four unticked boxes, so the flags alone cannot tell
+ * them apart and `own` is what does.
+ */
+export async function userPermissionsFor(
+  userId: number,
+): Promise<(Permission & { own: boolean })[]> {
+  const { byUser, actions } = await load();
+  const mine = byUser.get(userId);
+  return actions.map((a) => {
+    const row = mine?.get(a.name);
+    return { ...(row ?? none(a.name)), own: Boolean(row) };
+  });
+}
+
+/**
+ * What a person may actually do: their own grants first, then their role.
+ *
+ * An individual grant **replaces** the role's answer for that action rather
+ * than adding to it, so a person can be given less than their role as well as
+ * more. That is what makes a user with no role work at all: they have no role
+ * rows, so their own are the only ones there are.
+ */
+export async function effectivePermissionsFor(user: {
+  id: number;
+  roleId: number | null;
+}): Promise<Permission[]> {
+  if (user.roleId === ROLE.SUPER || user.roleId === ROLE.LAB) return fullPermissions();
+
+  const { byRole, byUser, actions } = await load();
+  const mine = byUser.get(user.id);
+  // No role at all: their own grants are the whole answer.
+  const role = user.roleId === null ? undefined : byRole.get(user.roleId);
+
+  return actions.map((a) => mine?.get(a.name) ?? role?.get(a.name) ?? none(a.name));
 }
 
 /**
@@ -109,14 +232,22 @@ export async function permissionsFor(roleId: number): Promise<Permission[]> {
  * reads those rows. Only the employee sidebar and the employee branches of the
  * controllers call `filterPermission()`. Reading the zeros literally would lock
  * a laboratory out of its own counter.
+ *
+ * Below those two, an individual grant wins over the role, and somebody with no
+ * role has nothing but their own grants.
  */
 export async function can(
   user: SessionUser,
   action: ActionType,
   ability: Ability,
 ): Promise<boolean> {
-  if (user.roleId === ROLE.ADMIN || user.roleId === ROLE.LAB) return true;
-  const byRole = await matrix();
+  if (user.roleId === ROLE.SUPER || user.roleId === ROLE.LAB) return true;
+
+  const { byRole, byUser } = await load();
+  const own = byUser.get(user.id)?.get(action);
+  if (own) return Boolean(own[ability]);
+
+  if (user.roleId === null) return false;
   return Boolean(byRole.get(user.roleId)?.get(action)?.[ability]);
 }
 
@@ -137,7 +268,7 @@ export async function assertCan(
   ability: Ability,
 ): Promise<void> {
   if (!(await can(user, action, ability))) {
-    throw forbidden(`Your role does not have ${ability} access to ${action.replace(/_/g, ' ')}.`);
+    throw forbidden(`You do not have ${ability} access to ${action.replace(/_/g, ' ')}.`);
   }
 }
 
@@ -151,10 +282,13 @@ export async function assertCan(
 export async function orderVisibility(
   user: SessionUser,
 ): Promise<'all' | 'lab' | 'own'> {
-  if (user.roleId === ROLE.ADMIN) return 'all';
+  if (user.roleId === ROLE.SUPER) return 'all';
   if (user.roleId === ROLE.LAB) return 'lab';
 
-  const byRole = await matrix();
-  const p = byRole.get(user.roleId)?.get('product_collection');
-  return p?.view && p?.create ? 'lab' : 'own';
+  // Read through the same resolution as can(): an individual grant of
+  // product_collection has to widen the list, or granting it would appear to do
+  // nothing.
+  const view = await can(user, 'product_collection', 'view');
+  const create = await can(user, 'product_collection', 'create');
+  return view && create ? 'lab' : 'own';
 }

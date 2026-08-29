@@ -221,6 +221,77 @@ The dues list — `EmpOrderDuesList`, its own screen in Laravel — is
 `GET /api/orders?dues=1` here. `dues_amount` is a varchar, so the filter coerces
 it numerically: compared as text, `'100'` and `'0.00'` land on the wrong side.
 
+### 13a. Students and enquiries — built, not ported
+
+The Laravel admin sidebar carried a **Student** menu (Enquiry, Enrollment,
+Active Student, Alumni, Fee Collection) and an **Enquiry** menu (Enquiry from
+Ask Me, Visitor's Diary, Lead followup, Complain). Every one of those nine
+entries is `href="#"`: no route, no controller, no table, no view. Nothing was
+ever stored, so nothing was migrated — `migrations/003-students-enquiries.sql`
+creates both tables and the shape is a decision rather than a recovery.
+
+**The general enquiry book** — Ask Me, Visitor's Diary, Lead followup,
+Complain — is one `enquiries` table with a `kind`, behind its own menu. Four
+tables would have carried the same columns four times.
+
+**The student side is a pipeline**, and migration 004 replaced the single
+`students` table with the five records it actually has:
+
+    enquiry --convert--> registration --enrol--> course --> certificate
+                                        `-- discount applies here
+
+`student_enquiries` carries the course somebody is *interested* in and a
+follow-up trail; `students` carries documents and a registration number
+(IIGL-YYYY-NNNN, taken in the same transaction as the row); `courses` is the
+catalogue; `student_courses` is one student on one course in one batch, and is
+where the money lives; `student_certificates` is issued against a completed
+enrolment, numbered IIGL-C-YYYY-NNNN so it cannot be mistaken for a gemstone
+report number.
+
+**The discount is not a stage.** It is three columns on the enrolment beside the
+fee it reduces — a discount table would let a fee and its discount disagree, and
+would need a join to answer what a student owes. `final_fee` is computed by the
+API and never accepted from a client.
+
+All of it is administrator-only, which is where the menu put it. Fee payments
+add to a running total; there is no receipt table behind them yet, and inventing
+one before anybody has taken a payment through the screen would be building the
+wrong thing twice.
+
+The website's contact form still does not post to `/api/enquiries`: an
+unauthenticated write endpoint needs a rate limit and a captcha decision of its
+own. Enquiries are entered by hand until then.
+
+### 13b. Discount coupons — new, not ported
+
+Nothing in the Laravel application issues a coupon. `discount_coupons` and
+`coupon_redemptions` (migrations 011 and 012) are a decision, not a recovery.
+
+A coupon is money off a **course fee** and nothing else. 011 built it with an
+`audience` — laboratory, customer or student — on the reading that a code could
+come off any bill; 012 removed that. There is nowhere else for one to land: an
+order at the counter and a laboratory's own bill have no column to record a
+coupon against, and an audience with two values nothing can use is a question
+every screen has to ask and no answer ever changes.
+
+It does not replace the enrolment discount, it **writes** it. Spending a coupon
+sets `student_courses.discount_type`, `discount_value`, `discount_amount`,
+`discount_reason` (`"Coupon NEWYEAR25"`) and `final_fee` — the same columns and
+the same arithmetic as `PATCH /api/courses/enrolments/{id}/discount` — and adds
+a redemption row. So "what does this student owe" still has one answer, and it
+is still on the enrolment where the fee is.
+
+`POST /api/coupons/validate` answers what a coupon would take off an enrolment
+without spending it, naming the refusal — switched off, expired on a date, for
+another course, fee below the minimum, used up, already used by this student.
+`/redeem` re-checks all of it inside the transaction that writes the fee: the
+two calls are minutes apart, and a coupon with one use left can be presented
+twice in that gap.
+
+Head office only, like every other course route. Both screens are wired: the
+coupon list (Student › Discount Coupons) writes and withdraws them, and the
+discount dialog on Student › Discount takes a code, checks it, and applies it.
+
 ### 13. Messages — nothing to migrate
 
 Both sidebars show Message, with Send Message and Message History. Both entries

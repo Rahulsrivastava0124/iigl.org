@@ -29,7 +29,7 @@ uploadRoutes.post(
         badRequest(`Unknown upload type. Expected one of: ${Object.keys(BUCKETS).join(', ')}.`),
       );
     }
-    if (ADMIN_ONLY.has(bucket) && req.user.roleId !== ROLE.ADMIN) {
+    if (ADMIN_ONLY.has(bucket) && req.user.roleId !== ROLE.SUPER) {
       return next(badRequest('Only an administrator can upload this kind of file.'));
     }
     next();

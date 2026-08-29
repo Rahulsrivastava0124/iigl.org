@@ -262,6 +262,7 @@ export function Panel({
   footer,
   actions,
   children,
+  sx,
 }: {
   title?: string;
   /**
@@ -284,9 +285,11 @@ export function Panel({
   footer?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
+  /** Spacing around the panel. It carries none of its own. */
+  sx?: object;
 }) {
   return (
-    <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+    <Paper variant="outlined" sx={{ overflow: 'hidden', ...sx }}>
       {(title || subtitle || actions) && (
         <Stack
           direction="row"
@@ -431,12 +434,16 @@ export function FormPanel({
           >
             {children}
           </Box>
-          <Stack direction="row" spacing={1} sx={{ mt: 3 }}>
-            <Button type="submit" variant="contained" disabled={busy}>
-              {busy ? 'Saving…' : submitLabel}
-            </Button>
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ mt: 3, pt: 2, borderTop: 1, borderColor: 'divider', justifyContent: 'flex-end' }}
+          >
             <Button type="button" color="inherit" onClick={onClose}>
               Cancel
+            </Button>
+            <Button type="submit" variant="contained" disabled={busy}>
+              {busy ? 'Saving…' : submitLabel}
             </Button>
           </Stack>
         </Box>
@@ -765,6 +772,72 @@ export function Dialog({
           </Button>
         </DialogActions>
       </Box>
+    </MuiDialog>
+  );
+}
+
+/**
+ * Confirmation dialog for destructive actions (delete, remove, etc.).
+ * Red-themed header with icon and text button.
+ */
+export function ConfirmDialog({
+  open,
+  title,
+  message,
+  warning,
+  onClose,
+  onConfirm,
+  confirmLabel = 'Delete',
+  confirmIcon,
+  busy,
+  danger = true,
+}: {
+  open: boolean;
+  title: string;
+  message: ReactNode;
+  warning?: string;
+  onClose: () => void;
+  onConfirm: () => void;
+  confirmLabel?: string;
+  confirmIcon?: ComponentType<SvgIconProps>;
+  busy?: boolean;
+  danger?: boolean;
+}) {
+  const Icon = confirmIcon;
+  return (
+    <MuiDialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle
+        sx={{
+          bgcolor: danger ? '#d32f2f' : 'primary.main',
+          color: '#fff',
+          fontWeight: 600,
+        }}
+      >
+        {title}
+      </DialogTitle>
+      <DialogContent sx={{ pt: 3, pb: 2 }}>
+        <Typography>{message}</Typography>
+        {warning && (
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            {warning}
+          </Typography>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} color="inherit" size="small">
+          Cancel
+        </Button>
+        <Button
+          variant="contained"
+          size="small"
+          startIcon={Icon ? <Icon fontSize="small" /> : undefined}
+          sx={danger ? { bgcolor: '#d32f2f', '&:hover': { bgcolor: '#b71c1c' } } : {}}
+          onClick={onConfirm}
+          disabled={busy}
+        >
+          {busy ? 'Processing…' : confirmLabel}
+        </Button>
+      </DialogActions>
     </MuiDialog>
   );
 }

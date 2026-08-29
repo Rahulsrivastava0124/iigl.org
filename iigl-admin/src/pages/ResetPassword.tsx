@@ -4,6 +4,7 @@ import { Box, Button, Link, Stack } from '@mui/material';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
 import { Notice, PasswordField } from '../components/ui';
+import { useToast } from '../components/Toast';
 import AuthCard from '../components/AuthCard';
 
 /**
@@ -22,8 +23,8 @@ export default function ResetPassword() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const toast = useToast();
 
   // Checked here as well as on the API: the mismatch is the common mistake, and
   // a person should not have to wait for a request to be told they mistyped.
@@ -34,12 +35,11 @@ export default function ResetPassword() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    setError(null);
     try {
       await api.post('/auth/reset-password', { email, token, new_password: password });
       setDone(true);
     } catch (err) {
-      setError(messageOf(err));
+      toast.error(messageOf(err));
     } finally {
       setBusy(false);
     }
@@ -84,12 +84,6 @@ export default function ResetPassword() {
       onSubmit={submit}
       footer="The link stops working an hour after it was sent, and once it has been used."
     >
-      {error && (
-        <Notice kind="error" sx={{ mb: 3, textAlign: 'left' }}>
-          {error}
-        </Notice>
-      )}
-
       <Stack spacing={2.5} sx={{ textAlign: 'left' }}>
         <PasswordField
           label="New password"

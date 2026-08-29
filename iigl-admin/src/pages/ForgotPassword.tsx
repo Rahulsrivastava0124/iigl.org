@@ -4,6 +4,7 @@ import { Box, Button, Link, Stack, TextField } from '@mui/material';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
 import { Notice } from '../components/ui';
+import { useToast } from '../components/Toast';
 import AuthCard from '../components/AuthCard';
 
 /**
@@ -18,22 +19,21 @@ import AuthCard from '../components/AuthCard';
  * below is deliberately "if that address is on an account", not "sent".
  */
 export default function ForgotPassword() {
+  const toast = useToast();
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    setError(null);
     try {
       const { message } = await api.post<{ message: string }>('/auth/forgot-password', {
         email: email.trim(),
       });
       setSaid(message);
     } catch (err) {
-      setError(messageOf(err));
+      toast.error(messageOf(err));
     } finally {
       setBusy(false);
     }
@@ -63,12 +63,6 @@ export default function ForgotPassword() {
       onSubmit={submit}
       footer="No email on your account? Ask an administrator to set a new password for you."
     >
-      {error && (
-        <Notice kind="error" sx={{ mb: 3, textAlign: 'left' }}>
-          {error}
-        </Notice>
-      )}
-
       <Stack spacing={2.5} sx={{ textAlign: 'left' }}>
         <TextField
           label="Email address"

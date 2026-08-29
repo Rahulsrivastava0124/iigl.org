@@ -26,7 +26,7 @@ transactionRoutes.get(
     let q = db.selectFrom('transactions').selectAll();
     let c = db.selectFrom('transactions').select(db.fn.countAll().as('n'));
 
-    if (req.user.roleId !== ROLE.ADMIN) {
+    if (req.user.roleId !== ROLE.SUPER) {
       const me = req.user.id;
       const mine = (eb: any) =>
         direction === 'sent'
@@ -71,7 +71,7 @@ transactionRoutes.post(
     if (!Number.isFinite(value) || value <= 0) throw badRequest('Enter an amount greater than zero.');
     if (!pay_mode) throw badRequest('Select a payment mode.');
 
-    const receivedBy = req.user.roleId === ROLE.LAB ? ROLE.ADMIN : req.user.labId;
+    const receivedBy = req.user.roleId === ROLE.LAB ? ROLE.SUPER : req.user.labId;
     if (receivedBy === null) throw badRequest('Your account is not linked to a laboratory.');
 
     const result = await db
@@ -117,7 +117,7 @@ transactionRoutes.post(
       .executeTakeFirst();
     if (!row) throw notFound('Transaction not found.');
 
-    if (req.user.roleId !== ROLE.ADMIN && Number(row.received_by) !== req.user.id) {
+    if (req.user.roleId !== ROLE.SUPER && Number(row.received_by) !== req.user.id) {
       throw forbidden('Only the receiver can approve or decline this transaction.');
     }
     if (Number(row.status) !== STATUS.PENDING) {
@@ -238,7 +238,7 @@ transactionRoutes.get(
   '/ledger',
   wrap(async (req, res) => {
     const target =
-      req.user.roleId === ROLE.ADMIN && req.query.user_id
+      req.user.roleId === ROLE.SUPER && req.query.user_id
         ? Number(req.query.user_id)
         : req.user.id;
 

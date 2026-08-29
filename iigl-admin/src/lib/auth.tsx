@@ -33,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((r) => {
         // Someone who signed in at another door should not be carried into
         // this one by a shared cookie.
-        setUser(config.admits(r.user.roleId) ? r.user : null);
+        setUser(r.user.roleId !== null && config.admits(r.user.roleId) ? r.user : null);
       })
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
@@ -42,7 +42,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (mobile: string, password: string) => {
     const r = await api.post<{ user: SessionUser }>('/auth/login', { mobile, password });
 
-    if (!config.admits(r.user.roleId)) {
+    // A person with no role is not admitted by any door: every door asks for a
+    // role, and null is the absence of one.
+    if (r.user.roleId === null || !config.admits(r.user.roleId)) {
       // Correct credentials, wrong entrance. Drop the session so a refused
       // sign-in does not silently leave one behind.
       await api.post('/auth/logout').catch(() => undefined);

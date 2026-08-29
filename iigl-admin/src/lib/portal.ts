@@ -1,22 +1,26 @@
 /**
  * Which door someone came in by.
  *
- * The panel has three entry points and each admits a different set of roles:
+ * One door per role, named after the role rather than after the software:
  *
- *   default   the admin panel — administrators
- *   super.    super administrator sign-in
- *   team.     laboratories and their staff only
+ *   super.iigl.org   super admin — IIGL head office            role 1
+ *   admin.iigl.org   admin — a laboratory owner                role 2
+ *   team.iigl.org    team — their staff                        roles 3 to 5
  *
- * Detected from the host first, so `super.iigl.org` and `team.iigl.org` work in
- * production, and from the first path segment as well, so `/super` and `/team`
- * work locally without touching DNS or hosts files.
+ * The bare domain is the head office door, because that is who opens the panel
+ * without being told an address.
  *
- * This decides which sign-in screen someone sees and which accounts it accepts.
- * It is not a permission boundary — the API enforces what each role may do on
- * every request, and always would even if someone signed in by another door.
+ * Detected from the host first, so the subdomains work in production, and from
+ * the first path segment as well — `/super`, `/admin`, `/team` — so all three
+ * can be used locally without touching DNS or a hosts file.
+ *
+ * This decides which sign-in screen somebody sees and which accounts it accepts.
+ * It is **not** a permission boundary: the API checks the role on every request,
+ * and would still refuse a laboratory the catalogue if it signed in at the head
+ * office address.
  */
 
-export type Portal = 'admin' | 'super' | 'team';
+export type Portal = 'super' | 'admin' | 'team';
 
 export interface PortalConfig {
   id: Portal;
@@ -28,53 +32,80 @@ export interface PortalConfig {
   wrongDoor: string;
 }
 
+const SUPER_ADDRESS = 'the super admin address';
+const ADMIN_ADDRESS = 'the admin address';
+const TEAM_ADDRESS = 'the team address';
+
 export const PORTALS: Record<Portal, PortalConfig> = {
-  admin: {
-    id: 'admin',
-    title: 'IIGL Admin',
-    subtitle: 'Sign in with your registered mobile number.',
-    admits: (r) => r === 1,
-    wrongDoor: 'This sign-in is for administrators. Laboratory and staff accounts sign in at the team address.',
-  },
   super: {
     id: 'super',
     title: 'IIGL Super Admin',
-    subtitle: 'Administrator sign-in.',
-    admits: (r) => r === 1,
-    wrongDoor: 'This sign-in is for administrators only.',
+    subtitle: 'Head office sign-in.',
+    admits: (r) => r === ROLE.SUPER,
+    wrongDoor: `This sign-in is for head office. A laboratory signs in at ${ADMIN_ADDRESS}, and its staff at ${TEAM_ADDRESS}.`,
+  },
+  admin: {
+    id: 'admin',
+    title: 'IIGL Admin',
+    subtitle: 'Laboratory sign-in.',
+    admits: (r) => r === ROLE.ADMIN,
+    wrongDoor: `This sign-in is for laboratories. Head office signs in at ${SUPER_ADDRESS}, and staff at ${TEAM_ADDRESS}.`,
   },
   team: {
     id: 'team',
     title: 'IIGL Team',
-    subtitle: 'Laboratory and staff sign-in.',
-    // Every role above administrator: laboratory, lab employee, manager,
-    // office boy. Matches the API guard, which admits role_id > 1 here.
-    admits: (r) => r >= 2,
-    wrongDoor: 'This sign-in is for laboratories and staff. Administrators sign in at the admin address.',
+    subtitle: 'Staff sign-in.',
+    // Lab employee, manager, office boy — everyone who works for somebody
+    // else. A laboratory owner is not staff and has their own door.
+    admits: (r) => r >= ROLE.TEAM,
+    wrongDoor: `This sign-in is for staff. A laboratory signs in at ${ADMIN_ADDRESS}, and head office at ${SUPER_ADDRESS}.`,
   },
 };
 
-/** The path prefix for this portal, '' for the default admin entry. */
+/** Where each door tells the others to go, for the line under the sign-in card. */
+export const OTHER_DOORS: Record<Portal, string> = {
+  super: 'Laboratories sign in at the admin address, staff at the team address.',
+  admin: 'Staff sign in at the team address; head office at the super admin address.',
+  team: 'Laboratories sign in at the admin address; head office at the super admin address.',
+};
+
+/**
+ * The path prefix for this portal.
+ *
+ * Empty for a subdomain, and empty for the bare domain, which is the head
+ * office door — a basename is only needed when the door came from the path.
+ */
 export function basenameFor(portal: Portal): string {
-  if (portal === 'admin') return '';
-  // Only when the portal came from the path; a subdomain needs no basename.
   return window.location.pathname.startsWith(`/${portal}`) ? `/${portal}` : '';
 }
 
 export function currentPortal(): Portal {
   const host = window.location.hostname.toLowerCase();
   if (host.startsWith('super.')) return 'super';
+  if (host.startsWith('admin.')) return 'admin';
   if (host.startsWith('team.')) return 'team';
 
   const first = window.location.pathname.split('/')[1]?.toLowerCase();
   if (first === 'super') return 'super';
+  if (first === 'admin') return 'admin';
   if (first === 'team') return 'team';
 
-  return 'admin';
+  // The bare domain. Head office is who arrives here without an address.
+  return 'super';
 }
 
-/** The roles as the data numbers them. */
-export const ROLE = { ADMIN: 1, LAB: 2, EMPLOYEE: 3 } as const;
+/**
+ * The roles as the data numbers them.
+ *
+ *   1  super admin   head office
+ *   2  admin         a laboratory. **The same account** — a laboratory user is
+ *                    its admin, so there is no third kind of person here.
+ *   3  team          their staff (4 and 5 are older team variants).
+ *
+ * A `roleId` of `null` is not a role at all: it is somebody whose permissions
+ * were granted to them one row at a time.
+ */
+export const ROLE = { SUPER: 1, ADMIN: 2, LAB: 2, TEAM: 3 } as const;
 
 /**
  * Role narrowing, named.
@@ -83,13 +114,31 @@ export const ROLE = { ADMIN: 1, LAB: 2, EMPLOYEE: 3 } as const;
  * control needs `can()` from the matrix as well. An administrator runs the
  * business, a laboratory runs a counter, and everyone else works at one.
  */
-export const isAdmin = (user?: { roleId: number } | null) => user?.roleId === ROLE.ADMIN;
-export const isLab = (user?: { roleId: number } | null) => user?.roleId === ROLE.LAB;
+/** Head office. */
+export const isSuper = (user?: { roleId: number | null } | null) => user?.roleId === ROLE.SUPER;
+
+/**
+ * A laboratory — which is to say its admin. `isAdmin` and `isLab` are the same
+ * test under two names because they are the same account; both exist so a call
+ * site can read the way the person writing it thinks about the user.
+ */
+export const isAdmin = (user?: { roleId: number | null } | null) => user?.roleId === ROLE.ADMIN;
+export const isLab = isAdmin;
+/** Nobody's role: everything they can do was granted to them one row at a time. */
+export const hasNoRole = (user?: { roleId: number | null } | null) =>
+  user != null && user.roleId == null;
+
+/** What the sidebar and the breadcrumb root call each door. */
+export const PORTAL_LABEL: Record<Portal, string> = {
+  super: 'Super Admin',
+  admin: 'Administration',
+  team: 'Team',
+};
 
 export const ROLE_NAMES: Record<number, string> = {
-  1: 'Administrator',
-  2: 'Laboratory',
-  3: 'Lab employee',
+  1: 'Super admin',
+  2: 'Admin — laboratory',
+  3: 'Team',
   4: 'Manager',
   5: 'Office boy',
 };

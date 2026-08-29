@@ -3,7 +3,7 @@ import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
 import { badRequest, conflict } from '../lib/errors.js';
 import { paged, readPage } from '../lib/paginate.js';
-import { requireLabScope, ROLE } from '../middleware/auth.js';
+import { empidOf, requireLabScope, ROLE } from '../middleware/auth.js';
 
 /**
  * Attendance.
@@ -131,7 +131,8 @@ attendanceRoutes.post(
 
 /**
  * Attendance history. Staff see their own; a laboratory or administrator can
- * read one of their people by passing emp_id.
+ * read one of their people by passing emp_id. `from` and `to` narrow it to a
+ * date range, which is how the calendar asks for a month.
  */
 attendanceRoutes.get(
   '/',
@@ -141,16 +142,21 @@ attendanceRoutes.get(
 
     if (req.query.emp_id) {
       const requested = Number(req.query.emp_id);
-      if (req.user.roleId === ROLE.ADMIN) {
+      if (req.user.roleId === ROLE.SUPER) {
         target = requested;
       } else if (req.user.roleId === ROLE.LAB) {
-        // A laboratory may read only its own staff.
-        const employed = await db
-          .selectFrom('employements')
-          .select('id')
-          .where('user_id', '=', requested)
-          .where('parent_id', '=', req.user.id)
-          .executeTakeFirst();
+        // A laboratory may read only its own staff. The employment names the
+        // employer by empid, so the laboratory's own is what it matches on —
+        // and a laboratory without one employs nobody.
+        const mine = await empidOf(req.user.id);
+        const employed = mine
+          ? await db
+              .selectFrom('employements')
+              .select('id')
+              .where('user_id', '=', requested)
+              .where('parent_id', '=', mine)
+              .executeTakeFirst()
+          : undefined;
         if (!employed) throw badRequest('That person does not work at your laboratory.');
         target = requested;
       } else if (requested !== req.user.id) {
@@ -158,20 +164,38 @@ attendanceRoutes.get(
       }
     }
 
+    /*
+     * A window, for a calendar.
+     *
+     * The list is paged newest-first, which answers "what happened lately" but
+     * not "what did August look like" — a month can straddle two pages, and a
+     * calendar that has to page to fill itself in draws holes. `from` and `to`
+     * are inclusive and either may be given alone.
+     */
+    const range = (value: unknown): string | null => {
+      const v = String(value ?? '').trim();
+      if (!v) return null;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) throw badRequest('Dates are YYYY-MM-DD.');
+      return v;
+    };
+    const from = range(req.query.from);
+    const to = range(req.query.to);
+
+    const scoped = () => {
+      let q = db.selectFrom('attendances').where('empId', '=', target);
+      if (from) q = q.where('date', '>=', new Date(`${from}T00:00:00`));
+      if (to) q = q.where('date', '<=', new Date(`${to}T00:00:00`));
+      return q;
+    };
+
     const [rows, count] = await Promise.all([
-      db
-        .selectFrom('attendances')
+      scoped()
         .selectAll()
-        .where('empId', '=', target)
         .orderBy('date', 'desc')
         .limit(p.limit)
         .offset(p.offset)
         .execute(),
-      db
-        .selectFrom('attendances')
-        .select(db.fn.countAll().as('n'))
-        .where('empId', '=', target)
-        .executeTakeFirstOrThrow(),
+      scoped().select(db.fn.countAll().as('n')).executeTakeFirstOrThrow(),
     ]);
 
     res.json(paged(rows, Number(count.n), p));

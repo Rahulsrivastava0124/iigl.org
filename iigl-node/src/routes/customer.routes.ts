@@ -20,7 +20,7 @@ customerRoutes.use(requireLabScope);
 
 /** The scope a person may see, matching the order list. */
 async function scope(user: Express.Request['user']) {
-  if (user.roleId === ROLE.ADMIN) return { kind: 'all' as const };
+  if (user.roleId === ROLE.SUPER) return { kind: 'all' as const };
   if ((await orderVisibility(user)) === 'own') return { kind: 'own' as const, id: user.id };
   return { kind: 'lab' as const, id: user.labId };
 }

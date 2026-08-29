@@ -87,8 +87,11 @@ export const extraTags = [
   { name: 'Content', description: 'The public site: articles, branch pages, certificate types, banners and static pages. Administrators only.' },
   { name: 'Uploads', description: 'Images and documents, written into the directories the Laravel application uses.' },
   { name: 'Attendance', description: 'Clocking in and out, breaks, and the record of both.' },
-  { name: 'Permissions', description: 'The role permission matrix, and what the signed-in user may do.' },
+  { name: 'Permissions', description: 'Roles, the permissions on them, and grants made to one person. Head office and a laboratory can both create roles.' },
   { name: 'Customers', description: 'Views over orders, grouped by mobile number. There is no customer table.' },
+  { name: 'Students', description: 'The student pipeline: enquiry, registration, course, discount, certificate. New in this system — the Laravel menu had the entries but no tables.' },
+  { name: 'Courses', description: 'The course catalogue, the enrolments on it, and the discount that sits on the fee.' },
+  { name: 'Enquiries', description: 'The general enquiry book: questions, visits, leads and complaints.' },
 ];
 
 export const extraPaths: Record<string, unknown> = {
@@ -238,6 +241,722 @@ export const extraPaths: Record<string, unknown> = {
   },
 
   // ------------------------------------------------------------ customers
+  // ---------------------------------------------------------------- roles
+  '/api/roles': {
+    get: {
+      tags: ['Permissions'],
+      summary: 'Roles this account can use',
+      description:
+        'Head office sees every role. A laboratory sees the shared roles and its own, not another laboratory\'s. Each row carries how many people hold it.',
+      responses: { 200: ok('Roles, system ones first.'), ...guarded },
+    },
+    post: {
+      tags: ['Permissions'],
+      summary: 'Create a role',
+      description:
+        'Head office creates a shared role; a laboratory creates one of its own, which only its staff can be given. The name must be unique among the roles the creator can see — two laboratories may both have a "Front desk".',
+      requestBody: body({ name: { type: 'string' }, description: str }, ['name']),
+      responses: {
+        201: ok('Role created.'),
+        400: err('A name is required.'),
+        409: err('That name is already in use.'),
+        ...guarded,
+      },
+    },
+  },
+
+  '/api/roles/{id}': {
+    patch: {
+      tags: ['Permissions'],
+      summary: 'Rename a role',
+      parameters: [idParam],
+      requestBody: body({ name: { type: 'string' }, description: str }),
+      responses: {
+        200: ok('Updated.'),
+        400: err('Nothing to update.'),
+        404: err('Role not found.'),
+        ...guarded,
+      },
+    },
+    delete: {
+      tags: ['Permissions'],
+      summary: 'Delete a role',
+      description: 'Refused while anybody holds it, and never for the five that shipped.',
+      parameters: [idParam],
+      responses: {
+        200: ok('Deleted.'),
+        404: err('Role not found.'),
+        409: err('Somebody still holds it.'),
+        ...guarded,
+      },
+    },
+  },
+
+  '/api/roles/actions': {
+    get: {
+      tags: ['Permissions'],
+      summary: 'Every permission that can be granted',
+      description:
+        'From `permission_actions`. `enforced` is false for a name the API does not yet check — it appears on the permission screens but grants nothing until a check is written against it.',
+      responses: { 200: ok('The permission list.'), ...guarded },
+    },
+    post: {
+      tags: ['Permissions'],
+      summary: 'Add a permission to the list',
+      description:
+        'Head office only. The name is lower-cased and underscored. Adding one puts it on every permission screen; it is a label until the API reads it.',
+      requestBody: body({ name: { type: 'string' }, label: { type: 'string' }, description: str }, ['name']),
+      responses: {
+        201: ok('Added.'),
+        400: err('A name is required.'),
+        409: err('Already on the list.'),
+        ...guarded,
+      },
+    },
+  },
+
+  '/api/roles/{id}/users': {
+    get: {
+      tags: ['Permissions'],
+      summary: 'Who holds this role',
+      description:
+        'The accounts on it, by name. Scoped like the role itself: head office sees any role, a laboratory only the shared ones and its own.',
+      parameters: [idParam],
+      responses: { 200: ok('Accounts holding the role.'), 404: err('Role not found.'), ...guarded },
+    },
+  },
+
+  '/api/roles/{id}/permissions': {
+    get: {
+      tags: ['Permissions'],
+      summary: 'The matrix for one role',
+      parameters: [idParam],
+      responses: { 200: ok('One row per permission.'), 404: err('Role not found.'), ...guarded },
+    },
+    put: {
+      tags: ['Permissions'],
+      summary: 'Set one permission on one role',
+      parameters: [idParam],
+      requestBody: body(
+        { action_type: { type: 'string' }, view: bool, create: bool, update: bool, delete: bool },
+        ['action_type'],
+      ),
+      responses: {
+        200: ok('Saved.'),
+        400: err('Not a permission.'),
+        404: err('Role not found.'),
+        ...guarded,
+      },
+    },
+  },
+
+  '/api/users/{id}/permissions': {
+    get: {
+      tags: ['Permissions'],
+      summary: 'What one person has been granted individually',
+      description:
+        'Separate from their role. Head office may read anybody; a laboratory only its own staff.\n\nEvery action comes back, so a screen can list them all, with `own` saying which of them this person actually has a row for. A filled gap and a stored row of four zeros are not the same thing — the first is “whatever the role says”, the second is “not this, whatever the role says” — and both look like four unticked boxes, so `own` is what tells them apart.',
+      parameters: [idParam],
+      responses: {
+        200: ok('One row per permission, each with an `own` flag.'),
+        404: err('User not found.'),
+        ...guarded,
+      },
+    },
+    put: {
+      tags: ['Permissions'],
+      summary: 'Grant or withdraw one permission for one person',
+      description:
+        'An individual grant **replaces** the role\'s answer for that action rather than adding to it, so it can take away as well as give — all four flags off means "not this, whatever the role says". It is also how a user with no role gets anything at all.',
+      parameters: [idParam],
+      requestBody: body(
+        { action_type: { type: 'string' }, view: bool, create: bool, update: bool, delete: bool },
+        ['action_type'],
+      ),
+      responses: {
+        200: ok('Saved.'),
+        400: err('Not a permission.'),
+        404: err('User not found.'),
+        ...guarded,
+      },
+    },
+  },
+
+  '/api/users/{id}/permissions/{action}': {
+    delete: {
+      tags: ['Permissions'],
+      summary: 'Drop an individual grant',
+      description: 'Puts the person back on whatever their role says.',
+      parameters: [
+        idParam,
+        { name: 'action', in: 'path', required: true, schema: { type: 'string' } },
+      ],
+      responses: { 200: ok('Removed, or there was nothing to remove.'), ...guarded },
+    },
+  },
+
+  // ------------------------------------------------------ students: enquiry
+  '/api/students/enquiries': {
+    get: {
+      tags: ['Students'],
+      summary: 'Course enquiries',
+      description:
+        'The first stage: somebody asking about a course. Distinct from /api/enquiries, which is the general enquiry book — a course enquiry carries the course they are interested in and converts into a registration.',
+      parameters: [
+        { name: 'page', in: 'query', schema: { type: 'integer' } },
+        { name: 'per_page', in: 'query', schema: { type: 'integer', maximum: 200 } },
+        {
+          name: 'status',
+          in: 'query',
+          schema: {
+            type: 'string',
+            enum: ['new', 'contacted', 'interested', 'converted', 'not_interested'],
+          },
+        },
+        { name: 'q', in: 'query', schema: { type: 'string' } },
+      ],
+      responses: { 200: ok('A page of enquiries, newest first.'), ...guarded },
+    },
+    post: {
+      tags: ['Students'],
+      summary: 'Record a course enquiry',
+      requestBody: body(
+        {
+          name: { type: 'string' },
+          mobile: { type: 'string' },
+          email: str,
+          course_id: { type: ['integer', 'null'], description: 'When it is a course we run.' },
+          course_interested: { type: ['string', 'null'], description: 'Free text, for one we do not.' },
+          enquiry_date: str,
+          source: str,
+          status: { type: 'string', enum: ['new', 'contacted', 'interested', 'not_interested'] },
+          remarks: str,
+          follow_up_on: str,
+        },
+        ['name', 'mobile'],
+      ),
+      responses: { 201: ok('Enquiry recorded.'), 400: err('A required field is missing.'), ...guarded },
+    },
+  },
+
+  '/api/students/enquiries/{id}': {
+    patch: {
+      tags: ['Students'],
+      summary: 'Update a course enquiry',
+      description:
+        'Every field but the status, which walks new → contacted → interested and then either not_interested or — through the convert endpoint only — converted.',
+      parameters: [idParam],
+      requestBody: body({
+        name: { type: 'string' },
+        mobile: { type: 'string' },
+        email: str,
+        course_id: { type: ['integer', 'null'] },
+        course_interested: str,
+        enquiry_date: str,
+        source: str,
+        status: { type: 'string', enum: ['new', 'contacted', 'interested', 'not_interested'] },
+        remarks: str,
+        follow_up_on: str,
+      }),
+      responses: {
+        200: ok('Updated.'),
+        400: err('Nothing to update, or converted was set by hand.'),
+        404: err('Enquiry not found.'),
+        ...guarded,
+      },
+    },
+    delete: {
+      tags: ['Students'],
+      summary: 'Delete a course enquiry',
+      parameters: [idParam],
+      responses: { 200: ok('Deleted.'), 404: err('Enquiry not found.'), ...guarded },
+    },
+  },
+
+  '/api/students/enquiries/{id}/convert': {
+    post: {
+      tags: ['Students'],
+      summary: 'Convert an enquiry into a registration',
+      description:
+        'One transaction: the student is registered, given a registration number, and the enquiry is marked converted and pointed at them. A converted enquiry with no student behind it would drop off the follow-up list while nobody was registered.',
+      parameters: [idParam],
+      requestBody: body({
+        name: { type: 'string', description: 'Defaults to the name on the enquiry.' },
+        mobile: { type: 'string' },
+        email: str,
+        course_id: { type: ['integer', 'null'] },
+        registration_date: str,
+        status: { type: 'string', enum: ['pending', 'registered', 'active'] },
+      }),
+      responses: {
+        201: ok('The new registration.'),
+        404: err('Enquiry not found.'),
+        409: err('Already converted.'),
+        ...guarded,
+      },
+    },
+  },
+
+  // ------------------------------------------------- students: registration
+  '/api/students': {
+    get: {
+      tags: ['Students'],
+      summary: 'List registrations',
+      parameters: [
+        { name: 'page', in: 'query', schema: { type: 'integer' } },
+        { name: 'per_page', in: 'query', schema: { type: 'integer', maximum: 200 } },
+        { name: 'status', in: 'query', schema: { type: 'string', enum: ['pending', 'registered', 'active'] } },
+        { name: 'q', in: 'query', schema: { type: 'string' }, description: 'Name, mobile, email or registration number.' },
+      ],
+      responses: { 200: ok('A page of students.'), ...guarded },
+    },
+    post: {
+      tags: ['Students'],
+      summary: 'Register a student',
+      description:
+        'The registration number is issued here — IIGL-YYYY-NNNN, counted within the year and taken in the same transaction as the row, so two registrations at once cannot share one.',
+      requestBody: body(
+        {
+          name: { type: 'string' },
+          father_name: str,
+          dob: str,
+          gender: str,
+          mobile: { type: 'string' },
+          alt_mobile: str,
+          email: str,
+          address: str,
+          city: str,
+          state: str,
+          pincode: str,
+          photo: str,
+          id_proof: str,
+          qualification_doc: str,
+          registration_date: str,
+          course_id: { type: ['integer', 'null'] },
+          status: { type: 'string', enum: ['pending', 'registered', 'active'] },
+          remark: str,
+        },
+        ['name', 'mobile'],
+      ),
+      responses: { 201: ok('The new registration.'), 400: err('A required field is missing.'), ...guarded },
+    },
+  },
+
+  '/api/students/summary': {
+    get: {
+      tags: ['Students'],
+      summary: 'Counts across the whole pipeline',
+      description: 'Enquiries, registrations and enrolments by status, the fee position, and how many certificates have been issued.',
+      responses: { 200: ok('Counts and totals.'), ...guarded },
+    },
+  },
+
+  '/api/students/{id}': {
+    get: {
+      tags: ['Students'],
+      summary: 'One student, with their enrolments and certificates',
+      parameters: [idParam],
+      responses: { 200: ok('The student.'), 404: err('Student not found.'), ...guarded },
+    },
+    patch: {
+      tags: ['Students'],
+      summary: 'Update a registration',
+      description: 'The registration number is not editable: it is printed on the paperwork the student is holding.',
+      parameters: [idParam],
+      requestBody: body({
+        name: { type: 'string' },
+        father_name: str,
+        dob: str,
+        gender: str,
+        mobile: { type: 'string' },
+        alt_mobile: str,
+        email: str,
+        address: str,
+        city: str,
+        state: str,
+        pincode: str,
+        photo: str,
+        id_proof: str,
+        qualification_doc: str,
+        registration_date: str,
+        course_id: { type: ['integer', 'null'] },
+        status: { type: 'string', enum: ['pending', 'registered', 'active'] },
+        remark: str,
+      }),
+      responses: {
+        200: ok('Updated.'),
+        400: err('Nothing to update, or a value is invalid.'),
+        404: err('Student not found.'),
+        ...guarded,
+      },
+    },
+    delete: {
+      tags: ['Students'],
+      summary: 'Delete a registration',
+      description: 'Refused while an enrolment exists. Any enquiry behind it goes back to being an enquiry.',
+      parameters: [idParam],
+      responses: {
+        200: ok('Deleted.'),
+        404: err('Student not found.'),
+        409: err('The student is enrolled on a course.'),
+        ...guarded,
+      },
+    },
+  },
+
+  // --------------------------------------------------- courses: the catalogue
+  '/api/courses': {
+    get: {
+      tags: ['Courses'],
+      summary: 'The course catalogue',
+      parameters: [
+        { name: 'page', in: 'query', schema: { type: 'integer' } },
+        { name: 'per_page', in: 'query', schema: { type: 'integer', maximum: 200 } },
+        { name: 'active', in: 'query', schema: { type: 'string', enum: ['0', '1'] } },
+        { name: 'q', in: 'query', schema: { type: 'string' } },
+      ],
+      responses: { 200: ok('Courses, by name.'), ...guarded },
+    },
+    post: {
+      tags: ['Courses'],
+      summary: 'Add a course',
+      requestBody: body(
+        {
+          name: { type: 'string' },
+          code: str,
+          duration: { type: ['string', 'null'], description: 'Free text — "6 months" — because that is how a prospectus says it.' },
+          fee: { type: 'number' },
+          description: str,
+          is_active: bool,
+        },
+        ['name'],
+      ),
+      responses: {
+        201: ok('Course created.'),
+        400: err('A required field is missing.'),
+        409: err('That course name already exists.'),
+        ...guarded,
+      },
+    },
+  },
+
+  '/api/courses/{id}': {
+    patch: {
+      tags: ['Courses'],
+      summary: 'Update a course',
+      description:
+        'Changing the catalogue fee does not touch anybody\'s enrolment: an enrolment holds what that student was billed.',
+      parameters: [idParam],
+      requestBody: body({
+        name: { type: 'string' },
+        code: str,
+        duration: str,
+        fee: { type: 'number' },
+        description: str,
+        is_active: bool,
+      }),
+      responses: {
+        200: ok('Updated.'),
+        400: err('Nothing to update.'),
+        404: err('Course not found.'),
+        ...guarded,
+      },
+    },
+    delete: {
+      tags: ['Courses'],
+      summary: 'Delete a course',
+      description: 'Refused while anybody is enrolled; retire it with is_active instead.',
+      parameters: [idParam],
+      responses: {
+        200: ok('Deleted.'),
+        404: err('Course not found.'),
+        409: err('Students are enrolled on it.'),
+        ...guarded,
+      },
+    },
+  },
+
+  // -------------------------------------------------- courses: the enrolments
+  '/api/courses/enrolments': {
+    get: {
+      tags: ['Courses'],
+      summary: 'List enrolments',
+      description: 'One student on one course in one batch, joined to the names a screen has to show.',
+      parameters: [
+        { name: 'page', in: 'query', schema: { type: 'integer' } },
+        { name: 'per_page', in: 'query', schema: { type: 'integer', maximum: 200 } },
+        { name: 'status', in: 'query', schema: { type: 'string', enum: ['upcoming', 'ongoing', 'completed'] } },
+        { name: 'student_id', in: 'query', schema: { type: 'integer' } },
+        { name: 'discounted', in: 'query', schema: { type: 'string', enum: ['1'] }, description: 'Only enrolments carrying a discount.' },
+        { name: 'q', in: 'query', schema: { type: 'string' } },
+      ],
+      responses: { 200: ok('A page of enrolments.'), ...guarded },
+    },
+    post: {
+      tags: ['Courses'],
+      summary: 'Enrol a student',
+      description:
+        'The fee is copied from the catalogue rather than read through it, so a price change next year cannot restate what this student was billed. Enrolling also makes the registration active.',
+      requestBody: body(
+        {
+          student_id: int,
+          course_id: int,
+          batch: str,
+          start_date: str,
+          end_date: str,
+          fee: { type: 'number', description: 'Defaults to the catalogue fee.' },
+          fee_paid: { type: 'number' },
+          status: { type: 'string', enum: ['upcoming', 'ongoing', 'completed'] },
+          remark: str,
+        },
+        ['student_id', 'course_id'],
+      ),
+      responses: {
+        201: ok('Enrolled.'),
+        400: err('A student and a course are required.'),
+        404: err('Student or course not found.'),
+        409: err('That student is already on this course.'),
+        ...guarded,
+      },
+    },
+  },
+
+  '/api/courses/enrolments/{id}': {
+    patch: {
+      tags: ['Courses'],
+      summary: 'Update an enrolment',
+      description:
+        'Changing the fee recomputes the discount, because a discount is a rule rather than a number. Marking it completed stamps the completion date.',
+      parameters: [idParam],
+      requestBody: body({
+        batch: str,
+        start_date: str,
+        end_date: str,
+        fee: { type: 'number' },
+        fee_paid: { type: 'number' },
+        status: { type: 'string', enum: ['upcoming', 'ongoing', 'completed'] },
+        completed_on: str,
+        result: str,
+        remark: str,
+      }),
+      responses: {
+        200: ok('Updated.'),
+        400: err('Nothing to update, or a value is invalid.'),
+        404: err('Enrolment not found.'),
+        ...guarded,
+      },
+    },
+    delete: {
+      tags: ['Courses'],
+      summary: 'Delete an enrolment',
+      parameters: [idParam],
+      responses: {
+        200: ok('Deleted.'),
+        404: err('Enrolment not found.'),
+        409: err('A certificate has been issued against it.'),
+        ...guarded,
+      },
+    },
+  },
+
+  '/api/courses/enrolments/{id}/discount': {
+    patch: {
+      tags: ['Courses'],
+      summary: 'Apply or clear a discount',
+      description:
+        'The discount lives on the enrolment beside the fee it reduces, so the two cannot disagree. `final_fee` is computed here and never accepted from the request. An empty type clears it. Who approved it is the signed-in administrator, not a typed name.',
+      parameters: [idParam],
+      requestBody: body({
+        type: { type: ['string', 'null'], enum: ['percent', 'fixed', null] },
+        value: { type: 'number', description: 'Per cent, or rupees, depending on the type.' },
+        reason: str,
+        applied_on: str,
+      }),
+      responses: {
+        200: ok('The fee, the discount and what it leaves.'),
+        400: err('Over 100%, more than the fee, or below what is already paid.'),
+        404: err('Enrolment not found.'),
+        ...guarded,
+      },
+    },
+  },
+
+  '/api/courses/enrolments/{id}/payment': {
+    post: {
+      tags: ['Courses'],
+      summary: 'Take a fee payment',
+      description: 'Added to what is already paid rather than replacing it, and refused above the amount due.',
+      parameters: [idParam],
+      requestBody: body({ amount: { type: 'number' } }, ['amount']),
+      responses: {
+        200: ok('The new paid total and what is still due.'),
+        400: err('Zero or less, or more than is due.'),
+        404: err('Enrolment not found.'),
+        ...guarded,
+      },
+    },
+  },
+
+  // ------------------------------------------------- student certificates
+  '/api/student-certificates': {
+    get: {
+      tags: ['Students'],
+      summary: 'Course certificates',
+      description:
+        'Not the gemstone certificates in /api/reports. These are numbered IIGL-C-YYYY-NNNN so the two cannot be mistaken for one another across a desk.',
+      parameters: [
+        { name: 'page', in: 'query', schema: { type: 'integer' } },
+        { name: 'per_page', in: 'query', schema: { type: 'integer', maximum: 200 } },
+        { name: 'student_id', in: 'query', schema: { type: 'integer' } },
+        { name: 'q', in: 'query', schema: { type: 'string' } },
+      ],
+      responses: { 200: ok('A page of certificates.'), ...guarded },
+    },
+    post: {
+      tags: ['Students'],
+      summary: 'Issue a certificate',
+      description:
+        'Against a completed enrolment, not against a student: two courses earn two certificates. Refused while the course is unfinished.',
+      requestBody: body(
+        { student_course_id: int, issued_on: str, grade: str, remark: str, file: str },
+        ['student_course_id'],
+      ),
+      responses: {
+        201: ok('The certificate.'),
+        400: err('The course is not finished.'),
+        404: err('Enrolment not found.'),
+        409: err('Already issued for that enrolment.'),
+        ...guarded,
+      },
+    },
+  },
+
+  '/api/student-certificates/pending': {
+    get: {
+      tags: ['Students'],
+      summary: 'Completed courses with no certificate yet',
+      description: 'What the issuing screen works from.',
+      responses: { 200: ok('Enrolments awaiting a certificate.'), ...guarded },
+    },
+  },
+
+  '/api/student-certificates/{id}': {
+    patch: {
+      tags: ['Students'],
+      summary: 'Update a certificate',
+      description: 'The number is not editable: it identifies a document somebody else is holding.',
+      parameters: [idParam],
+      requestBody: body({ issued_on: str, grade: str, remark: str, file: str }),
+      responses: {
+        200: ok('Updated.'),
+        400: err('Nothing to update.'),
+        404: err('Certificate not found.'),
+        ...guarded,
+      },
+    },
+    delete: {
+      tags: ['Students'],
+      summary: 'Delete a certificate',
+      parameters: [idParam],
+      responses: { 200: ok('Deleted.'), 404: err('Certificate not found.'), ...guarded },
+    },
+  },
+
+  // ------------------------------------------------------------ enquiries
+  '/api/enquiries': {
+    get: {
+      tags: ['Enquiries'],
+      summary: 'List enquiries',
+      description:
+        'Administrators only. Ordered so anything still open outranks anything closed — the list is a queue of work, not an archive.',
+      parameters: [
+        { name: 'page', in: 'query', schema: { type: 'integer' } },
+        { name: 'per_page', in: 'query', schema: { type: 'integer', maximum: 200 } },
+        {
+          name: 'kind',
+          in: 'query',
+          schema: { type: 'string', enum: ['ask', 'visit', 'lead', 'complaint'] },
+          description: "The old menu's four entries: Ask Me, Visitor's Diary, Lead followup, Complain.",
+        },
+        { name: 'status', in: 'query', schema: { type: 'string', enum: ['new', 'open', 'closed'] } },
+        { name: 'q', in: 'query', schema: { type: 'string' }, description: 'Name, mobile, email or subject.' },
+      ],
+      responses: { 200: ok('A page of enquiries.'), ...guarded },
+    },
+    post: {
+      tags: ['Enquiries'],
+      summary: 'Record an enquiry',
+      description:
+        'Not public. The website form does not post here yet: an unauthenticated write endpoint needs a rate limit and a captcha decision of its own.',
+      requestBody: body(
+        {
+          kind: { type: 'string', enum: ['ask', 'visit', 'lead', 'complaint'] },
+          name: { type: 'string' },
+          mobile: { type: 'string' },
+          email: str,
+          subject: str,
+          message: str,
+          source: str,
+          status: { type: 'string', enum: ['new', 'open', 'closed'] },
+          assigned_to: { type: ['integer', 'null'] },
+          lab_id: { type: ['integer', 'null'] },
+          remark: str,
+        },
+        ['name', 'mobile'],
+      ),
+      responses: { 201: ok('Enquiry recorded.'), 400: err('A required field is missing.'), ...guarded },
+    },
+  },
+
+  '/api/enquiries/summary': {
+    get: {
+      tags: ['Enquiries'],
+      summary: 'Counts per kind and per status',
+      responses: { 200: ok('Counts, and how many are still waiting.'), ...guarded },
+    },
+  },
+
+  '/api/enquiries/{id}': {
+    get: {
+      tags: ['Enquiries'],
+      summary: 'One enquiry',
+      parameters: [idParam],
+      responses: { 200: ok('The enquiry.'), 404: err('Enquiry not found.'), ...guarded },
+    },
+    patch: {
+      tags: ['Enquiries'],
+      summary: 'Update an enquiry',
+      description:
+        'Closing stamps `closed_at`; reopening clears it, so the column answers "when was this finished" rather than "when was it last closed".',
+      parameters: [idParam],
+      requestBody: body({
+        kind: { type: 'string', enum: ['ask', 'visit', 'lead', 'complaint'] },
+        name: { type: 'string' },
+        mobile: { type: 'string' },
+        email: str,
+        subject: str,
+        message: str,
+        source: str,
+        status: { type: 'string', enum: ['new', 'open', 'closed'] },
+        assigned_to: { type: ['integer', 'null'] },
+        remark: str,
+      }),
+      responses: {
+        200: ok('Updated.'),
+        400: err('Nothing to update, or a value is invalid.'),
+        404: err('Enquiry not found.'),
+        ...guarded,
+      },
+    },
+    delete: {
+      tags: ['Enquiries'],
+      summary: 'Delete an enquiry',
+      parameters: [idParam],
+      responses: { 200: ok('Deleted.'), 404: err('Enquiry not found.'), ...guarded },
+    },
+  },
+
+  // ------------------------------------------------------------ customers
   '/api/customers/registered': {
     get: {
       tags: ['Customers'],
@@ -352,13 +1071,20 @@ export const extraPaths: Record<string, unknown> = {
     get: {
       tags: ['Attendance'],
       summary: 'Attendance history',
-      description: 'Your own by default. A laboratory or administrator can read one of their people with emp_id.',
+      description:
+        'Your own by default. A laboratory or administrator can read one of their people with emp_id. `from` and `to` are inclusive dates, either given alone: a calendar asks for a month that way, because paging newest-first can split one across two pages and a calendar that pages to fill itself in draws holes.',
       parameters: [
         { name: 'page', in: 'query', schema: { type: 'integer' } },
         { name: 'per_page', in: 'query', schema: { type: 'integer', maximum: 200 } },
         { name: 'emp_id', in: 'query', schema: { type: 'integer' } },
+        { name: 'from', in: 'query', schema: { type: 'string', format: 'date' } },
+        { name: 'to', in: 'query', schema: { type: 'string', format: 'date' } },
       ],
-      responses: { 200: ok('A page of days, newest first.'), 400: err('Not permitted to read that person.'), ...guarded },
+      responses: {
+        200: ok('A page of days, newest first.'),
+        400: err('Not permitted to read that person, or a date that is not YYYY-MM-DD.'),
+        ...guarded,
+      },
     },
   },
 
@@ -530,36 +1256,6 @@ export const extraPaths: Record<string, unknown> = {
     },
   },
 
-  '/api/users/roles/{id}/permissions': {
-    get: {
-      tags: ['Permissions'],
-      summary: 'The matrix for a role',
-      parameters: [idParam],
-      responses: { 200: ok('One entry per action type, absent rows reported as no rights.'), ...guarded },
-    },
-    put: {
-      tags: ['Permissions'],
-      summary: 'Set the permissions for one action type',
-      description:
-        'Replaces the four flags for that action type on that role. This is enforced: staff without view and create on product_collection see only the orders they took or were assigned.',
-      parameters: [idParam],
-      requestBody: body(
-        {
-          action_type: {
-            type: 'string',
-            enum: ['account', 'admin_employee', 'customer', 'employee_management', 'laboratory', 'product_collection', 'report', 'visitor_book', 'website_blog', 'website_contact', 'website_education', 'website_enquiry', 'website_home', 'website_report'],
-          },
-          view: bool,
-          create: bool,
-          update: bool,
-          delete: bool,
-        },
-        ['action_type'],
-      ),
-      responses: { 200: ok('Saved. The cached matrix is dropped, so it applies at once.'), 400: err('Unknown action type.'), ...guarded },
-    },
-  },
-
   // -------------------------------------------------------------- accounts
   '/api/users/me': {
     patch: {
@@ -580,6 +1276,10 @@ export const extraPaths: Record<string, unknown> = {
         bank_name: str,
         ifsc_code: str,
         account_no: str,
+        adhar_no: str,
+        adhar_photo: str,
+        pan_no: str,
+        pan_photo: str,
         profile_photo: str,
         company_logo: str,
         signature: str,
@@ -592,15 +1292,20 @@ export const extraPaths: Record<string, unknown> = {
     get: {
       tags: ['Users'],
       summary: 'Read one account',
-      description: 'Administrators only. Everyone else reads themselves at /api/users/me.',
+      description:
+        'Administrators only. Everyone else reads themselves at /api/users/me. Carries `employment` — the current posting with its joining date, salary and employer, resolved to a user id and a name — or null when nobody employs them, which is the case for a laboratory and for somebody whose employment was ended.',
       parameters: [idParam],
-      responses: { 200: ok('Account.'), 404: err('Account not found.'), ...guarded },
+      responses: {
+        200: ok('Account, with its current employment.'),
+        404: err('Account not found.'),
+        ...guarded,
+      },
     },
     patch: {
       tags: ['Users'],
       summary: 'Update any account',
       description:
-        'Administrators only. A mobile number is checked against every other account first: the column carries no unique constraint, and duplicates are what locked three staff out of the old system.',
+        'Administrators only. A mobile number is checked against every other account first: the column carries no unique constraint, and duplicates are what locked three staff out of the old system. `empid` is a key as well as a label — employments name their employer by it — so one that anybody still works under cannot be changed.',
       parameters: [idParam],
       requestBody: body({
         fullname: { type: 'string' },
@@ -617,7 +1322,7 @@ export const extraPaths: Record<string, unknown> = {
       responses: {
         200: ok('Updated.'),
         400: err('Nothing to update, or a blank mobile number.'),
-        409: err('Another account already uses that mobile number.'),
+        409: err('Another account already uses that mobile number, or employments still point at this empid.'),
         404: err('Account not found.'),
         ...guarded,
       },
@@ -638,9 +1343,9 @@ export const extraPaths: Record<string, unknown> = {
   '/api/users/{id}/employment': {
     post: {
       tags: ['Users'],
-      summary: 'Attach a person to a laboratory',
+      summary: 'Attach a person to an employer',
       description:
-        'Without this an account created by POST /api/users belongs to nobody and cannot do any work, because every scoped query resolves the laboratory through this table.',
+        'Moves somebody onto an employer’s books. POST /api/users already does this for an account it creates, so this is for the ones that arrived without an employment — a Laravel-era row, or a person moving between laboratories after their old employment was ended. The employer is head office or a laboratory: head office employs its own staff too. `lab_id` is a **user id**; the employment stores that employer’s `empid`, so an employer without one is refused. `users.parent_id` is written at the same time, from the same value.',
       parameters: [idParam],
       requestBody: body(
         { lab_id: int, joining_date: { type: 'string' }, salary: { type: 'string' }, remark: str },
@@ -648,9 +1353,27 @@ export const extraPaths: Record<string, unknown> = {
       ),
       responses: {
         201: ok('Employed.'),
-        400: err('Not a laboratory, or not a staff account.'),
+        400: err('Not an employer, not a staff account, or the employer has no empid.'),
         409: err('Already employed somewhere. End that first.'),
         404: err('Account not found.'),
+        ...guarded,
+      },
+    },
+    patch: {
+      tags: ['Users'],
+      summary: 'Change the terms of a posting',
+      description:
+        'The salary and the joining date live on the employment, not on the account, so PATCH /api/users/{id} cannot reach them. Moving somebody to another employer is not this — that is ending one employment and starting another, which keeps the history.',
+      parameters: [idParam],
+      requestBody: body({
+        salary: { type: 'number' },
+        joining_date: { type: 'string', format: 'date' },
+        remark: str,
+      }),
+      responses: {
+        200: ok('Saved.'),
+        400: err('Nothing to update, or a salary or date that is not valid.'),
+        404: err('Not currently employed anywhere.'),
         ...guarded,
       },
     },
@@ -693,4 +1416,166 @@ export const extraPaths: Record<string, unknown> = {
       },
     },
   },
+
+  // ------------------------------------------------------ discount coupons
+  '/api/coupons': {
+    get: {
+      tags: ['Coupons'],
+      summary: 'List coupons',
+      description:
+        'Head office only, like every course route. Each row names its course (null is any course) and carries `spent` — the usage limit is reached — and `expired`, so a list never shows a coupon as usable when nobody can use it.',
+      parameters: [
+        { name: 'page', in: 'query', schema: int },
+        { name: 'per_page', in: 'query', schema: int },
+        { name: 'q', in: 'query', schema: { type: 'string' }, description: 'Matches the code or the title.' },
+        { name: 'course_id', in: 'query', schema: int },
+        { name: 'active', in: 'query', schema: { type: 'string', enum: ['0', '1'] } },
+      ],
+      responses: { 200: ok('A page of coupons.'), ...guarded },
+    },
+    post: {
+      tags: ['Coupons'],
+      summary: 'Write a coupon',
+      description:
+        'A coupon is money off a **course fee** and nothing else. The code is upper-cased and stripped of spaces: it is read off a printout and typed back in. `course_id` ties it to one course; null is any course we run.',
+      requestBody: body(
+        {
+          code: { type: 'string', examples: ['NEWYEAR25'] },
+          title: str,
+          description: str,
+          discount_type: { type: 'string', enum: ['percent', 'fixed'] },
+          discount_value: { type: 'number', examples: [20] },
+          max_discount: { type: ['number', 'null'], description: 'Caps a percentage. Null is no cap.' },
+          min_amount: { type: 'number', description: 'The course fee has to reach this first.' },
+          course_id: { type: ['integer', 'null'] },
+          valid_from: { type: ['string', 'null'], format: 'date' },
+          valid_to: { type: ['string', 'null'], format: 'date' },
+          usage_limit: { type: ['integer', 'null'], description: 'Total uses. Null is unlimited.' },
+          per_student_limit: { type: ['integer', 'null'] },
+          is_active: bool,
+        },
+        ['code', 'discount_value'],
+      ),
+      responses: {
+        201: ok('Coupon written.'),
+        400: err('A required field is missing, a percentage above 100, an unknown course, or a date that is not YYYY-MM-DD.'),
+        409: err('That code is already a coupon.'),
+        ...guarded,
+      },
+    },
+  },
+
+  '/api/coupons/validate': {
+    post: {
+      tags: ['Coupons'],
+      summary: 'What a coupon would take off an enrolment',
+      description:
+        'Changes nothing. Type the code against an enrolment and see the figure before committing to it. A coupon that cannot be used comes back as a 400 naming the reason \u2014 switched off, not yet valid, expired on a date, for another course, fee below the minimum, used up, or already used by this student \u2014 because "not valid" sends somebody to the telephone and "expired on 2026-08-31" does not.',
+      requestBody: body(
+        { code: { type: 'string' }, enrolment_id: int },
+        ['code', 'enrolment_id'],
+      ),
+      responses: {
+        200: ok('The discount, and what the student then owes.'),
+        400: err('The coupon cannot be used, with the reason.'),
+        404: err('No such coupon, or no such enrolment.'),
+        ...guarded,
+      },
+    },
+  },
+
+  '/api/coupons/redeem': {
+    post: {
+      tags: ['Coupons'],
+      summary: 'Spend a coupon on an enrolment',
+      description:
+        'Writes the enrolment\u2019s own discount columns \u2014 the same ones PATCH /api/courses/enrolments/{id}/discount writes, with `final_fee` computed here and never taken from the request \u2014 records the redemption and moves the coupon\u2019s count, in one transaction. `discount_reason` becomes "Coupon CODE", so the discount screen explains itself without a join. Everything /api/coupons/validate checks is checked again: the two calls are minutes apart, and a coupon with one use left can be presented twice in that gap.',
+      requestBody: body(
+        { code: { type: 'string' }, enrolment_id: int, note: str },
+        ['code', 'enrolment_id'],
+      ),
+      responses: {
+        201: ok('Spent, and the enrolment discounted.'),
+        400: err('A field is missing or invalid.'),
+        404: err('No such coupon, or no such enrolment.'),
+        409: err('The coupon cannot be used, or it would take the fee below what is already paid.'),
+        ...guarded,
+      },
+    },
+  },
+
+  '/api/coupons/{id}': {
+    get: {
+      tags: ['Coupons'],
+      summary: 'Read one coupon',
+      parameters: [idParam],
+      responses: { 200: ok('Coupon.'), 404: err('Coupon not found.'), ...guarded },
+    },
+    patch: {
+      tags: ['Coupons'],
+      summary: 'Change a coupon',
+      description: 'Only the fields present in the body change.',
+      parameters: [idParam],
+      requestBody: body({
+        code: { type: 'string' },
+        title: str,
+        description: str,
+        discount_type: { type: 'string', enum: ['percent', 'fixed'] },
+        discount_value: { type: 'number' },
+        max_discount: { type: ['number', 'null'] },
+        min_amount: { type: 'number' },
+        course_id: { type: ['integer', 'null'] },
+        valid_from: { type: ['string', 'null'], format: 'date' },
+        valid_to: { type: ['string', 'null'], format: 'date' },
+        usage_limit: { type: ['integer', 'null'] },
+        per_student_limit: { type: ['integer', 'null'] },
+      }),
+      responses: {
+        200: ok('Saved.'),
+        400: err('Nothing to update, or a value that is not allowed.'),
+        409: err('That code is already a coupon.'),
+        ...guarded,
+      },
+    },
+    delete: {
+      tags: ['Coupons'],
+      summary: 'Delete a coupon',
+      description:
+        'Only one that has never been spent. A coupon with redemptions is switched off instead \u2014 deleting it would take the record of money already taken off a student\u2019s fee with it.',
+      parameters: [idParam],
+      responses: {
+        200: ok('Deleted.'),
+        409: err('It has been used. Switch it off instead.'),
+        404: err('Coupon not found.'),
+        ...guarded,
+      },
+    },
+  },
+
+  '/api/coupons/{id}/active': {
+    patch: {
+      tags: ['Coupons'],
+      summary: 'Switch a coupon on or off',
+      description: 'How a coupon is withdrawn once it has been spent at least once.',
+      parameters: [idParam],
+      requestBody: body({ is_active: bool }, ['is_active']),
+      responses: { 200: ok('Saved.'), 404: err('Coupon not found.'), ...guarded },
+    },
+  },
+
+  '/api/coupons/{id}/redemptions': {
+    get: {
+      tags: ['Coupons'],
+      summary: 'Where a coupon went',
+      description:
+        'One enrolment per row, newest first: the student, the course, the fee before, the discount, what was left, and who applied it. The row keeps the code as it stood at the time \u2014 a coupon can be renamed, what a student was charged cannot.',
+      parameters: [
+        idParam,
+        { name: 'page', in: 'query', schema: int },
+        { name: 'per_page', in: 'query', schema: int },
+      ],
+      responses: { 200: ok('A page of redemptions.'), 404: err('Coupon not found.'), ...guarded },
+    },
+  },
+
 };

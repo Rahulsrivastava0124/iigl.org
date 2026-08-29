@@ -80,7 +80,8 @@ export const api = {
 export interface SessionUser {
   id: number;
   fullname: string;
-  roleId: number;
+  /** Null for somebody with no role: their permissions were granted one by one. */
+  roleId: number | null;
   labId: number | null;
 }
 
@@ -133,12 +134,16 @@ export interface Transaction {
 
 export interface Lab {
   id: number;
+  /** The code employments name this laboratory by — `employements.parent_id`. */
+  empid: string | null;
   fullname: string;
   mobile: string;
   city: string | null;
   commision: number | null;
   is_active: number;
   role_id: number;
+  /** People working under it — `employements.parent_id` holding its `empid`. */
+  staff: number;
 }
 
 export interface Category {

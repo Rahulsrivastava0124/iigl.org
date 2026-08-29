@@ -262,6 +262,113 @@ Use the shared components rather than a `Chip` with a colour picked by hand:
 All three are `variant="outlined"` and `size="small"`. A chip always carries a
 **word as well as a colour** — colour is never the only signal.
 
+### Active / Inactive status
+
+For boolean active states, use a filled `Chip` with green or red background:
+
+```tsx
+<Chip
+  label={row.is_active ? 'Active' : 'Inactive'}
+  size="small"
+  sx={{
+    bgcolor: row.is_active ? 'success.main' : 'error.main',
+    color: 'common.white',
+    fontWeight: 600,
+    fontSize: 12,
+  }}
+/>
+```
+
+### Toggle action buttons
+
+When a row has a toggle action (activate/deactivate), the icon colour reflects
+the current state:
+
+```tsx
+<Tooltip title={row.is_active ? 'Deactivate' : 'Activate'}>
+  <IconButton
+    size="small"
+    onClick={() => toggle(row)}
+    sx={{
+      color: row.is_active ? 'success.main' : 'error.main',
+      '&:hover': {
+        bgcolor: row.is_active ? 'success.main' : 'error.main',
+        color: 'common.white',
+      },
+    }}
+  >
+    {row.is_active ? <ToggleOnIcon /> : <ToggleOffIcon />}
+  </IconButton>
+</Tooltip>
+```
+
+### Confirmation dialogs
+
+**Every destructive action requires confirmation.** Use the `ConfirmDialog` component:
+
+```tsx
+import { ConfirmDialog } from '../components/ui';
+import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
+
+const [deleting, setDeleting] = useState<Item | null>(null);
+
+// In the table row:
+<IconAction
+  label="Delete item"
+  icon={DeleteIcon}
+  danger
+  onClick={() => setDeleting(item)}
+/>
+
+// At the end of the component:
+<ConfirmDialog
+  open={Boolean(deleting)}
+  title="Delete Item"
+  message={<>Are you sure you want to delete <strong>{deleting?.name}</strong>?</>}
+  warning="This action cannot be undone."
+  onClose={() => setDeleting(null)}
+  onConfirm={handleDelete}
+  confirmLabel="Delete"
+  confirmIcon={DeleteIcon}
+  busy={busy}
+/>
+```
+
+**For non-destructive confirmations** (like "Convert to Registration"), use `danger={false}`:
+
+```tsx
+<ConfirmDialog
+  open={Boolean(converting)}
+  title="Convert to Registration"
+  message={<>Convert <strong>{converting?.name}</strong> to a student?</>}
+  warning="This creates a registration and issues a number."
+  onClose={() => setConverting(null)}
+  onConfirm={handleConvert}
+  confirmLabel="Convert"
+  confirmIcon={ConvertIcon}
+  danger={false}  // Uses primary color instead of red
+  busy={busy}
+/>
+```
+
+| Prop | Type | Purpose |
+| --- | --- | --- |
+| `open` | boolean | Controls visibility |
+| `title` | string | Red header for danger, primary for non-danger |
+| `message` | ReactNode | Main confirmation text |
+| `warning` | string | Secondary text (optional) |
+| `confirmLabel` | string | Button text (default: "Delete") |
+| `confirmIcon` | Icon | Icon shown in button |
+| `danger` | boolean | Red theme (default: true) |
+| `busy` | boolean | Disables button during action |
+
+| Element | Style |
+| --- | --- |
+| Dialog width | `maxWidth="xs"` — narrow, focused |
+| Header | Red `#d32f2f` for danger, primary for non-danger |
+| Buttons | Small size with icon + text |
+| Cancel | `color="inherit"` — neutral |
+
 ---
 
 ## Components
@@ -298,6 +405,23 @@ feel finished.
 - The actions column is last and unlabelled: `<TableCell />` in the head.
 - Wrapping text needs `sx={{ whiteSpace: 'normal', minWidth: 160 }}`; everything
   else stays on one line and the container scrolls.
+- **Row controls are icons, never words** — `RowActions` + `IconAction`. See
+  *Row actions* below for why, and for the one exception.
+- **A second line under a cell carries the identifier**, not another column: the
+  student's registration number under their name, the batch under the course.
+  A `Typography variant="caption"` with `sx={{ display: 'block' }}` — MUI 9
+  dropped `display` as a prop.
+- **Every state renders through `StateChip`.** A table never writes a colour.
+
+### What a table row must not do
+
+- **No object held from a list.** Hold the id; derive the row. A `rows.find(…)`
+  against a list that has since refiltered returns `undefined`, and a save
+  guarded on it does nothing at all, silently.
+- **No `roleId <= 2` style rank tests.** A custom role takes any id above the
+  built-in five — use `isSuper()` / `isAdmin()`.
+- **No destructive control without its reason.** A disabled delete says why in
+  its tooltip: "Somebody still holds this role", not a grey icon.
 
 ### Panel anatomy
 
@@ -325,6 +449,40 @@ A list screen is one `Panel`, and everything has a fixed place in it:
   put in a panel supplies its own `px: 2, py: 1.5`.
 - **A filter that is not set says so:** `TableFrame emptyText="Select a
   category."` rather than an empty table or "Nothing here yet."
+
+### Filters live in the URL
+
+A filter that changes what the table shows is a **query parameter**, not
+component state:
+
+```
+/orders?status=preparing        /students?status=alumni
+/orders?dues=1                  /enquiries?kind=complaint&status=new
+/courses?tab=enrolments         /customers?tab=verifiers
+```
+
+Three things follow from that, and all three are the point:
+
+- the menu can link straight to a filtered list, which is how half the sidebar
+  works — an entry is a URL, not a screen with instructions attached;
+- a reload, a back button and a pasted link all land on the same rows;
+- the breadcrumb can name the filter rather than the screen, through `VIEWS` in
+  `src/lib/breadcrumbs.ts` — `Account › Ledger`, not `Account › Transactions`.
+
+**The search term is the exception.** It stays in component state and is
+debounced through `useDebounced`, because a URL rewritten on every keystroke
+fills the history with fragments of a word.
+
+```tsx
+const [params, setParams] = useSearchParams();
+const status = params.get('status') ?? '';        // filter: URL
+const [search, setSearch] = useState('');         // term: state
+const term = useDebounced(search);
+```
+
+Changing a filter resets the page to 1. Setting a filter to its "all" value
+removes the parameter rather than writing `?status=` — an empty parameter is
+noise in a link somebody may send to a colleague.
 
 ### Filters and forms share their selects
 
@@ -361,7 +519,151 @@ returns `undefined`, and a save guarded on that object silently does nothing.
 - Explanation goes in `helperText`, not a paragraph above the field.
 - Dialogs stack fields in `<Stack spacing={2}>`.
 
+### Form button alignment
+
+**All form buttons are right-aligned.** This applies to every form in the panel:
+
+- `FormPanel` (inline forms above lists)
+- `Dialog` (modal forms)
+- Full-page forms (Create/Edit pages)
+- Custom form layouts
+
+```tsx
+{/* FormPanel and Dialog handle this automatically */}
+
+{/* For custom forms, use this pattern: */}
+<Stack
+  direction="row"
+  spacing={1}
+  sx={{ mt: 3, pt: 2, borderTop: 1, borderColor: 'divider', justifyContent: 'flex-end' }}
+>
+  <Button color="inherit" onClick={cancel}>Cancel</Button>
+  <Button variant="contained" type="submit">Save</Button>
+</Stack>
+```
+
+| Rule | Implementation |
+| --- | --- |
+| **Right-aligned** | `justifyContent: 'flex-end'` on the button container |
+| **Cancel first, Submit last** | Reading order: secondary action, then primary |
+| **Divider above** | `borderTop: 1, borderColor: 'divider'` separates from fields |
+| **Spacing** | `mt: 3, pt: 2` — margin above divider, padding below |
+
+### Full-page forms (Create / Edit)
+
+A full-page form like Laboratory Create or Edit follows this structure:
+
+```tsx
+<Panel title="Add New Laboratory" actions={<BackButton />}>
+  <Box component="form" onSubmit={submit} sx={{ p: 2 }}>
+    <Grid container spacing={2}>
+      {/* All fields in a flat 3-column grid, no section headers */}
+      <Grid size={{ xs: 12, md: 4 }}><TextField … /></Grid>
+    </Grid>
+    <Stack
+      direction="row"
+      spacing={2}
+      sx={{ mt: 3, pt: 2, borderTop: 1, borderColor: 'divider', justifyContent: 'flex-end' }}
+    >
+      <Button variant="outlined" onClick={cancel}>Cancel</Button>
+      <Button variant="contained" type="submit">Save</Button>
+    </Stack>
+  </Box>
+</Panel>
+```
+
+| Rule | Why |
+| --- | --- |
+| **Flat grid, no sections** | Keeps the form compact; section headers add visual noise |
+| **3-column layout** | `Grid size={{ xs: 12, md: 4 }}` — stacks on mobile |
+| **Spacing 2** | Tighter than 2.5; forms should feel dense |
+| **Buttons on the right** | `justifyContent: 'flex-end'` — primary action is rightmost |
+| **Cancel before Submit** | Secondary action first, primary action last |
+| **Divider above buttons** | `borderTop: 1, borderColor: 'divider'` separates actions |
+| **Back button in header** | Panel `actions` slot, not inside the form |
+
 ---
+
+## Long grouped screens collapse
+
+A screen that shows the same table five times over — the permission matrix by
+category is the one that does — gives each group a chevron and a summary in its
+header, and one **Collapse all** / **Expand all** beside the heading.
+
+```tsx
+<Panel
+  title={label}
+  actions={
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+      <Typography variant="caption" color="text.secondary">
+        {granted} of {perms.length} granted
+      </Typography>
+      <IconAction label={open ? `Collapse ${label}` : `Expand ${label}`} … />
+    </Stack>
+  }
+>
+  <Collapse in={open} timeout="auto" unmountOnExit>…</Collapse>
+</Panel>
+```
+
+Three rules make it useful rather than merely tidy:
+
+- **Everything starts open.** A permission screen that hides what is granted
+  until you go looking is worse than a long one.
+- **A closed group still reports itself** — "5 of 6 granted" in the header — so
+  collapsing never hides the answer, only the detail.
+- **`unmountOnExit`.** A closed group's table leaves the DOM, so the checkboxes
+  in it cannot be tabbed into or read out by a screen reader while invisible.
+
+## Changing a password
+
+**One field: the new password.** No current password, no repeat.
+
+That is a decision with a cost, and it is written here so nobody has to
+rediscover it: the session is the only authority, so anybody who reaches an open
+one — a shared machine, an unlocked screen — can take the account over. The API
+matches the screen: `current_password` is optional, and still verified when a
+client sends one, so an old client cannot be waved through with rubbish.
+
+With no repeat field, a typo becomes a password nobody knows. The eye toggle on
+`PasswordField` is what stands in for the second field, and the helper text says
+to use it.
+
+## File upload
+
+One component, `FileField`, on **react-dropzone**. Every image and document in
+the panel goes through it: profile photographs, company logos, signatures,
+attribute icons, banners, website images, certificate images, and a student's
+photo, ID proof and qualification.
+
+```tsx
+<FileField
+  label="ID proof"
+  bucket="documentation"
+  value={docs.id_proof}
+  onChange={(path) => setDocs((d) => ({ ...d, id_proof: path }))}
+/>
+```
+
+- **A drop zone, not a file button.** What is being attached is a photograph or
+  a scan somebody is already looking at in a folder; dragging it in is fewer
+  steps than a dialog. Clicking the zone still opens the dialog and the input
+  keeps its keyboard behaviour, so nothing is lost for anyone who cannot drag.
+- **One field, one file.** `multiple: false`. Silently taking the first of five
+  dropped files would be a guess.
+- **The limit is the API's limit**: 8 MB, the same number `upload.service.ts`
+  gives multer, checked here so an oversized file fails instantly rather than
+  after the upload. Two different numbers would mean the panel promising
+  something the server refuses.
+- **Rejections are explained in words** — "That file is larger than 8 MB", "That
+  kind of file is not accepted here" — never a silent no-op.
+- **Uploading and attaching stay separate.** The field holds a path; the form
+  decides when to save. An abandoned form therefore leaves a file on disk and no
+  record, which is the right way round: an orphaned file costs disk, a
+  half-written record costs a reissue.
+- The `bucket` is one of the nine the API writes into. They are the Laravel
+  `public/` directories, and the stored path keeps the `public/uploads/...`
+  shape the old application uses.
 
 ## Messages
 
@@ -409,27 +711,47 @@ page down on every save and then sat there until something else replaced it.
 
 | Kind | `role_id` | Signs in at | Sees |
 | --- | --- | --- | --- |
-| **Super admin** | 1 | `/super` or the default address | Everything, unrestricted |
-| **Admin** | 1 | the default address | Everything, unrestricted |
-| **Staff** | 2, 3, 4, 5 | `/team` | Their laboratory, narrowed by the permission matrix |
+| **Super admin** | 1 | `super.` or the bare domain | Every laboratory, unrestricted |
+| **Admin** — a laboratory | 2 | `admin.` | Its own laboratory, unrestricted within it |
+| **Team** — their staff | 3, plus the older 4 and 5, and any custom role | `team.` | Their laboratory, narrowed by the permission matrix |
+| *(nobody)* | `NULL` | no door admits them | Only what was granted to them one row at a time |
 
-> **The database has five roles, not three.** `administrator` (1),
-> `frenchise` (2, a laboratory), `LAB EMPLOYEE` (3), `MANAGER` (4) and
-> `Office Boy` (5). Roles 3, 4 and 5 are all staff; role 2 is a laboratory,
-> which behaves like staff but scopes to itself rather than to an employer.
+> **Admin and laboratory are the same account.** A laboratory is a user with
+> `role_id = 2`, and that user is its admin — there is no separate owner record.
+> `isAdmin()` and `isLab()` in `src/lib/portal.ts` are the same test under two
+> names; `isSuper()` is head office.
 >
-> Super admin and admin are the **same role** in the data — the split is which
-> door they came in by, not what they may do. If they are meant to be different,
-> that is a schema change and a decision, not a styling one.
+> **`NULL` is not a role.** It is somebody with no role at all, holding only
+> their own grants in `user_permissions`. Nothing coerces a role through
+> `Number()` — `Number(null)` is 0, and a decoder that turns "no role" into a
+> number is one schema change from turning it into somebody's role.
 >
-> Guards test `role_id > 2` for staff. **Never hardcode `role_id === 3`** —
-> roles 4 and 5 are in use.
+> **Rank tests are sets, not inequalities.** Custom roles take any id above the
+> built-in five, so `roleId <= 2` would quietly admit the next one somebody
+> creates. Never hardcode a role id above 2.
+>
+> Roles are **not a fixed list**: head office and a laboratory can both create
+> them, and a laboratory's own role is invisible to every other laboratory.
+
+**A full description of the three roles, the doors and where each rule is
+enforced is in `ROLES.md` at the repo root.**
 
 ### Permissions in the UI
 
-`role_permissions` carries 14 action types per role, each with view, create,
-update and delete. It is **enforced by the API**, and the UI should not offer a
-button the role would be refused.
+`role_permissions` carries one row per role per action type, each with view,
+create, update and delete. The action list itself lives in `permission_actions`,
+so **never hardcode the fourteen** — read `/roles/actions`, and respect
+`enforced: false` by saying so on screen.
+
+Adding to that list is an API call, not a screen: a new name would appear on
+every role while granting nothing until the check that reads it is written, so
+it belongs with that code rather than behind a button.
+
+An individual grant in `user_permissions` **replaces** the role's answer for that
+action, so it can take away as well as give. `/api/users/me/permissions` returns
+the resolved answer — own grants, then role — which is the same order the API
+uses on every request, so a control hidden on it is exactly a control the API
+would refuse.
 
 ```tsx
 import { usePermissions } from '@/lib/permissions';
@@ -631,6 +953,41 @@ the instruction, not a repetition.
 5. Gate every write control behind a permission check.
 6. Typecheck with `npx tsc -p tsconfig.app.json --noEmit` and build with
    `npx vite build`. The root `tsconfig.json` checks nothing.
+
+---
+
+## Calendars
+
+`MonthCalendar.tsx` draws a month. `EmployeeView` uses it for one person's
+attendance and `Attendance` for the month behind today's clock; anything else
+that happens on days belongs there too. There is no date library and no
+`@mui/x-date-pickers`: a month grid is a CSS grid of seven columns, and the
+picker components exist to *choose* a date, which none of these screens asks
+for. Date **fields** stay `TextField type="date"`, which is the browser's own
+calendar and is what every form in the panel already uses.
+
+The component owns the grid, the month navigation and the colours. The caller
+owns the data and answers `dayFor(date)` with a tone, up to two short lines and
+a tooltip, or null for a day where nothing happened.
+
+- `display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))'` on a
+  `Box`, with one empty `Box` for each weekday before the first of the month.
+  `minmax(0, 1fr)` rather than `1fr`, or a long cell refuses to shrink and the
+  week overflows the panel.
+- `monthRange()` gives the `from`/`to` an endpoint takes, so no screen builds
+  those two dates itself.
+- Build the date key by hand — `${y}-${pad(m + 1)}-${pad(d)}`. `toISOString()`
+  converts to UTC first, so at +5:30 every day before 05:30 names the day
+  before, and the calendar lights the wrong square.
+- A day carries a state, so it takes a tone: `TONE[tone].soft` as the fill,
+  `TONE[tone].main` for the figures on it. Today is an `outline`, not a fill —
+  the fill already means something.
+- Fetch the whole window (`from`/`to`), never a page. Paging is newest-first, a
+  month can straddle two pages, and a calendar that pages to fill itself in
+  draws holes that look like absences.
+- Say what a blank means. "A blank day is one with no attendance recorded" sits
+  under the grid beside the two state chips, because a blank square is the one
+  thing on the screen with no colour to explain it.
 
 ---
 

@@ -1,4 +1,5 @@
 -- ---------------------------------------------------------------------------
+-- @blocked duplicate data must be resolved first — see the notes below
 -- 002 — unique constraints
 --
 -- NOT YET RUNNABLE. Both constraints are blocked by data that already violates
