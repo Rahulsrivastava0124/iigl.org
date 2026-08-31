@@ -79,13 +79,11 @@ export default function FaqSection() {
           <p className="m-0 text-[12px] font-medium uppercase tracking-[0.14em] text-[#bd7724]">
             FAQ
           </p>
-          <span aria-hidden className="mx-auto mt-3 block h-px w-14 bg-[#d58a2b]/70" />
-
-          <h2 className="m-0 mt-5 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[28px]">
+          <h2 className="m-0 mt-4 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[28px]">
             Frequently Asked Questions
           </h2>
 
-          <p className="mx-auto mt-3 max-w-[760px] text-[16px] font-normal leading-[1.7] text-[#4a5265]">
+          <p className="mx-auto mt-3 max-w-[760px] text-[15px] font-normal leading-[1.65] text-[#4a5265]">
             Find answers to the most common questions about our grading reports and services.
           </p>
         </div>
@@ -95,15 +93,15 @@ export default function FaqSection() {
           <aside className="rounded-xl border border-[#e6e8ee] bg-[#fbfbfc] px-6 py-8 text-center">
             <span
               aria-hidden
-              className="inline-flex h-[86px] w-[86px] items-center justify-center rounded-full border border-[#e8dccb] bg-white text-[#d58a2b]"
+              className="icon-gold-outline inline-flex h-[86px] w-[86px]"
             >
               <MessageCircleQuestion className="h-[38px] w-[38px]" strokeWidth={1.5} />
             </span>
 
-            <h3 className="m-0 mt-5 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[22px] font-medium text-[#061948]">
+            <h3 className="m-0 mt-5 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[20px] font-medium text-[#061948]">
               Have a Question?
             </h3>
-            <p className="mx-auto mt-3 max-w-[300px] text-[14px] font-normal leading-[1.7] text-[#4a5265]">
+            <p className="mx-auto mt-3 max-w-[300px] text-[13.5px] font-normal leading-[1.7] text-[#4a5265]">
               Can’t find the answer you’re looking for? Our support team is here to help you.
             </p>
 
@@ -112,21 +110,21 @@ export default function FaqSection() {
                 <li className="flex items-center gap-3" key={label}>
                   <span
                     aria-hidden
-                    className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full border border-[#e8dccb] bg-white text-[#d58a2b]"
+                    className="icon-gold-outline h-[42px] w-[42px] shrink-0"
                   >
                     <Icon className="h-[19px] w-[19px]" strokeWidth={1.6} />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-[14px] font-medium text-[#061948]">{label}</span>
+                    <span className="block text-[13.5px] font-medium text-[#061948]">{label}</span>
                     {href ? (
                       <a
-                        className="block text-[13.5px] font-normal text-[#4a5265] transition-colors hover:text-[#bd7724]"
+                        className="block text-[13px] font-normal text-[#4a5265] transition-colors hover:text-[#bd7724]"
                         href={href}
                       >
                         {value}
                       </a>
                     ) : (
-                      <span className="block text-[13.5px] font-normal text-[#4a5265]">{value}</span>
+                      <span className="block text-[13px] font-normal text-[#4a5265]">{value}</span>
                     )}
                   </span>
                 </li>
@@ -169,14 +167,14 @@ export default function FaqSection() {
                           <Plus className="h-[15px] w-[15px]" strokeWidth={2} />
                         )}
                       </span>
-                      <span className="flex-1 text-[16px] font-medium leading-[1.5] text-[#061948]">
+                      <span className="flex-1 text-[15px] font-medium leading-[1.5] text-[#061948]">
                         {faq.question}
                       </span>
                     </button>
                   </h3>
 
                   {isOpen && (
-                    <p className="m-0 pb-5 pl-[66px] pr-6 text-[15px] font-normal leading-[1.75] text-[#3c4252] max-[560px]:pl-5">
+                    <p className="m-0 pb-5 pl-[66px] pr-6 text-[14px] font-normal leading-[1.7] text-[#3c4252] max-[560px]:pl-5">
                       {faq.answer}
                     </p>
                   )}
@@ -190,16 +188,16 @@ export default function FaqSection() {
         <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-4 rounded-xl border border-[#e6e8ee] bg-[#fbfbfc] px-6 py-5">
           <span
             aria-hidden
-            className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full border border-[#e8dccb] bg-white text-[#d58a2b]"
+            className="icon-gold-outline h-[42px] w-[42px] shrink-0"
           >
             <FileText className="h-[19px] w-[19px]" strokeWidth={1.6} />
           </span>
-          <p className="m-0 text-[15px] font-normal text-[#3c4252]">
+          <p className="m-0 text-[14px] font-normal text-[#3c4252]">
             Still have questions? Contact our support team.
           </p>
           <span aria-hidden className="hidden h-7 w-px bg-[#e6e8ee] sm:block" />
           <a
-            className="group inline-flex h-10 w-fit items-center justify-center gap-3 rounded-lg bg-[#061948] px-5 text-[11px] font-medium uppercase leading-none tracking-[0.04em] text-white shadow-[0_12px_20px_rgba(6,25,72,0.14)]"
+            className="group inline-flex h-10 w-fit items-center justify-center gap-3 rounded-lg bg-[#061948] px-5 text-[13px] font-medium uppercase leading-none tracking-[0.04em] text-white shadow-[0_12px_20px_rgba(6,25,72,0.14)]"
             href="#contact"
           >
             <span>Contact Us</span>

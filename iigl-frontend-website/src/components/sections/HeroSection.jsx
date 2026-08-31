@@ -52,7 +52,7 @@ export default function HeroSection() {
         {banners.map((banner) => (
           <SwiperSlide key={banner.image}>
             <img
-              className="h-[clamp(270px,40vw,600px)] w-full object-cover"
+              className="h-[clamp(340px,48vw,760px)] w-full object-cover"
               src={banner.image}
               alt={banner.alt}
             />

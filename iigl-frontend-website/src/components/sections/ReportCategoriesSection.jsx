@@ -43,7 +43,7 @@ function ReportIcon({ category }) {
   const Icon = category.icon;
 
   return (
-    <span className="absolute left-1/2 top-[148px] z-10 inline-flex h-[50px] w-[50px] -translate-x-1/2 items-center justify-center rounded-full bg-white text-[#d58a2b] shadow-[0_12px_26px_rgba(44,59,100,0.10)] ring-1 ring-[#e6e8ee] max-[1260px]:top-[140px] max-[640px]:top-[134px]">
+    <span className="absolute left-1/2 top-[148px] z-10 icon-gold-outline inline-flex h-[50px] w-[50px] -translate-x-1/2 max-[1260px]:top-[140px] max-[640px]:top-[134px]">
       <Icon className="h-[26px] w-[26px]" strokeWidth={1.6} />
     </span>
   );
@@ -86,7 +86,7 @@ export default function ReportCategoriesSection() {
                 </p>
 
                 <a
-                  className="mt-auto inline-flex h-10 w-[min(100%,195px)] items-center justify-center gap-3 rounded-lg border border-[#2c3b64] bg-white px-4 text-[11px] font-medium leading-none text-[#061948] transition duration-200 hover:bg-[#061948] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#d58a2b]"
+                  className="mt-auto inline-flex h-10 w-[min(100%,195px)] items-center justify-center gap-3 rounded-lg bg-[#061948] px-4 text-[13px] font-medium leading-none text-white transition duration-200 hover:bg-[#10285e] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#d58a2b]"
                   href="#reports"
                 >
                   <span>Explore Reports</span>

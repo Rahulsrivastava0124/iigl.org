@@ -57,7 +57,7 @@ export default function WhyChooseSection() {
               className="flex min-h-[198px] flex-col items-center justify-start rounded-xl border border-[#e6e8ee] bg-white px-5 py-7 text-center shadow-[0_15px_38px_rgba(44,59,100,0.08)]"
               key={title}
             >
-              <span className="inline-flex h-[58px] w-[58px] items-center justify-center rounded-full bg-[#f7efe7] text-[#d58a2b]">
+              <span className="icon-gold-outline inline-flex h-[58px] w-[58px]">
                 <Icon size={34} strokeWidth={1.6} />
               </span>
 

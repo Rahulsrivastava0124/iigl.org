@@ -12,7 +12,7 @@ const navItems = [
 
 export default function Navbar() {
   return (
-    <header className="relative z-20 flex h-[60px] w-full items-center border-b border-[rgba(18,25,68,0.08)] bg-white px-[34px] shadow-[0_11px_26px_rgba(19,28,58,0.10)] max-[900px]:px-[18px] max-[560px]:h-[58px]">
+    <header className="sticky top-0 z-50 flex h-[60px] w-full items-center border-b border-[rgba(18,25,68,0.08)] bg-white px-[34px] shadow-[0_11px_26px_rgba(19,28,58,0.10)] max-[900px]:px-[18px] max-[560px]:h-[58px]">
       <a
         className="flex h-[60px] shrink-0 items-center max-[560px]:h-[58px]"
         href="/"
@@ -47,7 +47,7 @@ export default function Navbar() {
 
       <div className="ml-[32px] flex items-center gap-[24px] max-[1200px]:ml-[24px] max-[1200px]:gap-[18px] max-[900px]:hidden">
         <a
-          className="inline-flex h-[38px] min-w-[188px] items-center justify-center gap-2 rounded-full bg-linear-to-b from-[#df9d3d] to-[#bd7724] px-6 text-[12px] font-medium leading-none tracking-normal text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.32)] max-[1200px]:h-[34px] max-[1200px]:min-w-[170px] max-[1200px]:px-[18px] max-[1200px]:text-[10px]"
+          className="inline-flex h-[38px] min-w-[188px] items-center justify-center gap-2 rounded-full bg-linear-to-b from-[#df9d3d] to-[#bd7724] px-6 text-[13px] font-medium leading-none tracking-normal text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.32)] max-[1200px]:h-[34px] max-[1200px]:min-w-[170px] max-[1200px]:px-[18px] max-[1200px]:text-[12px]"
           href="#verify"
         >
           <ShieldCheck size={20} strokeWidth={2.2} />

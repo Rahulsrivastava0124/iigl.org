@@ -44,3 +44,44 @@
   width: 30px;
   background: #d58a2b;
 }
+
+/* Gold-outline icon disc.
+   Not expressible in utilities: the ring is a gradient painted into the border
+   box behind a solid padding box, and the icon's stroke is an SVG paint server
+   rather than a colour. Lives in the components layer so a utility `h-*`/`w-*`
+   on the span, or on the icon, still wins over the defaults below. */
+@layer components {
+  .icon-gold-outline {
+    width: 64px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border: 1px solid transparent;
+    border-radius: 50%;
+
+    background:
+      linear-gradient(#ffffff, #ffffff) padding-box,
+      linear-gradient(
+          135deg,
+          #8a5a00 0%,
+          #d4a72c 25%,
+          #fff0a6 50%,
+          #c99216 75%,
+          #7a4d00 100%
+        )
+        border-box;
+
+    box-shadow: 0 6px 20px rgba(44, 59, 100, 0.10);
+
+    color: #bd7724;
+  }
+
+  .icon-gold-outline svg {
+    width: 30px;
+    height: 30px;
+    stroke: url(#goldGradient);
+    stroke-width: 1.8;
+  }
+}

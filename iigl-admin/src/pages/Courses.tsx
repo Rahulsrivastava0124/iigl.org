@@ -30,7 +30,7 @@ import PrintIcon from '@mui/icons-material/PrintOutlined';
 import { useDebounced, useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import { escapeHtml, printDocument } from '../lib/print';
+import { apiUrl } from '../lib/config';
 import { useToast } from '../components/Toast';
 import {
   ConfirmDialog,
@@ -192,46 +192,19 @@ export default function Courses() {
   };
 
   /**
-   * Print what this student has paid, and what is left.
+   * The fee statement for one enrolment, as a PDF.
+   *
+   * Rendered by the API rather than here, on the same headless browser the
+   * certificates and the order paperwork go through: one letterhead, one place
+   * it is maintained, and a file that can be saved or attached rather than a
+   * print dialog that has to be caught.
    *
    * A statement of the fee as it stands, not a numbered receipt: nothing in
-   * the schema issues fee receipt numbers, and printing an official-looking
-   * number that no record can be found by is worse than printing none. The
-   * enrolment id is the reference, and every figure on it is read from the
-   * enrolment rather than recomputed here.
+   * the schema issues fee receipt numbers, so the enrolment id is the
+   * reference.
    */
   const printReceipt = (e: Enrolment) => {
-    const row = (label: string, value: string, total = false) =>
-      `<tr${total ? ' class="total"' : ''}><td class="k">${escapeHtml(label)}</td>` +
-      `<td class="v">${escapeHtml(value)}</td></tr>`;
-
-    printDocument(
-      `Fee statement — ${e.student_name ?? 'student'}`,
-      `<h1>IIGL — Course fee statement</h1>
-       <p class="sub">${escapeHtml(new Date().toLocaleString('en-IN'))} · enrolment #${e.id}</p>
-       <div class="rule"></div>
-       <table>
-         ${row('Student', e.student_name ?? '—')}
-         ${row('Registration no', e.registration_no ?? '—')}
-         ${row('Course', e.course_name ?? '—')}
-         ${row('Batch', e.batch ?? '—')}
-       </table>
-       <div class="rule"></div>
-       <table>
-         ${row('Course fee', money(e.fee))}
-         ${
-           Number(e.discount_amount) > 0
-             ? row(e.discount_reason ?? 'Discount', `− ${money(e.discount_amount)}`)
-             : ''
-         }
-         ${row('Payable', money(e.final_fee))}
-         ${row('Paid', money(e.fee_paid))}
-         ${row('Still due', money(due(e)), true)}
-       </table>
-       <p class="note">Figures as at the time of printing. Issued by ${escapeHtml(
-         user?.fullname ?? 'IIGL',
-       )}.</p>`,
-    );
+    window.open(apiUrl(`/courses/enrolments/${e.id}/statement`), '_blank', 'noopener');
   };
 
   const closeFee = () => {
@@ -580,11 +553,13 @@ export default function Courses() {
                     go({ page: 1 });
                   }}
                 />
-                <IconAction
-                  label="Add a course"
-                  icon={AddIcon}
+                <Button
+                  variant="contained"
+                  startIcon={<AddIcon />}
                   onClick={() => setForm({ ...BLANK_COURSE })}
-                />
+                >
+                  Add course
+                </Button>
               </>
             }
           >
@@ -785,11 +760,26 @@ export default function Courses() {
                             }
                           />
                         )}
-                        <IconAction
-                          label="Fee, discount and payment"
-                          icon={PaymentIcon}
-                          onClick={() => openFee(e)}
-                        />
+                        {/*
+                          Once the fee is settled the money dialog has nothing
+                          left to do — the balance is nil and the API refuses a
+                          discount after the first payment — so the slot carries
+                          the statement instead, which is what is actually
+                          wanted at that point.
+                        */}
+                        {due(e) > 0 ? (
+                          <IconAction
+                            label="Fee, discount and payment"
+                            icon={PaymentIcon}
+                            onClick={() => openFee(e)}
+                          />
+                        ) : (
+                          <IconAction
+                            label="Print fee statement"
+                            icon={PrintIcon}
+                            onClick={() => printReceipt(e)}
+                          />
+                        )}
                         <IconAction
                           label="Remove enrolment"
                           icon={DeleteIcon}
@@ -816,7 +806,9 @@ export default function Courses() {
         <Dialog
           title={`Fee — ${open.student_name}`}
           actions={
-            <IconAction label="Print fee statement" icon={PrintIcon} onClick={() => printReceipt(open)} />
+            <Button variant="outlined" startIcon={<PrintIcon />} onClick={() => printReceipt(open)}>
+              Print statement
+            </Button>
           }
           onClose={closeFee}
           onSubmit={takePayment}

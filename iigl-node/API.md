@@ -1,6 +1,6 @@
 # IIGL API
 
-158 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
+159 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
 
 The interactive version is at `/docs` when the server is running, and the raw
 document at `/openapi.json`.
@@ -366,6 +366,7 @@ The course catalogue, the enrolments on it, and the discount that sits on the fe
 | DELETE | `/api/courses/enrolments/{id}` | session | — | — | 401, 403, 404, 409 | Delete an enrolment |
 | PATCH | `/api/courses/enrolments/{id}/discount` | session | — | type, value, reason, applied_on | 400, 401, 403, 404 | Apply or clear a discount |
 | POST | `/api/courses/enrolments/{id}/payment` | session | — | **amount** | 400, 401, 403, 404 | Take a fee payment |
+| GET | `/api/courses/enrolments/{id}/statement` | session | `format` | — | 401, 403, 404 | Print the fee statement |
 
 ## Enquiries
 
@@ -384,4 +385,4 @@ The general enquiry book: questions, visits, leads and complaints.
 
 Bold body fields are required.
 
-158 endpoints: 16 public, 142 requiring a session.
+159 endpoints: 16 public, 143 requiring a session.

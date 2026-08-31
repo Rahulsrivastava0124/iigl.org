@@ -215,8 +215,9 @@ const ADMIN_GROUPS: Group[] = [
       { to: '/student-enquiries', label: 'Enquiry' },
       { to: '/students', label: 'Registration' },
       { to: '/courses', label: 'Course' },
+      { to: '/courses?tab=enrolments', label: 'Enrolments' },
       // A coupon is money off a course fee. The reduction itself is applied on
-      // the enrolment, under Course › Enrolments, which is where the fee is —
+      // the enrolment, under Student › Enrolments, which is where the fee is —
       // there is no separate Discount screen any more.
       { to: '/coupons', label: 'Discount Coupons' },
       { to: '/student-certificates', label: 'Certificates' },

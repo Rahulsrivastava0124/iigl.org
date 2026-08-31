@@ -126,7 +126,7 @@ Primary dark button:
 ```jsx
 inline-flex h-[54px] w-fit items-center justify-center gap-[18px]
 rounded-lg bg-[#061948] px-6
-text-[13px] font-medium leading-none text-white
+text-[16px] font-medium leading-none text-white
 ```
 
 Gold pill button:
@@ -134,10 +134,19 @@ Gold pill button:
 ```jsx
 inline-flex h-[38px] min-w-[188px] items-center justify-center gap-2
 rounded-full bg-linear-to-b from-[#df9d3d] to-[#bd7724] px-6
-text-[12px] font-medium leading-none text-white
+text-[13px] font-medium leading-none text-white
 ```
 
-Button text should stay medium weight, not bold.
+Compact uppercase CTA (section footers, card actions):
+
+```jsx
+inline-flex h-10 items-center justify-center gap-3
+rounded-lg px-5
+text-[13px] font-medium uppercase leading-none tracking-[0.04em]
+```
+
+Button text should stay medium weight, not bold. Button labels do not go below
+`13px` anywhere on the site — a 10 or 11px CTA reads as a caption, not a control.
 
 ## Navbar
 
@@ -263,8 +272,10 @@ categories use.
 ## Footer
 
 The footer sits on the deep navy `#061948` and is the only large dark block on
-the site. Gold is used for the column headings, the icons, the send button and
-the tagline — never for a body line.
+the site. It carries **no gold at all**: headings, icons, the mark, the tagline
+and the send button are white, and the only variation is opacity. Gold on navy
+is the site's accent colour spent where it reads as decoration; white keeps the
+footer quiet under the page above it.
 
 ```jsx
 <footer className="relative overflow-hidden bg-[#061948] px-5 pt-14 text-white sm:px-8 lg:px-12">
@@ -272,12 +283,12 @@ the tagline — never for a body line.
     <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.25fr_0.85fr_0.85fr_0.85fr_1.15fr] lg:gap-8">
 ```
 
-- Column headings: `text-[12px] font-medium uppercase tracking-[0.14em] text-[#d58a2b]`,
-  with a short gold rule under them (`h-px w-9 bg-[#d58a2b]/60`). This is the
+- Column headings: `text-[12px] font-medium uppercase tracking-[0.14em] text-white`,
+  with a short white rule under them (`h-px w-9 bg-white/60`). This is the
   one place a rule under a heading belongs — see Decorative Elements for the
   rest of the site, where it does not.
 - Link text is `text-white/70`, brightening to white on hover, with a
-  `ChevronRight` that turns gold.
+  `ChevronRight` that goes from `text-white/35` to white.
 - Body copy on navy: `text-[13px] leading-[1.75] text-white/70`. Do not use the
   light-background body colours here.
 
@@ -285,12 +296,12 @@ the tagline — never for a body line.
 
 `Assets/logo-text.png` is **RGB with no alpha**, so placing it on the navy
 produces a white rectangle. Use `Assets/footer logo.png`, which has an alpha
-channel, and paint it through a CSS mask so the shape takes the brand gold:
+channel, and paint it through a CSS mask so the shape takes a flat white:
 
 ```jsx
 <span
   aria-hidden
-  className="block h-[52px] w-[52px] bg-[#d58a2b]"
+  className="block h-[52px] w-[52px] bg-white"
   style={{
     maskImage: `url(${markUrl})`,
     maskSize: 'contain',
@@ -306,8 +317,8 @@ channel, and paint it through a CSS mask so the shape takes the brand gold:
 
 The same mask at `bg-white/[0.045]` and 320px is the faint diamond in the top
 right corner. The wordmark and the tagline beside it are text — Playfair for
-`IIGL`, Montserrat for `Learn. Understand. Excel.` in gold — because no asset
-carries that lockup in white.
+`IIGL`, Montserrat for `Learn. Understand. Excel.` — because no asset carries
+that lockup in white.
 
 ### Brand icons
 
@@ -336,11 +347,19 @@ Icon color:
 text-[#d58a2b]
 ```
 
-Icon circles:
+Icon discs use `.icon-gold-outline` from `src/styles.css`: a deep navy face
+inside a gold gradient ring, with the icon stroked by the `#goldGradient` paint
+server defined once in `App.jsx`. Set the size with utilities; the class
+defaults to 64px with a 30px icon.
 
 ```jsx
-h-[58px] w-[58px] rounded-full bg-[#f7efe7] text-[#d58a2b]
+<span className="icon-gold-outline inline-flex h-[58px] w-[58px]">
+  <Gem />
+</span>
 ```
+
+Size the icon with `className="h-[19px] w-[19px]"`, not `size={19}` — a size
+*attribute* loses to the class's own 30px default, a utility class beats it.
 
 ## Decorative Elements
 

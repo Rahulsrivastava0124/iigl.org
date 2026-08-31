@@ -797,6 +797,30 @@ export const extraPaths: Record<string, unknown> = {
     },
   },
 
+  '/api/courses/enrolments/{id}/statement': {
+    get: {
+      tags: ['Courses'],
+      summary: 'Print the fee statement',
+      description:
+        'What the course costs, what has come in and what is left, as an A4 sheet to hand over. A statement rather than a numbered receipt: nothing in the schema issues fee receipt numbers, so the enrolment id is the reference and no official-looking number is invented for it.\n\nEvery figure is read from the enrolment rather than recomputed, so the sheet and the screen the money was taken on can never disagree. `?format=html` returns the markup the PDF is rendered from.',
+      parameters: [
+        idParam,
+        { name: 'format', in: 'query', schema: { type: 'string', enum: ['html'] }, description: 'Return the markup instead of a PDF.' },
+      ],
+      responses: {
+        200: {
+          description: 'The statement as a PDF, or as HTML when format=html.',
+          content: {
+            'application/pdf': { schema: { type: 'string', format: 'binary' } },
+            'text/html': { schema: { type: 'string' } },
+          },
+        },
+        404: err('Enrolment not found.'),
+        ...guarded,
+      },
+    },
+  },
+
   // ------------------------------------------------- student certificates
   '/api/student-certificates': {
     get: {

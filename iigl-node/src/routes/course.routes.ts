@@ -5,6 +5,7 @@ import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { paged, readPage } from '../lib/paginate.js';
 import { requireAdmin } from '../middleware/auth.js';
 import { numericId } from '../middleware/params.js';
+import { feeStatementHtml, feeStatementPdf } from '../services/document.service.js';
 import { COURSE_STATUS } from './student.routes.js';
 
 /**
@@ -496,6 +497,34 @@ courseRoutes.post(
       .execute();
 
     res.json({ data: { fee_paid: next, due: Number(row.final_fee) - next } });
+  }),
+);
+
+/**
+ * The fee on one enrolment, as a sheet to hand over.
+ *
+ * A statement, not a numbered receipt: nothing in the schema issues fee
+ * receipt numbers, so the enrolment id is the reference. `?format=html`
+ * returns the markup the PDF is rendered from, which is how the layout is
+ * worked on without a render round trip.
+ */
+courseRoutes.get(
+  '/enrolments/:id/statement',
+  numericId,
+  wrap(async (req, res) => {
+    const enrolmentId = Number(req.params.id);
+    const issuedBy = req.user?.fullname ?? 'IIGL';
+
+    if (req.query.format === 'html') {
+      res.type('html').send(await feeStatementHtml(enrolmentId, issuedBy));
+      return;
+    }
+
+    const pdf = await feeStatementPdf(enrolmentId, issuedBy);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="fee-statement-${enrolmentId}.pdf"`);
+    res.setHeader('Content-Length', String(pdf.length));
+    res.end(pdf);
   }),
 );
 

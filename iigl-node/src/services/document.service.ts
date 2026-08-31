@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ejs from 'ejs';
@@ -128,6 +129,87 @@ export async function orderDocumentPdf(orderId: number, kind: DocumentKind): Pro
 
   // A separate browser from the card renderer would double the memory for no
   // gain, so this reuses the same one.
+  const { renderHtmlToPdf } = await import('./pdf.service.js');
+  return renderHtmlToPdf(html, { format: 'A4' });
+}
+
+/* ------------------------------------------------------------ fee statement */
+
+const FEE_TEMPLATE = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../templates/fee-statement.ejs',
+);
+
+const rupees = (v: number | string | null | undefined) =>
+  `₹ ${Number(v ?? 0).toLocaleString('en-IN')}`;
+
+/**
+ * The IIGL mark, as a data URI.
+ *
+ * The cards read their logo out of the Laravel public/ directory, which is
+ * fine on a server that has one and leaves a hole in the sheet anywhere that
+ * does not — a checkout without the legacy tree, or a host where
+ * LEGACY_PUBLIC_ROOT is not set. So the statement prefers that asset and falls
+ * back to a copy that ships beside the templates: paperwork that goes to a
+ * student should not depend on a directory outside this repository.
+ */
+async function brandLogo(): Promise<string> {
+  const legacy = await asDataUri('public/card-logo.png');
+  if (legacy) return legacy;
+
+  const file = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../templates/iigl-logo.png',
+  );
+  return `data:image/png;base64,${(await readFile(file)).toString('base64')}`;
+}
+
+/**
+ * One enrolment's fee, as a sheet that can be handed over.
+ *
+ * Every figure is read from the enrolment rather than recomputed: the API is
+ * what sets `final_fee` when a discount is applied, so a statement that did
+ * its own arithmetic could disagree with the screen the money was taken on.
+ * `due` is the one derived number, and it is the same subtraction the payment
+ * endpoint answers with.
+ */
+export async function feeStatementHtml(enrolmentId: number, issuedBy: string): Promise<string> {
+  const enrolment = await db
+    .selectFrom('student_courses as sc')
+    .leftJoin('students as s', 's.id', 'sc.student_id')
+    .leftJoin('courses as c', 'c.id', 'sc.course_id')
+    .select([
+      'sc.id',
+      'sc.batch',
+      'sc.fee',
+      'sc.discount_amount',
+      'sc.discount_reason',
+      'sc.final_fee',
+      'sc.fee_paid',
+      's.name as student_name',
+      's.registration_no',
+      'c.name as course_name',
+    ])
+    .where('sc.id', '=', enrolmentId)
+    .executeTakeFirst();
+  if (!enrolment) throw notFound('Enrolment not found.');
+
+  return ejs.renderFile(
+    FEE_TEMPLATE,
+    {
+      enrolment,
+      due: Number(enrolment.final_fee ?? 0) - Number(enrolment.fee_paid ?? 0),
+      issuedBy,
+      issuedAt: new Date().toLocaleString('en-IN'),
+      logo: await brandLogo(),
+      money: rupees,
+    },
+    { async: true },
+  );
+}
+
+export async function feeStatementPdf(enrolmentId: number, issuedBy: string): Promise<Buffer> {
+  const html = await feeStatementHtml(enrolmentId, issuedBy);
   const { renderHtmlToPdf } = await import('./pdf.service.js');
   return renderHtmlToPdf(html, { format: 'A4' });
 }

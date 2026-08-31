@@ -132,7 +132,7 @@ export default function Footer() {
             <a className="flex items-center gap-3" href="/" aria-label="IIGL home">
               <span
                 aria-hidden
-                className="block h-[52px] w-[52px] shrink-0 bg-[#d58a2b]"
+                className="block h-[52px] w-[52px] shrink-0 bg-white"
                 style={{
                   maskImage: `url(${markUrl})`,
                   maskSize: 'contain',
@@ -148,7 +148,7 @@ export default function Footer() {
                 <span className="block font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[30px] font-medium leading-none tracking-[0.02em] text-white">
                   IIGL
                 </span>
-                <span className="mt-1 block text-[10.5px] font-medium tracking-[0.06em] text-[#d58a2b]">
+                <span className="mt-1 block text-[10.5px] font-medium tracking-[0.06em] text-white">
                   Learn. Understand. Excel.
                 </span>
               </span>
@@ -163,12 +163,12 @@ export default function Footer() {
             <ul className="mt-6 space-y-4">
               {contact.map(({ icon: Icon, lines, href }) => (
                 <li className="flex items-start gap-3" key={lines[0]}>
-                  <span className="mt-[2px] flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md bg-white/[0.06] text-[#d58a2b]">
+                  <span className="mt-[2px] flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md bg-white/[0.06] text-white">
                     <Icon className="h-[14px] w-[14px]" strokeWidth={1.8} />
                   </span>
                   {href ? (
                     <a
-                      className="text-[13px] font-normal leading-[1.6] text-white/70 transition-colors hover:text-[#d58a2b]"
+                      className="text-[13px] font-normal leading-[1.6] text-white/70 transition-colors hover:text-white"
                       href={href}
                     >
                       {lines[0]}
@@ -190,11 +190,11 @@ export default function Footer() {
           {/* ------------------------------------------------ link columns */}
           {columns.map((column) => (
             <nav key={column.heading} aria-label={column.heading}>
-              <h2 className="m-0 text-[12px] font-medium uppercase tracking-[0.14em] text-[#d58a2b]">
+              <h2 className="m-0 text-[12px] font-medium uppercase tracking-[0.14em] text-white">
                 {column.heading}
               </h2>
               {/* The one rule under a heading the design does keep. */}
-              <span aria-hidden className="mt-2 block h-px w-9 bg-[#d58a2b]/60" />
+              <span aria-hidden className="mt-2 block h-px w-9 bg-white/60" />
               <ul className="mt-5 space-y-[13px]">
                 {column.links.map((link) => (
                   <li key={link.label}>
@@ -204,7 +204,7 @@ export default function Footer() {
                     >
                       <span>{link.label}</span>
                       <ChevronRight
-                        className="h-[13px] w-[13px] text-white/35 transition-colors group-hover:text-[#d58a2b]"
+                        className="h-[13px] w-[13px] text-white/35 transition-colors group-hover:text-white"
                         strokeWidth={2}
                       />
                     </a>
@@ -216,10 +216,10 @@ export default function Footer() {
 
           {/* ------------------------------------------------ stay updated */}
           <div>
-            <h2 className="m-0 text-[12px] font-medium uppercase tracking-[0.14em] text-[#d58a2b]">
+            <h2 className="m-0 text-[12px] font-medium uppercase tracking-[0.14em] text-white">
               Stay Updated
             </h2>
-            <span aria-hidden className="mt-2 block h-px w-9 bg-[#d58a2b]/60" />
+            <span aria-hidden className="mt-2 block h-px w-9 bg-white/60" />
 
             <p className="mt-5 max-w-[300px] text-[13px] font-normal leading-[1.7] text-white/70">
               Subscribe to our newsletter and stay updated with the latest courses, insights and
@@ -233,7 +233,7 @@ export default function Footer() {
               nothing is worse than one that plainly does not work yet.
             */}
             <form
-              className="mt-5 flex h-[46px] max-w-[300px] items-center overflow-hidden rounded-md border border-white/15 bg-white/[0.04] focus-within:border-[#d58a2b]/60"
+              className="mt-5 flex h-[46px] max-w-[300px] items-center overflow-hidden rounded-md border border-white/15 bg-white/[0.04] focus-within:border-white/60"
               onSubmit={(event) => event.preventDefault()}
             >
               <label className="sr-only" htmlFor="footer-newsletter">
@@ -248,7 +248,7 @@ export default function Footer() {
                 placeholder="Enter your email"
               />
               <button
-                className="flex h-[38px] w-[42px] shrink-0 items-center justify-center rounded-md bg-linear-to-b from-[#df9d3d] to-[#bd7724] text-white mr-1"
+                className="flex h-[38px] w-[42px] shrink-0 items-center justify-center rounded-md bg-white text-[#061948] mr-1"
                 type="submit"
                 aria-label="Subscribe"
               >
@@ -261,7 +261,7 @@ export default function Footer() {
               {socials.map(({ label, href, path }) => (
                 <li key={label}>
                   <a
-                    className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-white/15 text-[#d58a2b] transition-colors hover:border-[#d58a2b] hover:bg-[#d58a2b] hover:text-white"
+                    className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-white/15 text-white transition-colors hover:border-white hover:bg-white hover:text-[#061948]"
                     href={href}
                     aria-label={label}
                   >
@@ -286,7 +286,7 @@ export default function Footer() {
             © {new Date().getFullYear()} IIGL Education. All rights reserved.
           </p>
           <p className="m-0 flex items-center gap-2 text-white/70">
-            <Gem className="h-[15px] w-[15px] text-[#d58a2b]" strokeWidth={1.6} />
+            <Gem className="h-[15px] w-[15px] text-white" strokeWidth={1.6} />
             <span>Excellence in Gemology Education</span>
           </p>
         </div>

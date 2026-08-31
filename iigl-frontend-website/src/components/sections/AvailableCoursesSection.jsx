@@ -8,7 +8,6 @@ import {
   GraduationCap,
   LayoutGrid,
   ScrollText,
-  Sparkles,
 } from 'lucide-react';
 import ac1Url from '../../../Assets/AC1.png';
 import ac2Url from '../../../Assets/AC2.png';
@@ -109,7 +108,7 @@ export default function AvailableCoursesSection() {
               return (
                 <button
                   aria-pressed={on}
-                  className={`inline-flex h-[46px] items-center gap-2.5 rounded-full px-6 text-[14px] font-medium leading-none transition duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d58a2b] max-[520px]:h-[40px] max-[520px]:px-4 max-[520px]:text-[13px] ${
+                  className={`inline-flex h-[46px] items-center gap-2.5 rounded-full px-6 text-[15px] font-medium leading-none transition duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d58a2b] max-[520px]:h-[40px] max-[520px]:px-4 max-[520px]:text-[13px] ${
                     on
                       ? 'bg-[#061948] text-white shadow-[0_12px_24px_rgba(6,25,72,0.18)]'
                       : 'bg-transparent text-[#2c3b64] hover:text-[#bd7724]'
@@ -146,9 +145,8 @@ export default function AvailableCoursesSection() {
                   flush with the card edge. */}
               <div className="flex flex-1 flex-col px-5 pb-5 pt-5">
                 <div className="flex items-start gap-3.5">
-                  {/* <span className="inline-flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full bg-[#f7efe7] text-[#d58a2b]">
-                    <Icon className="h-[22px] w-[22px]" strokeWidth={1.6} />
-                  </span> */}
+                  {/* 
+                   */}
                   <h3 className="m-0 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[19px] font-medium leading-[1.25] tracking-normal text-[#061948]">
                     {title}
                   </h3>
@@ -171,7 +169,7 @@ export default function AvailableCoursesSection() {
               </div>
 
               <a
-                className="flex items-center justify-between bg-[#061948] px-5 py-4 text-[14px] font-medium leading-none text-white transition duration-200 hover:bg-[#10285e] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#d58a2b]"
+                className="flex items-center justify-between bg-[#061948] px-5 py-4 text-[15px] font-medium leading-none text-white transition duration-200 hover:bg-[#10285e] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#d58a2b]"
                 href="#courses"
               >
                 <span>View Course</span>
@@ -183,7 +181,7 @@ export default function AvailableCoursesSection() {
 
         <div className="mt-9 flex justify-center">
           <a
-            className="inline-flex h-[54px] items-center justify-center gap-4 rounded-lg border border-[#061948] px-8 text-[15px] font-medium leading-none text-[#061948] transition duration-200 hover:bg-[#061948] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#d58a2b]"
+            className="inline-flex h-[54px] items-center justify-center gap-4 rounded-lg border border-[#061948] px-8 text-[16px] font-medium leading-none text-[#061948] transition duration-200 hover:bg-[#061948] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#d58a2b]"
             href="#courses"
           >
             <span>View All Courses</span>
