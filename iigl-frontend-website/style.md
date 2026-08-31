@@ -34,7 +34,7 @@ tracking-normal
 text-[#061948]
 ```
 
-All section headings must use Title Case display text, such as `Our Report Categories`. Do not force section headings to all caps with uppercase text or the `uppercase` utility. Keep the same section heading size across the website unless the user explicitly asks for a special hero treatment.
+All section headings must use Title Case display text, such as `Our Report Categories`. Do not force section headings to all caps with uppercase text or the `uppercase` utility. Keep the same section heading size across the website — one size for every section, and the hero's larger size for the hero alone.
 
 Hero heading size:
 
@@ -44,20 +44,21 @@ leading-[1.06]
 max-[560px]:text-[32px]
 ```
 
-Section heading size:
+Section heading size — smaller than the hero on purpose, so the page has one
+loudest line and it is the first one:
 
 ```jsx
-text-[46px]
+text-[36px]
 font-medium
 leading-[1.08]
-max-[640px]:text-[34px]
+max-[640px]:text-[28px]
 ```
 
 Standard centered section header:
 
 ```jsx
 <div className="mx-auto max-w-[820px] text-center">
-  <h2 className="m-0 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[46px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[34px]">
+  <h2 className="m-0 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[28px]">
     Section Heading
   </h2>
   <p className="mx-auto mt-3 max-w-[760px] text-[15px] font-normal leading-[1.65] text-[#4a5265]">
@@ -194,7 +195,7 @@ For large report/certificate presentation sections, keep the layout editorial an
   <div className="mx-auto max-w-[1390px]">
     <div className="grid items-end gap-8 lg:grid-cols-[0.88fr_1.12fr] lg:gap-14">
       <div>
-        <h2 className="m-0 flex flex-wrap items-end gap-x-4 gap-y-2 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[46px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[34px]">
+        <h2 className="m-0 flex flex-wrap items-end gap-x-4 gap-y-2 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[28px]">
           <img className="h-auto w-[clamp(112px,10vw,154px)] translate-y-[2px]" src={logoTextUrl} alt="IIGL" />
           <span>Reports</span>
         </h2>
@@ -224,7 +225,7 @@ For education/course sections that use a wide background image, place the suppli
       <img className="absolute inset-y-0 left-0 h-full w-[104%] max-w-none object-cover object-left" src={educationUrl} alt="" />
       <div className="relative z-10 w-[min(51%,640px)] px-8 py-11 sm:px-10 lg:px-12">
         <p className="text-[12px] font-medium uppercase tracking-[0.08em] text-[#bd7724]">IIGL Education</p>
-        <h2 className="mt-7 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[46px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[34px]">
+        <h2 className="mt-7 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[28px]">
           Your Journey to Excellence Starts Here
         </h2>
       </div>
@@ -236,6 +237,86 @@ For education/course sections that use a wide background image, place the suppli
 Feature rows inside this section should use `lucide-react` icons in soft gold circles, small Playfair headings, and compact Montserrat descriptions.
 
 Do not add decorative text divider lines, faint watermark icons, or a separate right-side royal-blue brand panel in the education section unless explicitly requested.
+
+## Testimonials
+
+`ReviewsSection.jsx` is the pattern for quoted praise: a gold label, the section
+heading, then four house cards in the same 1 / 2 / 4 column grid the report
+categories use.
+
+- The label is `text-[12px] font-medium uppercase tracking-[0.14em] text-[#bd7724]`
+  with a short gold rule under **it** — not under the heading, where the rest of
+  the site has none.
+- Stars are lucide `Star` with `fill="currentColor"` and `strokeWidth={0}`. An
+  outlined star reads as an empty one, which says the opposite of five out of
+  five.
+- The quote takes `flex-1` so every card in the row ends its attribution block
+  on the same line whatever the length of the words above it.
+- The attribution sits under a `border-t border-[#e6e8ee]` hairline: avatar,
+  name in `text-[#061948]`, trade in `text-[#4a5265]`.
+- **Faces are initials in a `bg-[#f7efe7]` disc.** There are no client
+  photographs in `Assets/`, and a stock portrait beside a named person is a
+  picture of somebody else.
+
+---
+
+## Footer
+
+The footer sits on the deep navy `#061948` and is the only large dark block on
+the site. Gold is used for the column headings, the icons, the send button and
+the tagline — never for a body line.
+
+```jsx
+<footer className="relative overflow-hidden bg-[#061948] px-5 pt-14 text-white sm:px-8 lg:px-12">
+  <div className="mx-auto max-w-[1390px]">
+    <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.25fr_0.85fr_0.85fr_0.85fr_1.15fr] lg:gap-8">
+```
+
+- Column headings: `text-[12px] font-medium uppercase tracking-[0.14em] text-[#d58a2b]`,
+  with a short gold rule under them (`h-px w-9 bg-[#d58a2b]/60`). This is the
+  one place a rule under a heading belongs — see Decorative Elements for the
+  rest of the site, where it does not.
+- Link text is `text-white/70`, brightening to white on hover, with a
+  `ChevronRight` that turns gold.
+- Body copy on navy: `text-[13px] leading-[1.75] text-white/70`. Do not use the
+  light-background body colours here.
+
+### The mark on navy
+
+`Assets/logo-text.png` is **RGB with no alpha**, so placing it on the navy
+produces a white rectangle. Use `Assets/footer logo.png`, which has an alpha
+channel, and paint it through a CSS mask so the shape takes the brand gold:
+
+```jsx
+<span
+  aria-hidden
+  className="block h-[52px] w-[52px] bg-[#d58a2b]"
+  style={{
+    maskImage: `url(${markUrl})`,
+    maskSize: 'contain',
+    maskRepeat: 'no-repeat',
+    maskPosition: 'center',
+    WebkitMaskImage: `url(${markUrl})`,
+    WebkitMaskSize: 'contain',
+    WebkitMaskRepeat: 'no-repeat',
+    WebkitMaskPosition: 'center',
+  }}
+/>
+```
+
+The same mask at `bg-white/[0.045]` and 320px is the faint diamond in the top
+right corner. The wordmark and the tagline beside it are text — Playfair for
+`IIGL`, Montserrat for `Learn. Understand. Excel.` in gold — because no asset
+carries that lockup in white.
+
+### Brand icons
+
+`lucide-react` 1.x removed Facebook, LinkedIn, Instagram and YouTube. Those four
+are inline `<svg>` paths in the footer, which is the one exception to the Icons
+rule below: there is no lucide icon to reach for, and a generic globe is not a
+social link.
+
+---
 
 ## Icons
 

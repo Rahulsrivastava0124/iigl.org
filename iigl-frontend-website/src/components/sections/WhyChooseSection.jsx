@@ -41,7 +41,7 @@ export default function WhyChooseSection() {
             Why Choose IIGL?
           </p>
 
-          <h2 className="mt-5 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[46px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[34px]">
+          <h2 className="mt-5 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[28px]">
             Excellence in Gemology,
             <span className="block">Trust in Every Report</span>
           </h2>

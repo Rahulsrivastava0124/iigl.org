@@ -50,7 +50,7 @@ import { alpha } from '@mui/material/styles';
 import { BRAND } from '../lib/theme';
 import { useAuth } from '../lib/auth';
 import { useFetch } from '../lib/useFetch';
-import { PORTAL_LABEL, ROLE, ROLE_NAMES } from '../lib/portal';
+import { ROLE, ROLE_NAMES } from '../lib/portal';
 import { api } from '../lib/api';
 import { useBreadcrumbs } from '../lib/breadcrumbs';
 import { usePermissions } from '../lib/permissions';

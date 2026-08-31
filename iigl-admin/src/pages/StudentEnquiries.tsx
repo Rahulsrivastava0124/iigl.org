@@ -262,8 +262,16 @@ export default function StudentEnquiries() {
             value={form.status}
             onChange={(e) => set('status', e.target.value)}
           >
-            {TABS.filter((t) => t.id !== 'all' && t.id !== 'converted').map((t) => (
-              <MenuItem key={t.id} value={t.id}>
+            {/*
+              Converted is not something you choose — it happens when an enquiry
+              becomes a registration — so it is not offered. It is still listed
+              while the form is open on an enquiry that already holds it, or the
+              select would show a blank where the status is.
+            */}
+            {TABS.filter(
+              (t) => t.id !== 'all' && (t.id !== 'converted' || form.status === 'converted'),
+            ).map((t) => (
+              <MenuItem key={t.id} value={t.id} disabled={t.id === 'converted'}>
                 {t.label}
               </MenuItem>
             ))}
@@ -364,7 +372,12 @@ export default function StudentEnquiries() {
                             course_interested: e.course_interested ?? '',
                             enquiry_date: e.enquiry_date?.slice(0, 10) ?? '',
                             source: e.source ?? '',
-                            status: e.status === 'converted' ? 'interested' : e.status,
+                            // Converted is kept rather than swapped for
+                            // something else: it is a real state, and the
+                            // select below offers it while the form holds it.
+                            // ('interested' was not one of this screen's
+                            // statuses at all, and did not compile.)
+                            status: e.status,
                             follow_up_on: e.follow_up_on?.slice(0, 10) ?? '',
                             remarks: e.remarks ?? '',
                           })

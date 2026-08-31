@@ -129,6 +129,19 @@ export const theme = createTheme({
           fontFamily: '"IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace',
           fontSize: '0.82rem',
         },
+        /*
+         * No spinner arrows on a number field.
+         *
+         * Every numeric field in the panel holds money, a count of days or a
+         * percentage — figures somebody types, not ones they nudge one at a
+         * time. The arrows also sit where the eye goes for the value, and a
+         * stray scroll over a focused field silently changes an amount.
+         * `type="number"` is kept for the keypad it brings up on a phone and
+         * for the min/max the fields already set.
+         */
+        'input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button':
+          { WebkitAppearance: 'none', margin: 0 },
+        'input[type=number]': { MozAppearance: 'textfield' },
       },
     },
     MuiPaper: {

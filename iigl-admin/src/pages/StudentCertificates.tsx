@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  Box,
   MenuItem,
-  Stack,
   Table,
   TableBody,
   TableCell,
@@ -137,8 +137,22 @@ export default function StudentCertificates() {
     }
   };
 
+  /*
+   * Two short fields side by side, the long one across both.
+   *
+   * A date and a one-letter grade do not each need the width of the dialog,
+   * and stacking them made a form of three lines out of what reads as two.
+   * One column on a phone, where there is no width to share.
+   */
   const fields = (
-    <Stack spacing={2}>
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+        gap: 2,
+        alignItems: 'start',
+      }}
+    >
       <TextField
         label="Issued on"
         type="date"
@@ -152,6 +166,7 @@ export default function StudentCertificates() {
         label="Grade"
         value={form.grade}
         onChange={(e) => setForm((f) => ({ ...f, grade: e.target.value }))}
+        helperText="Optional."
       >
         <MenuItem value="">Not graded</MenuItem>
         {['A+', 'A', 'B', 'C', 'Pass'].map((g) => (
@@ -166,8 +181,9 @@ export default function StudentCertificates() {
         onChange={(e) => setForm((f) => ({ ...f, remark: e.target.value }))}
         multiline
         minRows={2}
+        sx={{ gridColumn: '1 / -1' }}
       />
-    </Stack>
+    </Box>
   );
 
   return (

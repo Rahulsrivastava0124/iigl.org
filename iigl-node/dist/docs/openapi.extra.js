@@ -651,7 +651,7 @@ export const extraPaths = {
         patch: {
             tags: ['Courses'],
             summary: 'Apply or clear a discount',
-            description: 'The discount lives on the enrolment beside the fee it reduces, so the two cannot disagree. `final_fee` is computed here and never accepted from the request. An empty type clears it. Who approved it is the signed-in administrator, not a typed name.',
+            description: 'The discount lives on the enrolment beside the fee it reduces, so the two cannot disagree. `final_fee` is computed here and never accepted from the request. An empty type clears it. Who approved it is the signed-in administrator, not a typed name.\n\n**Only before the first payment.** Once anything has been paid the fee is what the student was told and part-paid: changing it rewrites the sum a statement was printed from, and clearing it can put the payable below what has already been handed over. Refund and re-enrol is the path for that.',
             parameters: [idParam],
             requestBody: body({
                 type: { type: ['string', 'null'], enum: ['percent', 'fixed', null] },
@@ -1264,7 +1264,7 @@ export const extraPaths = {
         post: {
             tags: ['Coupons'],
             summary: 'What a coupon would take off an enrolment',
-            description: 'Changes nothing. Type the code against an enrolment and see the figure before committing to it. A coupon that cannot be used comes back as a 400 naming the reason \u2014 switched off, not yet valid, expired on a date, for another course, fee below the minimum, used up, or already used by this student \u2014 because "not valid" sends somebody to the telephone and "expired on 2026-08-31" does not.',
+            description: 'Changes nothing. Type the code against an enrolment and see the figure before committing to it. A coupon that cannot be used comes back as a 400 naming the reason \u2014 switched off, not yet valid, expired on a date, for another course, fee below the minimum, used up, or already used by this student, already part-paid \u2014 because "not valid" sends somebody to the telephone and "expired on 2026-08-31" does not.',
             requestBody: body({ code: { type: 'string' }, enrolment_id: int }, ['code', 'enrolment_id']),
             responses: {
                 200: ok('The discount, and what the student then owes.'),

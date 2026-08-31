@@ -266,7 +266,8 @@ export default function Students() {
           onClose={() => setEnrolling(null)}
           onSubmit={saveEnrolment}
           submitLabel="Enrol"
-          busy={busy || !enrol.course_id || !enrol.batch || !enrol.start_date || !enrol.end_date}
+          busy={busy}
+          disabled={!enrol.course_id || !enrol.batch || !enrol.start_date || !enrol.end_date}
         >
           <Grid container spacing={2}>
             <Grid size={{ xs: 12 }}>

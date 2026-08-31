@@ -43,7 +43,7 @@ export default function EducationSection() {
               <Gem className="h-[24px] w-[24px]" strokeWidth={1.5} />
             </div>
 
-            <h2 className="mt-7 max-w-[560px] font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[46px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[760px]:mt-6 max-[760px]:text-[34px]">
+            <h2 className="mt-7 max-w-[560px] font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[760px]:mt-6 max-[760px]:text-[28px]">
               Your Journey to Excellence Starts Here
             </h2>
 

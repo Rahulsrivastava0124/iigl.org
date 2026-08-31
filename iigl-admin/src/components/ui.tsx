@@ -711,19 +711,30 @@ export function ToneAction({
   tone,
   onClick,
   disabled,
+  size = 'medium',
+  hint,
 }: {
   label: string;
   icon: ComponentType<SvgIconProps>;
   tone: Tone;
   onClick: () => void;
   disabled?: boolean;
+  /** `small` for one of these sitting in a row of icon actions. */
+  size?: 'small' | 'medium';
+  /**
+   * Why it is disabled, or what it will do. A worded button explains itself,
+   * so this is for the case a word cannot carry — chiefly "you cannot do this
+   * yet, and here is what is in the way".
+   */
+  hint?: string;
 }) {
-  return (
+  const button = (
     <Button
       // Filled rather than outlined: these decide something, and on a row of
       // otherwise quiet controls the fill is what makes the pair read at a
       // glance as accept and refuse.
       variant="contained"
+      size={size}
       // `plain` has no Button colour of its own — a toneless action inherits
       // the surrounding text colour rather than claiming a semantic one.
       color={tone === 'plain' ? 'inherit' : TONE_COLOUR[tone]}
@@ -735,6 +746,17 @@ export function ToneAction({
       {label}
     </Button>
   );
+
+  if (!hint) return button;
+
+  // A disabled button fires no events, so the tooltip needs a wrapper to hang
+  // on to — otherwise the one control somebody is unsure about is the one that
+  // cannot explain itself.
+  return (
+    <Tooltip title={hint}>
+      {disabled ? <span style={{ display: 'inline-flex' }}>{button}</span> : button}
+    </Tooltip>
+  );
 }
 
 export function Dialog({
@@ -743,18 +765,50 @@ export function Dialog({
   onSubmit,
   submitLabel = 'Save',
   busy,
+  disabled,
+  actions,
   children,
 }: {
   title: string;
   onClose: () => void;
   onSubmit: () => void;
   submitLabel?: string;
+  /** A request is in flight. The button says so and stops taking clicks. */
   busy?: boolean;
+  /**
+   * The form is not ready to submit — a required field is empty, there is
+   * nothing left to pay.
+   *
+   * Separate from `busy` on purpose: passing a validation test as `busy` made
+   * the button read "Saving…" over an empty form, which says the panel is
+   * doing something when it is waiting for the person to type.
+   */
+  disabled?: boolean;
+  /**
+   * Controls that belong to the record rather than to the form — printing it,
+   * opening it elsewhere. They sit inline with the title, away from Cancel and
+   * Save, because they neither commit nor abandon what is being edited.
+   */
+  actions?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <MuiDialog open onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle sx={{ fontSize: '1rem', fontWeight: 600 }}>{title}</DialogTitle>
+      <DialogTitle
+        sx={{
+          fontSize: '1rem',
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 1.5,
+        }}
+      >
+        <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {title}
+        </Box>
+        {actions}
+      </DialogTitle>
       <Box
         component="form"
         onSubmit={(e: React.FormEvent) => {
@@ -767,7 +821,7 @@ export function Dialog({
           <Button onClick={onClose} color="inherit">
             Cancel
           </Button>
-          <Button type="submit" variant="contained" disabled={busy}>
+          <Button type="submit" variant="contained" disabled={busy || disabled}>
             {busy ? 'Saving…' : submitLabel}
           </Button>
         </DialogActions>

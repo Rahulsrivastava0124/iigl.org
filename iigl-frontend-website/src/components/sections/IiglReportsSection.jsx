@@ -7,7 +7,7 @@ export default function IiglReportsSection() {
       <div className="mx-auto max-w-[1390px]">
         <div className="grid items-end gap-8 lg:grid-cols-[0.88fr_1.12fr] lg:gap-14">
           <div>
-            <h2 className="m-0 flex flex-wrap items-end gap-x-4 gap-y-2 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[46px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[34px]">
+            <h2 className="m-0 flex flex-wrap items-end gap-x-4 gap-y-2 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[28px]">
               <img
                 className="h-auto w-[clamp(112px,10vw,154px)] translate-y-[2px]"
                 src={logoTextUrl}

@@ -359,6 +359,18 @@ courseRoutes.patch('/enrolments/:id/discount', numericId, wrap(async (req, res) 
         throw notFound('Enrolment not found.');
     const b = req.body ?? {};
     const fee = Number(existing.fee);
+    /*
+     * A discount is settled before the money starts moving.
+     *
+     * Once a payment has been taken against this enrolment the fee is what the
+     * student was told and part-paid; changing it afterwards rewrites the sum a
+     * receipt was printed from, and clearing it can put the payable below what
+     * has already been handed over. Refund and re-enrol is the honest path for
+     * that, not an edit here.
+     */
+    if (Number(existing.fee_paid) > 0) {
+        throw badRequest(`A discount can only be set before the first payment. ${Number(existing.fee_paid)} has already been paid on this enrolment.`);
+    }
     // An empty type clears the discount and puts the fee back to the full one.
     if (b.type == null || b.type === '' || Number(b.value ?? 0) <= 0) {
         await db

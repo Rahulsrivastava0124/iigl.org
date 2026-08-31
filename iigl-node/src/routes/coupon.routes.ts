@@ -171,6 +171,11 @@ async function refusal(c: CouponRow, e: EnrolmentRow): Promise<string | null> {
   if (from && now < from) return `${c.code} is not valid until ${from}.`;
   if (to && now > to) return `${c.code} expired on ${to}.`;
 
+  // Same rule as a typed discount: the fee is settled once money has moved.
+  if (Number(e.fee_paid) > 0) {
+    return `A coupon can only be applied before the first payment, and ${Number(e.fee_paid)} has already been paid.`;
+  }
+
   if (c.course_id !== null && Number(c.course_id) !== Number(e.course_id)) {
     const course = await db
       .selectFrom('courses')

@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  Box,
   Button,
+  IconButton,
+  InputAdornment,
   MenuItem,
   Stack,
   Tab,
@@ -12,6 +15,7 @@ import {
   TableRow,
   Tabs,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/AddOutlined';
@@ -20,11 +24,13 @@ import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import StartIcon from '@mui/icons-material/PlayCircleOutlined';
 import DoneIcon from '@mui/icons-material/CheckCircleOutlined';
 import PaymentIcon from '@mui/icons-material/PaymentsOutlined';
-import DiscountIcon from '@mui/icons-material/LocalOfferOutlined';
-import ClearIcon from '@mui/icons-material/BackspaceOutlined';
+import BackIcon from '@mui/icons-material/UndoOutlined';
+import CloseIcon from '@mui/icons-material/CloseOutlined';
+import PrintIcon from '@mui/icons-material/PrintOutlined';
 import { useDebounced, useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
-import { messageOf } from '../lib/auth';
+import { messageOf, useAuth } from '../lib/auth';
+import { escapeHtml, printDocument } from '../lib/print';
 import { useToast } from '../components/Toast';
 import {
   ConfirmDialog,
@@ -37,6 +43,7 @@ import {
   SearchField,
   StateChip,
   TableFrame,
+  ToneAction,
   YesNo,
   money,
 } from '../components/ui';
@@ -104,6 +111,7 @@ const BLANK_COURSE = {
  */
 export default function Courses() {
   const toast = useToast();
+  const { user } = useAuth();
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') === 'enrolments' ? 'enrolments' : 'catalogue';
   const status = params.get('status') as CourseStatus | null;
@@ -140,42 +148,153 @@ export default function Courses() {
    * from here — a client that posts its own total can post one the arithmetic
    * does not support.
    */
-  const [discounting, setDiscounting] = useState<Enrolment | null>(null);
   const [cut, setCut] = useState({ type: 'percent', value: '', reason: '' });
   const [code, setCode] = useState('');
   const [checked, setChecked] = useState<{ discount: number; final_fee: number } | null>(null);
   const [cutBusy, setCutBusy] = useState(false);
 
-  const closeDiscount = () => {
-    setDiscounting(null);
-    setCut({ type: 'percent', value: '', reason: '' });
-    setCode('');
-    setChecked(null);
-  };
-
-  const openDiscount = (e: Enrolment) => {
+  /**
+   * Open the fee dialog on one enrolment.
+   *
+   * One dialog, not two. Taking money and taking money off are the same
+   * conversation at the counter — "that will be 30,000", "there is a coupon" —
+   * and splitting them across two row actions meant applying a discount, then
+   * finding the payment button, then reading the new figure off the row.
+   */
+  const openFee = (e: Enrolment) => {
     setCut({
       type: e.discount_type ?? 'percent',
       value: Number(e.discount_amount) > 0 ? String(Number(e.discount_value)) : '',
       reason: '',
     });
+    // Seeded with the coupon already on the enrolment, so the field shows what
+    // was spent and can cancel it.
+    setCode(couponOn(e) ?? '');
+    setChecked(null);
+    // The amount is left empty on purpose. Filling it with the whole balance
+    // makes a part payment an act of deleting a number somebody else typed,
+    // and one Enter too many takes the full amount.
+    setAmount('');
+    setPaying(e);
+  };
+
+  /**
+   * The coupon code an enrolment already carries, if a coupon set its discount.
+   *
+   * `discount_reason` is where a coupon writes itself — `Coupon NEWYEAR25` —
+   * because the reduction has to live on the enrolment whichever door it came
+   * through. Reading it back is what lets the field show the code and cancel
+   * it.
+   */
+  const couponOn = (e: Enrolment): string | null => {
+    const match = /^Coupon (.+)$/.exec(e.discount_reason ?? '');
+    return match ? match[1] : null;
+  };
+
+  /**
+   * Print what this student has paid, and what is left.
+   *
+   * A statement of the fee as it stands, not a numbered receipt: nothing in
+   * the schema issues fee receipt numbers, and printing an official-looking
+   * number that no record can be found by is worse than printing none. The
+   * enrolment id is the reference, and every figure on it is read from the
+   * enrolment rather than recomputed here.
+   */
+  const printReceipt = (e: Enrolment) => {
+    const row = (label: string, value: string, total = false) =>
+      `<tr${total ? ' class="total"' : ''}><td class="k">${escapeHtml(label)}</td>` +
+      `<td class="v">${escapeHtml(value)}</td></tr>`;
+
+    printDocument(
+      `Fee statement — ${e.student_name ?? 'student'}`,
+      `<h1>IIGL — Course fee statement</h1>
+       <p class="sub">${escapeHtml(new Date().toLocaleString('en-IN'))} · enrolment #${e.id}</p>
+       <div class="rule"></div>
+       <table>
+         ${row('Student', e.student_name ?? '—')}
+         ${row('Registration no', e.registration_no ?? '—')}
+         ${row('Course', e.course_name ?? '—')}
+         ${row('Batch', e.batch ?? '—')}
+       </table>
+       <div class="rule"></div>
+       <table>
+         ${row('Course fee', money(e.fee))}
+         ${
+           Number(e.discount_amount) > 0
+             ? row(e.discount_reason ?? 'Discount', `− ${money(e.discount_amount)}`)
+             : ''
+         }
+         ${row('Payable', money(e.final_fee))}
+         ${row('Paid', money(e.fee_paid))}
+         ${row('Still due', money(due(e)), true)}
+       </table>
+       <p class="note">Figures as at the time of printing. Issued by ${escapeHtml(
+         user?.fullname ?? 'IIGL',
+       )}.</p>`,
+    );
+  };
+
+  const closeFee = () => {
+    setPaying(null);
+    setCut({ type: 'percent', value: '', reason: '' });
     setCode('');
     setChecked(null);
-    setDiscounting(e);
+  };
+
+
+  /**
+   * Enter applies the discount, from either of its fields.
+   *
+   * There is no Apply button. The catch is that this sits inside the payment
+   * form, so an un-caught Enter submits the payment instead — which is a
+   * different act on the same money. Hence `preventDefault` before anything
+   * else, and no apply-on-blur: leaving a field to reach for Cancel should not
+   * charge anybody a discount.
+   */
+  const applyOnEnter = (event: React.KeyboardEvent) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    if (!cutBusy && cut.value) applyDiscount();
   };
 
   const applyDiscount = async () => {
-    if (!discounting) return;
+    if (!paying) return;
     setCutBusy(true);
     try {
       const res = await api.patch<{ data: { discount: number; final_fee: number } }>(
-        `/courses/enrolments/${discounting.id}/discount`,
+        `/courses/enrolments/${paying.id}/discount`,
         { type: cut.type, value: Number(cut.value) || 0, reason: cut.reason },
       );
       toast.ok(
-        `${money(res.data.discount)} off — ${discounting.student_name} now pays ${money(res.data.final_fee)}.`,
+        `${money(res.data.discount)} off — ${paying.student_name} now pays ${money(res.data.final_fee)}.`,
       );
-      closeDiscount();
+      // The dialog stays open on the new figures: what is left to pay has just
+      // changed, and the person is still deciding what to take.
+      enrolments.reload();
+    } catch (e) {
+      toast.error(messageOf(e));
+    } finally {
+      setCutBusy(false);
+    }
+  };
+
+  /**
+   * Take the coupon back off the enrolment.
+   *
+   * The same call as clearing a typed discount — a coupon *is* the discount on
+   * the enrolment once it is spent, so there is one thing to undo. What it does
+   * not do is give the coupon back: `used_count` and the redemption stay,
+   * because the record of a code having been spent on this student is what a
+   * usage limit counts, and rubbing it out would let one code be spent twice.
+   */
+  const cancelCoupon = async () => {
+    if (!open) return;
+    setCutBusy(true);
+    try {
+      await api.patch(`/courses/enrolments/${open.id}/discount`, { type: null, value: 0 });
+      toast.ok(`${code || 'Coupon'} taken off. ${open.student_name} pays the full ${money(open.fee)}.`);
+      setCode('');
+      setChecked(null);
       enrolments.reload();
     } catch (e) {
       toast.error(messageOf(e));
@@ -188,6 +307,9 @@ export default function Courses() {
     try {
       await api.patch(`/courses/enrolments/${e.id}/discount`, { type: null, value: 0 });
       toast.ok(`Discount removed. ${e.student_name} pays the full ${money(e.fee)}.`);
+      // The field emptied too, or it still shows the figure that is no longer
+      // on the enrolment.
+      setCut((f) => ({ ...f, value: '', reason: '' }));
       enrolments.reload();
     } catch (err) {
       toast.error(messageOf(err));
@@ -196,13 +318,13 @@ export default function Courses() {
 
   /** Ask what a coupon would take off, before committing to it. */
   const checkCoupon = async () => {
-    if (!discounting || !code.trim()) return;
+    if (!paying || !code.trim()) return;
     setCutBusy(true);
     setChecked(null);
     try {
       const res = await api.post<{ data: { discount: number; final_fee: number } }>(
         '/coupons/validate',
-        { code: code.trim(), enrolment_id: discounting.id },
+        { code: code.trim(), enrolment_id: paying.id },
       );
       setChecked(res.data);
     } catch (e) {
@@ -215,17 +337,17 @@ export default function Courses() {
   };
 
   const redeemCoupon = async () => {
-    if (!discounting || !code.trim()) return;
+    if (!paying || !code.trim()) return;
     setCutBusy(true);
     try {
       const res = await api.post<{ data: { discount: number; final_fee: number } }>(
         '/coupons/redeem',
-        { code: code.trim(), enrolment_id: discounting.id },
+        { code: code.trim(), enrolment_id: paying.id },
       );
       toast.ok(
-        `${code.trim().toUpperCase()} applied — ${money(res.data.discount)} off, ${discounting.student_name} now pays ${money(res.data.final_fee)}.`,
+        `${code.trim().toUpperCase()} applied — ${money(res.data.discount)} off, ${paying.student_name} now pays ${money(res.data.final_fee)}.`,
       );
-      closeDiscount();
+      setChecked(null);
       enrolments.reload();
     } catch (e) {
       toast.error(messageOf(e));
@@ -345,8 +467,43 @@ export default function Courses() {
   };
 
   const due = (e: Enrolment) => Number(e.final_fee) - Number(e.fee_paid);
+
+  /**
+   * Nothing has been paid on a fee that is not zero.
+   *
+   * What stops a course being started: the money comes first. A fee of zero —
+   * a scholarship, a fully discounted place — is not unpaid, so it does not
+   * hold the course up.
+   */
+  const unpaid = (e: Enrolment) => Number(e.final_fee) > 0 && Number(e.fee_paid) <= 0;
   const courses = catalogue.data?.data ?? [];
   const rows = enrolments.data?.data ?? [];
+
+  /**
+   * The row the fee dialog is open on, re-read from the list.
+   *
+   * A discount applied inside the dialog changes the very figures it is
+   * showing, so it reads the reloaded row rather than the copy it was opened
+   * with — otherwise the totals go stale the moment they matter most.
+   */
+  const open = paying ? (rows.find((r) => r.id === paying.id) ?? paying) : null;
+
+  /** The coupon already spent on the open enrolment, if there is one. */
+  const spent = open ? couponOn(open) : null;
+
+  /**
+   * A discount is settled before the money starts moving.
+   *
+   * Once a payment has been taken, the fee is what the student was told and
+   * part-paid: changing it rewrites the sum a statement was printed from, and
+   * removing it can put the payable below what has already been handed over.
+   * The API refuses it either way — this is the screen saying so first, rather
+   * than letting somebody type a figure and then be told no.
+   */
+  const settled = Boolean(open && Number(open.fee_paid) > 0);
+
+  /** A typed discount already on the enrolment — a coupon's is cancelled on the code. */
+  const applied = Boolean(open && Number(open.discount_amount) > 0 && !spent);
 
   return (
     <>
@@ -581,38 +738,57 @@ export default function Courses() {
                     </TableCell>
                     <TableCell>
                       <RowActions>
+                        {/*
+                          A course starts once it has been paid for. The button
+                          is drawn either way rather than hidden, because "why
+                          can I not start this" is answered by the tooltip and
+                          not by a control that is not there.
+                        */}
                         {e.status !== 'completed' && (
-                          <IconAction
-                            label={e.status === 'upcoming' ? 'Start the course' : 'Mark completed'}
+                          // Worded, not an icon: starting a course and closing
+                          // one are the two decisions on this row, and an
+                          // unlabelled play button beside three other glyphs
+                          // says nothing about which. The tone is the state it
+                          // produces — amber for ongoing, green for completed —
+                          // matching the chip the row will then carry.
+                          <ToneAction
+                            label={e.status === 'ongoing' ? 'Complete' : 'Start course'}
                             icon={e.status === 'upcoming' ? StartIcon : DoneIcon}
+                            tone={e.status === 'upcoming' ? 'waiting' : 'settled'}
+                            size="small"
+                            disabled={e.status === 'upcoming' && unpaid(e)}
+                            hint={
+                              e.status === 'upcoming' && unpaid(e)
+                                ? `Take a payment first — ${money(due(e))} due`
+                                : undefined
+                            }
                             onClick={() =>
                               moveEnrolment(e, e.status === 'upcoming' ? 'ongoing' : 'completed')
                             }
                           />
                         )}
-                        <IconAction
-                          label={
-                            Number(e.discount_amount) > 0 ? 'Change the discount' : 'Discount or coupon'
-                          }
-                          icon={DiscountIcon}
-                          onClick={() => openDiscount(e)}
-                        />
-                        {Number(e.discount_amount) > 0 && (
+                        {/*
+                          And back again. A course marked completed by mistake,
+                          or started before the money arrived, needed a database
+                          edit to undo — the status only ever moved forwards.
+                        */}
+                        {e.status !== 'upcoming' && (
                           <IconAction
-                            label="Remove discount"
-                            icon={ClearIcon}
-                            danger
-                            onClick={() => clearDiscount(e)}
+                            label={
+                              e.status === 'completed'
+                                ? 'Back to ongoing'
+                                : 'Back to upcoming'
+                            }
+                            icon={BackIcon}
+                            onClick={() =>
+                              moveEnrolment(e, e.status === 'completed' ? 'ongoing' : 'upcoming')
+                            }
                           />
                         )}
                         <IconAction
-                          label="Take a fee payment"
+                          label="Fee, discount and payment"
                           icon={PaymentIcon}
-                          disabled={due(e) <= 0}
-                          onClick={() => {
-                            setPaying(e);
-                            setAmount(String(due(e)));
-                          }}
+                          onClick={() => openFee(e)}
                         />
                         <IconAction
                           label="Remove enrolment"
@@ -636,104 +812,234 @@ export default function Courses() {
           : 'The fee shown is after any discount. A discount — typed, or decided by a coupon — is applied on the enrolment itself, which is where the fee lives.'}
       </Typography>
 
-      {discounting && (
+      {open && (
         <Dialog
-          title={`Discount — ${discounting.student_name}`}
-          onClose={closeDiscount}
-          onSubmit={applyDiscount}
-          submitLabel="Apply discount"
-          busy={cutBusy || !cut.value}
-        >
-          <Stack spacing={2}>
-            <Typography variant="body2" color="text.secondary">
-              {discounting.course_name} · course fee {money(discounting.fee)}
-              {Number(discounting.fee_paid) > 0
-                ? ` · ${money(discounting.fee_paid)} already paid, and a discount cannot take the fee below that`
-                : ''}
-            </Typography>
-
-            <TextField
-              select
-              label="Discount type"
-              value={cut.type}
-              onChange={(e) => setCut((f) => ({ ...f, type: e.target.value }))}
-            >
-              <MenuItem value="percent">Percentage</MenuItem>
-              <MenuItem value="fixed">Fixed amount</MenuItem>
-            </TextField>
-            <TextField
-              label={cut.type === 'percent' ? 'Discount %' : 'Discount amount'}
-              type="number"
-              value={cut.value}
-              onChange={(e) => setCut((f) => ({ ...f, value: e.target.value }))}
-              slotProps={{
-                htmlInput: { min: 0, max: cut.type === 'percent' ? 100 : Number(discounting.fee) },
-              }}
-              autoFocus
-            />
-            <TextField
-              label="Reason"
-              value={cut.reason}
-              onChange={(e) => setCut((f) => ({ ...f, reason: e.target.value }))}
-              helperText="Why this student, so the concession can be explained later."
-            />
-
-            {/*
-              Or a coupon, which decides the figure instead of somebody typing
-              one. Check first, apply second: the check names the refusal —
-              expired, wrong course, already used by this student — where
-              applying would only fail.
-            */}
-            <Stack
-              direction="row"
-              spacing={1}
-              sx={{ alignItems: 'flex-start', borderTop: 1, borderColor: 'divider', pt: 2 }}
-            >
-              <TextField
-                label="Coupon code"
-                value={code}
-                onChange={(e) => {
-                  setCode(e.target.value.toUpperCase());
-                  setChecked(null);
-                }}
-                helperText={
-                  checked
-                    ? `${money(checked.discount)} off — the student would pay ${money(checked.final_fee)}.`
-                    : 'A code takes the place of the figure above.'
-                }
-                sx={{ flex: 1 }}
-              />
-              <Button
-                onClick={checked ? redeemCoupon : checkCoupon}
-                disabled={cutBusy || !code.trim()}
-                variant={checked ? 'contained' : 'outlined'}
-                sx={{ mt: 1, whiteSpace: 'nowrap' }}
-              >
-                {cutBusy ? 'Checking…' : checked ? 'Apply coupon' : 'Check'}
-              </Button>
-            </Stack>
-          </Stack>
-        </Dialog>
-      )}
-
-      {paying && (
-        <Dialog
-          title={`Fee payment — ${paying.student_name}`}
-          onClose={() => setPaying(null)}
+          title={`Fee — ${open.student_name}`}
+          actions={
+            <IconAction label="Print fee statement" icon={PrintIcon} onClick={() => printReceipt(open)} />
+          }
+          onClose={closeFee}
           onSubmit={takePayment}
           submitLabel="Take payment"
           busy={busy}
+          disabled={!amount || Number(amount) <= 0 || due(open) <= 0}
         >
-          <TextField
-            label="Amount"
-            type="number"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            slotProps={{ htmlInput: { min: 0, max: due(paying) } }}
-            helperText={`${money(due(paying))} still due of ${money(paying.final_fee)}.`}
-            fullWidth
-            autoFocus
-          />
+          <Stack spacing={1.5}>
+            {/* What is owed, before anything is typed. */}
+            <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+              {[
+                ['Course fee', money(open.fee)],
+                ...(Number(open.discount_amount) > 0
+                  ? ([
+                      [open.discount_reason ?? 'Discount', `− ${money(open.discount_amount)}`],
+                    ] as [string, string][])
+                  : []),
+                ['Payable', money(open.final_fee)],
+                ['Paid', money(open.fee_paid)],
+              ].map(([label, value]) => (
+                <Stack
+                  key={label}
+                  direction="row"
+                  sx={{ justifyContent: 'space-between', py: 0.25 }}
+                >
+                  <Typography variant="body2" color="text.secondary">
+                    {label}
+                  </Typography>
+                  <Typography variant="body2" className="tabular">
+                    {value}
+                  </Typography>
+                </Stack>
+              ))}
+              <Stack
+                direction="row"
+                sx={{
+                  justifyContent: 'space-between',
+                  pt: 0.75,
+                  mt: 0.75,
+                  borderTop: 1,
+                  borderColor: 'divider',
+                }}
+              >
+                <Typography sx={{ fontWeight: 600 }}>Still due</Typography>
+                <Typography className="tabular" sx={{ fontWeight: 600 }}>
+                  {money(due(open))}
+                </Typography>
+              </Stack>
+            </Box>
+
+            <TextField
+              label="Amount"
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              slotProps={{ htmlInput: { min: 0, max: due(open) } }}
+              helperText={
+                due(open) > 0
+                  ? `${money(due(open))} still due.`
+                  : 'This enrolment is paid in full.'
+              }
+              fullWidth
+              autoFocus
+            />
+
+            {/*
+              The discount lives in this dialog rather than behind a row action
+              of its own: taking money and taking money off are one conversation
+              at the counter, and the figures above answer both.
+
+              It is gone once anything has been paid, rather than greyed out. A
+              discount is settled before the money moves — the API refuses it
+              after — and a row of dead fields is a block of screen explaining
+              something that is no longer a choice. What was already taken off
+              still shows in the summary above, which is where it belongs.
+            */}
+            {!settled && (
+            <Box sx={{ borderTop: 1, borderColor: 'divider', pt: 1.5 }}>
+              <Typography variant="overline" color="text.secondary">
+                Discount
+              </Typography>
+              {/*
+                A grid, not a row of three. In a row the select took the width
+                it wanted and the amount field was squeezed to a sliver between
+                it and the button — two equal columns cannot do that, whatever
+                the dialog width.
+              */}
+              <Box
+                sx={{
+                  mt: 0.5,
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                  gap: 1.5,
+                }}
+              >
+                <TextField
+                  select
+                  label="Type"
+                  value={cut.type}
+                  onChange={(e) => setCut((f) => ({ ...f, type: e.target.value }))}
+                  disabled={Boolean(spent)}
+                  fullWidth
+                >
+                  <MenuItem value="percent">Percent</MenuItem>
+                  <MenuItem value="fixed">Amount</MenuItem>
+                </TextField>
+                <TextField
+                  label={cut.type === 'percent' ? 'Off %' : 'Off ₹'}
+                  type="number"
+                  value={cut.value}
+                  onChange={(e) => setCut((f) => ({ ...f, value: e.target.value }))}
+                  onKeyDown={applyOnEnter}
+                  disabled={Boolean(spent)}
+                  slotProps={{
+                    htmlInput: { min: 0, max: cut.type === 'percent' ? 100 : Number(open.fee) },
+                    input: {
+                      // Removing a discount happens on the figure itself, the
+                      // same way a coupon is cancelled on its code. A button
+                      // under the block was a second place to look for one act.
+                      endAdornment: (cut.value || applied) && (
+                        <InputAdornment position="end">
+                          <Tooltip title={applied ? 'Remove this discount' : 'Clear'}>
+                            <span>
+                              <IconButton
+                                size="small"
+                                edge="end"
+                                aria-label={applied ? 'Remove discount' : 'Clear discount'}
+                                disabled={cutBusy}
+                                onClick={() => {
+                                  if (applied) clearDiscount(open);
+                                  else setCut((f) => ({ ...f, value: '' }));
+                                }}
+                              >
+                                <CloseIcon fontSize="small" />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
+                  fullWidth
+                />
+              </Box>
+
+              <TextField
+                label="Reason"
+                value={cut.reason}
+                onChange={(e) => setCut((f) => ({ ...f, reason: e.target.value }))}
+                onKeyDown={applyOnEnter}
+                disabled={Boolean(spent)}
+                helperText="Why this student, so the concession can be explained later. Press Enter to apply."
+                fullWidth
+                sx={{ mt: 1.5 }}
+              />
+
+              {/*
+                Or a coupon, which decides the figure instead of somebody typing
+                one. Check first, apply second: the check names the refusal —
+                expired, wrong course, already used by this student — where
+                applying would only fail.
+              */}
+              <Stack direction="row" spacing={1} sx={{ mt: 1, alignItems: 'flex-start' }}>
+                <TextField
+                  label="Coupon code"
+                  value={code}
+                  onChange={(e) => {
+                    setCode(e.target.value.toUpperCase());
+                    setChecked(null);
+                  }}
+                  disabled={Boolean(spent)}
+                  helperText={
+                    spent
+                      ? `${spent} is on this enrolment. Cancel it to change the discount.`
+                      : checked
+                        ? `${money(checked.discount)} off — the student would pay ${money(checked.final_fee)}.`
+                        : 'A code takes the place of the figure above.'
+                  }
+                  slotProps={{
+                    input: {
+                      // Cancel sits inside the box, on the code it undoes.
+                      endAdornment: (code || spent) && (
+                        <InputAdornment position="end">
+                          <Tooltip title={spent ? `Take ${spent} off this fee` : 'Clear'}>
+                            <span>
+                              <IconButton
+                                size="small"
+                                edge="end"
+                                aria-label={spent ? 'Cancel coupon' : 'Clear code'}
+                                disabled={cutBusy}
+                                onClick={() => {
+                                  if (spent) cancelCoupon();
+                                  else {
+                                    setCode('');
+                                    setChecked(null);
+                                  }
+                                }}
+                              >
+                                <CloseIcon fontSize="small" />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
+                  // `minWidth: 0` as well as `flex: 1`: a flex item will not
+                  // shrink below its content width without it, which is how the
+                  // field beside a button ends up a sliver.
+                  sx={{ flex: 1, minWidth: 0 }}
+                />
+                <Button
+                  onClick={checked ? redeemCoupon : checkCoupon}
+                  disabled={cutBusy || !code.trim() || Boolean(spent)}
+                  variant={checked ? 'contained' : 'outlined'}
+                  sx={{ mt: 1, whiteSpace: 'nowrap' }}
+                >
+                  {cutBusy ? 'Checking…' : checked ? 'Apply coupon' : 'Check'}
+                </Button>
+              </Stack>
+            </Box>
+            )}
+          </Stack>
         </Dialog>
       )}
 

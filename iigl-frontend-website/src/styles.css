@@ -29,18 +29,18 @@
   }
 }
 
-.hero-swiper .swiper-pagination {
-  bottom: 16px;
-}
-
-.hero-swiper .swiper-pagination-bullet {
-  width: 28px;
-  height: 3px;
+/* The dots live in `.hero-dots`, a plain div under the slider — see the note
+   in HeroSection.jsx about Swiper zeroing the padding inside `.swiper`. */
+.hero-dots .swiper-pagination-bullet {
+  width: 22px;
+  height: 6px;
   border-radius: 999px;
-  background: rgba(44, 59, 100, 0.24);
+  background: rgba(44, 59, 100, 0.2);
   opacity: 1;
+  transition: width 0.25s ease, background 0.25s ease;
 }
 
-.hero-swiper .swiper-pagination-bullet-active {
+.hero-dots .swiper-pagination-bullet-active {
+  width: 30px;
   background: #d58a2b;
 }
