@@ -125,6 +125,7 @@ export default function Dashboard() {
                     value={money(s.wallet.balance)}
                     fill="brand"
                     icon={WalletIcon}
+                    to="/wallet"
                   />
                 </Grid>
                 <Grid size={CELL}>

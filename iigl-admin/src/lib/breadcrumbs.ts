@@ -27,6 +27,7 @@ const SECTIONS: Record<string, string> = {
   orders: 'Order Management',
   reports: 'Certificates',
   transactions: 'Account',
+  wallet: 'Account',
   attendance: 'Attendance',
   laboratories: 'Laboratory',
   staff: 'Employee Management',
@@ -89,6 +90,7 @@ const VIEWS: Record<string, Record<string, string>> = {
  * are the same, a second crumb saying it twice is worse than one.
  */
 const DEFAULT_VIEW: Record<string, string> = {
+  wallet: 'Wallet',
   categories: 'Categories',
   attributes: 'Attributes',
   staff: 'Employee List',

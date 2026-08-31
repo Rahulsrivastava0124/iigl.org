@@ -518,7 +518,7 @@ function RedemptionLog({ coupon, onClose }: { coupon: Coupon; onClose: () => voi
   const rows = data?.data ?? [];
 
   return (
-    <Dialog title={`${coupon.code} — where it went`} onClose={onClose} onSubmit={onClose} submitLabel="Done">
+    <Dialog title={`${coupon.code} — where it went`} onClose={onClose} onSubmit={onClose} submitLabel="Done" maxWidth="md">
       <TableFrame loading={loading} error={error} empty={rows.length === 0}>
         <Table size="small">
           <TableHead>

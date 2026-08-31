@@ -1,3 +1,4 @@
+import AvailableCoursesSection from './components/sections/AvailableCoursesSection.jsx';
 import EducationSection from './components/sections/EducationSection.jsx';
 import FaqSection from './components/sections/FaqSection.jsx';
 import Footer from './components/sections/Footer.jsx';

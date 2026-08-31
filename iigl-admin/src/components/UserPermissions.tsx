@@ -146,6 +146,7 @@ export default function UserPermissions({
       onClose={onClose}
       onSubmit={onClose}
       submitLabel="Done"
+      maxWidth="lg"
     >
       {/*
         * No explanation banner for somebody who has a role.

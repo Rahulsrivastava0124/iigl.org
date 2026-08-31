@@ -123,12 +123,20 @@ export interface Report {
 export interface Transaction {
   id: number;
   amount: string;
+  /** The sale the commission was worked out from. Null on other kinds. */
+  comission_on: number | null;
   send_by: number;
   received_by: number;
+  /** Resolved by the list endpoint. Null when the id is the walk-in sentinel 0. */
+  send_by_name: string | null;
+  received_by_name: string | null;
   status: number;
   transaction_type: string | null;
   pay_mode: string;
   transaction_no: string | null;
+  remark: string | null;
+  /** `public/uploads/…`, the payment proof. Render with `fileUrl`. */
+  attachment: string | null;
   created_at: string | null;
 }
 

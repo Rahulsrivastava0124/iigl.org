@@ -174,10 +174,17 @@ export function Tile({
   tone,
   fill,
   icon: Icon,
+  to,
 }: {
   label: string;
   value: string;
   note?: string;
+  /**
+   * Where the figure came from. A tile that can be opened says so by lifting
+   * on hover — a dashboard number is a summary, and the useful next question
+   * is always which rows it is the sum of.
+   */
+  to?: string;
   /** Draws the figure in the brand navy, for the one that matters most. */
   accent?: boolean;
   /** Draws the figure in the colour of the state it reports. */
@@ -206,6 +213,7 @@ export function Tile({
   return (
     <Paper
       variant="outlined"
+      {...(to ? { component: RouterLink, to } : {})}
       sx={{
         p: 2,
         height: '100%',
@@ -214,6 +222,14 @@ export function Tile({
         justifyContent: 'space-between',
         gap: 1.5,
         ...(tint && { bgcolor: tint.soft, borderColor: tint.soft }),
+        ...(to && {
+          textDecoration: 'none',
+          transition: 'box-shadow 150ms, border-color 150ms',
+          '&:hover': {
+            borderColor: 'primary.main',
+            boxShadow: '0 6px 18px rgba(6,25,72,0.10)',
+          },
+        }),
       }}
     >
       <Box sx={{ minWidth: 0 }}>

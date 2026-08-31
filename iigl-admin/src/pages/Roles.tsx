@@ -1,14 +1,7 @@
 import { useState } from 'react';
 import {
-  Box,
   Button,
-  Checkbox,
   Chip,
-  CircularProgress,
-  Dialog as MuiDialog,
-  DialogContent,
-  DialogTitle,
-  IconButton,
   Table,
   TableBody,
   TableCell,
@@ -18,6 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useToast } from '../components/Toast';
+import RolePermissionsDialog from '../components/RolePermissionsDialog';
 import { useAuth } from '../lib/auth';
 import { isSuper, ROLE } from '../lib/portal';
 import { useFetch } from '../lib/useFetch';
@@ -26,7 +20,6 @@ import { messageOf } from '../lib/auth';
 import {
   FormPanel,
   IconAction,
-  Notice,
   Panel,
   RowActions,
   SearchField,
@@ -44,7 +37,6 @@ import AddIcon from '@mui/icons-material/AddOutlined';
 import PermissionsIcon from '@mui/icons-material/KeyOutlined';
 import EditIcon from '@mui/icons-material/EditOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
-import CloseIcon from '@mui/icons-material/CloseOutlined';
 
 interface Role {
   id: number;
@@ -60,16 +52,6 @@ interface Role {
   users: number;
 }
 
-/** A permission that can be granted, from `permission_actions`. */
-interface Action {
-  name: string;
-  label: string;
-  description: string | null;
-  is_system: boolean;
-  /** False when nothing in the API reads this name yet. */
-  enforced: boolean;
-}
-
 interface Permission {
   action_type: string;
   view: boolean;
@@ -77,41 +59,6 @@ interface Permission {
   update: boolean;
   delete: boolean;
 }
-
-type Ability = 'view' | 'create' | 'update' | 'delete';
-const ABILITIES: Ability[] = ['view', 'create', 'update', 'delete'];
-
-/**
- * Plain-English names for the action types. The stored values are terse and
- * inconsistent — `product_collection` is order intake, `admin_employee` is
- * staff administration — so nobody should have to infer what a row governs
- * from a column value.
- */
-const LABELS: Record<string, { name: string; note?: string }> = {
-  product_collection: {
-    name: 'Order intake',
-    note: 'Without view and create, a person sees only the orders they took or were assigned — not the laboratory queue.',
-  },
-  report: { name: 'Certificates' },
-  account: { name: 'Accounts and ledger' },
-  customer: { name: 'Customers' },
-  laboratory: { name: 'Laboratories' },
-  employee_management: { name: 'Staff' },
-  admin_employee: { name: 'Staff administration' },
-  visitor_book: { name: 'Visitor book' },
-  website_home: { name: 'Website — home' },
-  website_blog: { name: 'Website — articles' },
-  website_contact: { name: 'Website — contact' },
-  website_enquiry: { name: 'Website — enquiries' },
-  website_education: { name: 'Website — education' },
-  website_report: { name: 'Website — certificate lookup' },
-};
-
-const labelFor = (action: string, known?: Action) =>
-  LABELS[action] ??
-  (known
-    ? { name: known.label, note: known.description ?? undefined }
-    : { name: action.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()) });
 
 /**
  * Only super admin (#1) and laboratory (#2) are truly built-in.
@@ -123,7 +70,6 @@ export default function Roles() {
   const toast = useToast();
   const { user } = useAuth();
   const roles = useFetch<{ data: Role[] }>('/roles');
-  const actions = useFetch<{ data: Action[] }>('/roles/actions');
   const list = roles.data?.data ?? [];
   // `list` itself stays whole: it resolves the selected role and drives the
   // permission matrix below, neither of which a search of the table should touch.
@@ -141,8 +87,6 @@ export default function Roles() {
     chosen ? `/roles/${chosen}/permissions` : null,
   );
 
-  const [saving, setSaving] = useState<string | null>(null);
-
   // No `open`: the form is a panel on the page, empty to add and filled to
   // rename, with `id` the only thing telling the two apart.
   const [form, setForm] = useState<{
@@ -153,29 +97,6 @@ export default function Roles() {
   }>({ open: false, name: '', description: '' });
 
   const [busy, setBusy] = useState(false);
-
-  /**
-   * One toggle sends the whole row: the API replaces all four flags for that
-   * action type, so sending a single changed flag would clear the other three.
-   */
-  const toggle = async (permission: Permission, ability: Ability) => {
-    const next = { ...permission, [ability]: !permission[ability] };
-    setSaving(`${permission.action_type}:${ability}`);
-    try {
-      await api.put(`/roles/${chosen}/permissions`, {
-        action_type: permission.action_type,
-        view: next.view,
-        create: next.create,
-        update: next.update,
-        delete: next.delete,
-      });
-      permissions.reload();
-    } catch (e) {
-      toast.error(messageOf(e));
-    } finally {
-      setSaving(null);
-    }
-  };
 
   const saveRole = async () => {
     setBusy(true);
@@ -226,9 +147,6 @@ export default function Roles() {
         : r.users > 0
           ? `${r.users} ${r.users === 1 ? 'person holds' : 'people hold'} this role`
           : 'Delete role';
-
-  const rows = permissions.data?.data ?? [];
-  const granted = rows.filter((p) => ABILITIES.some((a) => p[a])).length;
 
   return (
     <>
@@ -346,85 +264,23 @@ export default function Roles() {
         </TableFrame>
       </Panel>
 
-      {/* Permissions Modal */}
       {role && roleId && (
-        <MuiDialog
-          open
+        <RolePermissionsDialog
+          key={role.id}
+          roleId={role.id}
+          roleName={role.id === ROLE.ADMIN ? 'Laboratory' : role.role_name}
+          readOnly={!mayRename(role)}
+          note={
+            role.id === ROLE.ADMIN
+              ? 'A laboratory account already has full access to its own laboratory data. These grants apply to what it may do beyond that.'
+              : undefined
+          }
           onClose={() => setRoleId('')}
-          maxWidth="md"
-          fullWidth
-        >
-          <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Box>
-              <Typography variant="h6" component="span">
-                Permissions — {role.id === ROLE.ADMIN ? 'Laboratory' : role.role_name}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {granted} of {rows.length} areas granted
-              </Typography>
-            </Box>
-            <IconButton onClick={() => setRoleId('')} size="small">
-              <CloseIcon />
-            </IconButton>
-          </DialogTitle>
-          <DialogContent dividers>
-            {role.id === ROLE.ADMIN && (
-              <Notice kind="info" sx={{ mb: 2 }}>
-                Laboratory accounts have full access to their own laboratory data.
-              </Notice>
-            )}
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Area</TableCell>
-                  {ABILITIES.map((a) => (
-                    <TableCell key={a} align="center" sx={{ width: 80 }}>
-                      {a.charAt(0).toUpperCase() + a.slice(1)}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {rows.map((p) => {
-                  const known = (actions.data?.data ?? []).find((a) => a.name === p.action_type);
-                  const label = labelFor(p.action_type, known);
-                  return (
-                    <TableRow key={p.action_type} hover>
-                      <TableCell sx={{ whiteSpace: 'normal' }}>
-                        <Typography sx={{ fontSize: 13.5 }}>{label.name}</Typography>
-                        {known && !known.enforced && (
-                          <Chip
-                            size="small"
-                            variant="outlined"
-                            label="not enforced"
-                            sx={{ ml: 1, height: 18, fontSize: 10 }}
-                          />
-                        )}
-                      </TableCell>
-                      {ABILITIES.map((a) => {
-                        const key = `${p.action_type}:${a}`;
-                        return (
-                          <TableCell key={a} align="center">
-                            {saving === key ? (
-                              <CircularProgress size={16} />
-                            ) : (
-                              <Checkbox
-                                size="small"
-                                checked={p[a]}
-                                onChange={() => toggle(p, a)}
-                                disabled={Boolean(saving)}
-                              />
-                            )}
-                          </TableCell>
-                        );
-                      })}
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </DialogContent>
-        </MuiDialog>
+          onSaved={() => {
+            roles.reload();
+            permissions.reload();
+          }}
+        />
       )}
 
     </>

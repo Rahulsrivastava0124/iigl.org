@@ -38,6 +38,15 @@ transactionRoutes.get(
       c = c.where(mine);
     }
 
+    // `transaction_type` is free text in the schema; the values in use are
+    // 'commision' (the Laravel spelling) and the order payment kinds. The
+    // wallet screen asks for one of them by name.
+    if (req.query.type) {
+      const type = String(req.query.type);
+      q = q.where('transaction_type', '=', type);
+      c = c.where('transaction_type', '=', type);
+    }
+
     if (req.query.status != null) {
       const s = Number(req.query.status);
       q = q.where('status', '=', s);
@@ -55,7 +64,30 @@ transactionRoutes.get(
       c.executeTakeFirstOrThrow(),
     ]);
 
-    res.json(paged(rows, Number(count.n), p));
+    // Who sent and who received, by name. The columns hold ids, and a ledger
+    // that prints `#4` is a ledger somebody has to go and look things up in.
+    // Resolved in one query over the ids on the page rather than a join, so the
+    // filters above stay as they are.
+    const ids = [...new Set(rows.flatMap((r) => [Number(r.send_by), Number(r.received_by)]))].filter(
+      (id) => id > 0,
+    );
+    const people = ids.length
+      ? await db.selectFrom('users').select(['id', 'fullname']).where('id', 'in', ids).execute()
+      : [];
+    const nameOf = new Map(people.map((u) => [Number(u.id), u.fullname]));
+
+    res.json(
+      paged(
+        rows.map((r) => ({
+          ...r,
+          // 0 is the sentinel for a walk-in customer with no account.
+          send_by_name: nameOf.get(Number(r.send_by)) ?? null,
+          received_by_name: nameOf.get(Number(r.received_by)) ?? null,
+        })),
+        Number(count.n),
+        p,
+      ),
+    );
   }),
 );
 

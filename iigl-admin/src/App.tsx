@@ -7,6 +7,7 @@ import Shell from './components/Shell';
 import { ToastProvider } from './components/Toast';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import Wallet from './pages/Wallet';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Orders from './pages/Orders';
@@ -83,6 +84,14 @@ function Routed() {
         <Route path="/reports" element={<Reports />} />
         <Route path="/reports/new" element={<NewReport />} />
         <Route path="/transactions" element={<Transactions />} />
+        <Route
+          path="/wallet"
+          element={
+            <AdminOnly>
+              <Wallet />
+            </AdminOnly>
+          }
+        />
         <Route path="/attendance" element={<Attendance />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/profile" element={<Profile />} />
