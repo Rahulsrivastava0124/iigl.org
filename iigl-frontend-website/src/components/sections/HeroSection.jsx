@@ -4,6 +4,9 @@ import 'swiper/css';
 import 'swiper/css/pagination';
 import heroUrl from '../../../Assets/Hero banner 1.png';
 import heroAltUrl from '../../../Assets/Hero banner.png';
+import hero2Url from '../../../Assets/Hero banner 3.png';
+import hero2AltUrl from '../../../Assets/Hero banner 4.png';
+
 
 /**
  * The banners, and nothing else.
@@ -17,6 +20,8 @@ import heroAltUrl from '../../../Assets/Hero banner.png';
 const banners = [
   { image: heroUrl, alt: 'Coloured gemstones being examined with a loupe' },
   { image: heroAltUrl, alt: 'A brilliant-cut diamond beside red gemstones' },
+  { image: hero2Url, alt: 'A close-up of a blue sapphire' },
+  { image: hero2AltUrl, alt: 'A yellow diamond set in a ring' },
 ];
 
 export default function HeroSection() {
