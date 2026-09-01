@@ -14,6 +14,7 @@ import {
 import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { fileUrl } from '../lib/config';
+import FilePreview from '../components/FilePreview';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
 import {
@@ -51,6 +52,7 @@ export default function Categories() {
   // One search term per list rather than one shared between them: the two tabs
   // are one component, so a shared term would follow you across and leave the
   // other list looking empty for no visible reason.
+  const [preview, setPreview] = useState<{ path: string; name: string } | null>(null);
   const [catQuery, setCatQuery] = useState('');
   const [subQuery, setSubQuery] = useState('');
 
@@ -252,7 +254,17 @@ export default function Categories() {
                       variant="rounded"
                       src={fileUrl(c.icon) ?? undefined}
                       alt=""
-                      sx={{ width: 36, height: 36, bgcolor: 'action.hover', color: 'text.secondary', fontSize: 14 }}
+                      onClick={c.icon ? () => setPreview({ path: c.icon!, name: c.name }) : undefined}
+                      // Fit the whole icon rather than cropping it square.
+                      slotProps={{ img: { sx: { objectFit: 'contain' } } }}
+                      sx={{
+                        width: 36,
+                        height: 36,
+                        bgcolor: 'action.hover',
+                        color: 'text.secondary',
+                        fontSize: 14,
+                        cursor: c.icon ? 'zoom-in' : 'default',
+                      }}
                     >
                       {c.name.charAt(0)}
                     </Avatar>
@@ -424,6 +436,14 @@ export default function Categories() {
         </TableFrame>
       </Panel>
       </>
+      )}
+
+      {preview && (
+        <FilePreview
+          stored={preview.path}
+          title={preview.name}
+          onClose={() => setPreview(null)}
+        />
       )}
     </>
   );

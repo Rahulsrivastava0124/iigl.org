@@ -1073,9 +1073,21 @@ export const extraPaths: Record<string, unknown> = {
                       type: 'object',
                       properties: {
                         path: { type: 'string', examples: ['public/uploads/report/8f3c….png'] },
+                        url: {
+                          type: 'string',
+                          description:
+                            "The object's public URL, or an empty string when no public " +
+                            'domain is configured. Empty means read it through /api/files.',
+                          examples: ['https://pub-….r2.dev/uploads/report/8f3c….png'],
+                        },
                         original_name: { type: 'string' },
                         bytes: int,
                         mime: { type: 'string' },
+                        storage: {
+                          type: 'string',
+                          enum: ['r2', 'disk'],
+                          description: 'Which store took the bytes.',
+                        },
                       },
                     },
                   },

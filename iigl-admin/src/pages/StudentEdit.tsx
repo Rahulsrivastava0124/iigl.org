@@ -302,30 +302,37 @@ export default function StudentEdit() {
             </TextField>
           </Grid>
 
-          {/* Documents */}
-          <Grid size={{ xs: 12, md: 4 }}>
-            <FileField
-              label="Photograph"
-              bucket="employee"
-              value={docs.photo}
-              onChange={(path) => setDocs((d) => ({ ...d, photo: path }))}
-            />
-          </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <FileField
-              label="ID Proof"
-              bucket="documentation"
-              value={docs.id_proof}
-              onChange={(path) => setDocs((d) => ({ ...d, id_proof: path }))}
-            />
-          </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <FileField
-              label="Qualification"
-              bucket="documentation"
-              value={docs.qualification_doc}
-              onChange={(path) => setDocs((d) => ({ ...d, qualification_doc: path }))}
-            />
+          {/*
+            The three documents sit in one row of their own rather than in
+            three columns of the form grid. A column is a third of the page and
+            these frames are 150px wide, so a column each left them stranded
+            with a hand's width of nothing between them. `useFlexGap` because
+            the spacing has to survive the wrap on a narrow screen.
+          */}
+          <Grid size={{ xs: 12 }}>
+            <Stack direction="row" spacing={2} useFlexGap sx={{ flexWrap: 'wrap' }}>
+              <FileField
+                label="Photograph"
+                bucket="employee"
+                value={docs.photo}
+                onChange={(path) => setDocs((d) => ({ ...d, photo: path }))}
+                ratio="3 / 4"
+              />
+              <FileField
+                label="ID Proof"
+                bucket="documentation"
+                value={docs.id_proof}
+                onChange={(path) => setDocs((d) => ({ ...d, id_proof: path }))}
+                ratio="3 / 4"
+              />
+              <FileField
+                label="Qualification"
+                bucket="documentation"
+                value={docs.qualification_doc}
+                onChange={(path) => setDocs((d) => ({ ...d, qualification_doc: path }))}
+                ratio="3 / 4"
+              />
+            </Stack>
           </Grid>
 
           {/* Remark */}

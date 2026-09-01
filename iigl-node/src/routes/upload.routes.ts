@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { wrap } from '../lib/async.js';
 import { badRequest } from '../lib/errors.js';
 import { requireLabScope, ROLE } from '../middleware/auth.js';
-import { BUCKETS, isBucket, MAX_UPLOAD_BYTES, storedPath, upload } from '../services/upload.service.js';
+import { BUCKETS, isBucket, MAX_UPLOAD_BYTES, store, upload } from '../services/upload.service.js';
 
 export const uploadRoutes = Router();
 uploadRoutes.use(requireLabScope);
@@ -41,15 +41,13 @@ uploadRoutes.post(
       throw badRequest('Attach at least one file, in a field named "files".');
     }
 
-    const bucket = String(req.params.bucket);
-    res.status(201).json({
-      data: files.map((f) => ({
-        path: storedPath(bucket as never, f.filename),
-        original_name: f.originalname,
-        bytes: f.size,
-        mime: f.mimetype,
-      })),
-    });
+    const bucket = String(req.params.bucket) as never;
+    // Sequential rather than parallel: ten 8 MB PUTs at once is 80 MB of
+    // sockets for a form that is holding at most a handful of pictures.
+    const stored = [];
+    for (const file of files) stored.push(await store(bucket, file));
+
+    res.status(201).json({ data: stored });
   }),
 );
 
