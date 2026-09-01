@@ -1,6 +1,6 @@
 # IIGL API
 
-159 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
+161 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
 
 The interactive version is at `/docs` when the server is running, and the raw
 document at `/openapi.json`.
@@ -379,10 +379,12 @@ The general enquiry book: questions, visits, leads and complaints.
 | GET | `/api/enquiries/{id}` | session | — | — | 401, 403, 404 | One enquiry |
 | PATCH | `/api/enquiries/{id}` | session | — | kind, name, mobile, email, subject, message, source, status, +2 more | 400, 401, 403, 404 | Update an enquiry |
 | DELETE | `/api/enquiries/{id}` | session | — | — | 401, 403, 404 | Delete an enquiry |
+| GET | `/api/enquiries/{id}/followups` | session | — | — | 401, 403, 404 | The follow-up history of one enquiry |
+| POST | `/api/enquiries/{id}/followups` | session | — | note, outcome, next_follow_up_on, status | 400, 401, 403, 404 | Record a follow-up |
 | GET | `/api/enquiries/summary` | session | — | — | 401, 403 | Counts per kind and per status |
 
 ---
 
 Bold body fields are required.
 
-159 endpoints: 16 public, 143 requiring a session.
+161 endpoints: 16 public, 145 requiring a session.

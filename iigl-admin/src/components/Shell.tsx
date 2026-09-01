@@ -211,16 +211,20 @@ const ADMIN_GROUPS: Group[] = [
     label: 'Student',
     icon: StudentIcon,
     adminOnly: true,
+    // In the order a student passes through them: they ask, they register,
+    // they are enrolled, and the course, the certificate and the money off it
+    // follow. The list is read top to bottom by people learning the panel, so
+    // it should be the sequence rather than the order the screens were built.
     items: [
       { to: '/student-enquiries', label: 'Enquiry' },
       { to: '/students', label: 'Registration' },
-      { to: '/courses', label: 'Course' },
       { to: '/courses?tab=enrolments', label: 'Enrolments' },
+      { to: '/courses', label: 'Course' },
+      { to: '/student-certificates', label: 'Certificates' },
       // A coupon is money off a course fee. The reduction itself is applied on
       // the enrolment, under Student › Enrolments, which is where the fee is —
       // there is no separate Discount screen any more.
       { to: '/coupons', label: 'Discount Coupons' },
-      { to: '/student-certificates', label: 'Certificates' },
     ],
   },
   {

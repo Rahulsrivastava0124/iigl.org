@@ -15,6 +15,8 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/AddOutlined';
 import EditIcon from '@mui/icons-material/EditOutlined';
+import ViewIcon from '@mui/icons-material/VisibilityOutlined';
+import FollowIcon from '@mui/icons-material/PhoneInTalkOutlined';
 import OpenIcon from '@mui/icons-material/PlayCircleOutlined';
 import CloseIcon from '@mui/icons-material/CheckCircleOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
@@ -22,6 +24,7 @@ import { useDebounced, useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
 import { useToast } from '../components/Toast';
+import { EnquiryViewDialog, FollowupDialog } from '../components/EnquiryFollowups';
 import {
   ConfirmDialog,
   FormPanel,
@@ -33,6 +36,7 @@ import {
   StateChip,
   TableFrame,
   Tile,
+  ToneAction,
 } from '../components/ui';
 import type { Paged } from '../lib/api';
 import type { Tone } from '../components/ui';
@@ -86,6 +90,11 @@ interface Enquiry {
   status: Status;
   remark: string | null;
   created_at: string | null;
+  /** How many times somebody has tried, and when they last did. */
+  followups: number;
+  last_followup_at: string | null;
+  /** When the next attempt is due, from the newest follow-up. */
+  follow_up_on: string | null;
 }
 
 interface Summary {
@@ -128,6 +137,8 @@ export default function Enquiries() {
 
   const [form, setForm] = useState<typeof BLANK | null>(null);
   const [deleting, setDeleting] = useState<Enquiry | null>(null);
+  const [following, setFollowing] = useState<Enquiry | null>(null);
+  const [viewing, setViewing] = useState<Enquiry | null>(null);
   const [busy, setBusy] = useState(false);
 
   const go = (next: { kind?: string; status?: string | null; page?: number }) => {
@@ -347,6 +358,7 @@ export default function Enquiries() {
                 <TableCell>Kind</TableCell>
                 <TableCell>Subject</TableCell>
                 <TableCell>Status</TableCell>
+                <TableCell>Follow-up</TableCell>
                 <TableCell>Received</TableCell>
                 <TableCell />
               </TableRow>
@@ -364,18 +376,57 @@ export default function Enquiries() {
                   <TableCell>
                     <StateChip {...(STATE[e.status] ?? { tone: 'plain', label: e.status })} />
                   </TableCell>
+                  {/*
+                    What has been tried and what is next, together: on a
+                    worklist those two decide whether to call, and reading them
+                    in different places means reading the row twice.
+                  */}
+                  <TableCell sx={{ whiteSpace: 'normal', minWidth: 130 }}>
+                    {e.followups > 0 ? (
+                      <>
+                        {e.followups} {e.followups === 1 ? 'attempt' : 'attempts'}
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                          {e.follow_up_on
+                            ? `next ${String(e.follow_up_on).slice(0, 10)}`
+                            : `last ${String(e.last_followup_at ?? '').slice(0, 10)}`}
+                        </Typography>
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </TableCell>
                   <TableCell>{e.created_at?.slice(0, 10) ?? '—'}</TableCell>
                   <TableCell>
                     <RowActions>
+                      <IconAction
+                        label="View enquiry and its history"
+                        icon={ViewIcon}
+                        onClick={() => setViewing(e)}
+                      />
+                      {/*
+                        Following up is the work this screen exists for, so it
+                        is the one control that keeps its word.
+                      */}
+                      {e.status !== 'closed' && (
+                        <ToneAction
+                          label="Follow"
+                          icon={FollowIcon}
+                          tone="waiting"
+                          size="small"
+                          onClick={() => setFollowing(e)}
+                        />
+                      )}
                       {e.status !== 'closed' && (
                         <IconAction
                           label={e.status === 'new' ? 'Pick this up' : 'Close it'}
                           icon={e.status === 'new' ? OpenIcon : CloseIcon}
+                          overflow
                           onClick={() => move(e, e.status === 'new' ? 'open' : 'closed')}
                         />
                       )}
                       <IconAction
                         label="Edit enquiry"
+                        overflow
                         icon={EditIcon}
                         onClick={() =>
                           setForm({
@@ -411,6 +462,19 @@ export default function Enquiries() {
         write endpoint needs a rate limit and a captcha decision first, so these are entered by hand
         for now.
       </Typography>
+
+      {following && (
+        <FollowupDialog
+          enquiry={following}
+          onClose={() => setFollowing(null)}
+          onSaved={() => {
+            source.reload();
+            summary.reload();
+          }}
+        />
+      )}
+
+      {viewing && <EnquiryViewDialog enquiry={viewing} onClose={() => setViewing(null)} />}
 
       <ConfirmDialog
         open={Boolean(deleting)}

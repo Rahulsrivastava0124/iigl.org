@@ -24,6 +24,7 @@ import { messageOf } from '../lib/auth';
 import { useToast } from '../components/Toast';
 import {
   ConfirmDialog,
+  DateField,
   Dialog,
   IconAction,
   Pager,
@@ -295,22 +296,18 @@ export default function Students() {
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField
+              <DateField
                 label="Start date"
-                type="date"
                 value={enrol.start_date}
-                onChange={(e) => setEnrol((s) => ({ ...s, start_date: e.target.value }))}
-                slotProps={{ inputLabel: { shrink: true } }}
+                onChange={(value) => setEnrol((s) => ({ ...s, start_date: value }))}
                 required
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField
+              <DateField
                 label="End date"
-                type="date"
                 value={enrol.end_date}
-                onChange={(e) => setEnrol((s) => ({ ...s, end_date: e.target.value }))}
-                slotProps={{ inputLabel: { shrink: true } }}
+                onChange={(value) => setEnrol((s) => ({ ...s, end_date: value }))}
                 required
               />
             </Grid>

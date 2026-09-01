@@ -1,6 +1,14 @@
-import { useEffect, useState } from 'react';
-import type { ComponentType, ReactNode } from 'react';
+import { Children, isValidElement, useEffect, useState } from 'react';
+import type { ComponentType, ReactElement, ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import dayjs from 'dayjs';
+import customParseFormat from 'dayjs/plugin/customParseFormat';
+
+dayjs.extend(customParseFormat);
+
+/** The format the API speaks, and the one every form's state holds. */
+const ISO_DATE = 'YYYY-MM-DD';
 import {
   Alert,
   Box,
@@ -13,6 +21,8 @@ import {
   DialogTitle,
   IconButton,
   InputAdornment,
+  Menu as MuiMenu,
+  MenuItem,
   Paper,
   Stack,
   TableContainer,
@@ -23,6 +33,7 @@ import type { SvgIconProps } from '@mui/material';
 import TextField from '@mui/material/TextField';
 import SearchIcon from '@mui/icons-material/SearchOutlined';
 import ClearIcon from '@mui/icons-material/CloseOutlined';
+import MoreIcon from '@mui/icons-material/MoreVertOutlined';
 import ShowIcon from '@mui/icons-material/VisibilityOutlined';
 import HideIcon from '@mui/icons-material/VisibilityOffOutlined';
 import type { TextFieldProps } from '@mui/material';
@@ -542,6 +553,77 @@ export function YesNo({ on }: { on: boolean | number }) {
 }
 
 /**
+ * Today, as `YYYY-MM-DD` — the format `DateField` and the API both speak.
+ *
+ * A function rather than a constant: a panel left open overnight would keep
+ * offering yesterday, and the one form where that matters is the one somebody
+ * fills in first thing in the morning.
+ *
+ * Local, not UTC. `toISOString` is a day behind for anybody west of Greenwich
+ * for part of the day, and this is a date somebody is typing, not an instant.
+ */
+export const today = () => dayjs().format(ISO_DATE);
+
+/**
+ * A date field, with the Material UI calendar behind it.
+ *
+ * The panel stores and sends dates as `YYYY-MM-DD` strings — that is what the
+ * API takes and what every form's state already holds — so this keeps that
+ * contract and does the conversion itself. Swapping a `TextField type="date"`
+ * for one of these is a change of tag, not of state.
+ *
+ * Shown as `DD-MM-YYYY`, which is how the Laravel panel printed dates and how
+ * everybody here reads them; the value never changes format.
+ *
+ * An unparseable or cleared date yields `''` rather than a partial string: a
+ * half-typed date reaching the API as a date is worse than one that never
+ * leaves the field.
+ */
+export function DateField({
+  label,
+  value,
+  onChange,
+  required,
+  disabled,
+  minDate,
+  maxDate,
+  helperText,
+  sx,
+}: {
+  label: string;
+  /** `YYYY-MM-DD`, or empty. */
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+  disabled?: boolean;
+  /** Both `YYYY-MM-DD`. */
+  minDate?: string;
+  maxDate?: string;
+  helperText?: string;
+  sx?: object;
+}) {
+  const parsed = value ? dayjs(value, ISO_DATE, true) : null;
+
+  return (
+    <DatePicker
+      label={label}
+      format="DD-MM-YYYY"
+      value={parsed?.isValid() ? parsed : null}
+      onChange={(next) => onChange(next?.isValid() ? next.format(ISO_DATE) : '')}
+      disabled={disabled}
+      minDate={minDate ? dayjs(minDate, ISO_DATE, true) : undefined}
+      maxDate={maxDate ? dayjs(maxDate, ISO_DATE, true) : undefined}
+      slotProps={{
+        textField: { required, helperText, sx, fullWidth: true, size: 'small' },
+        // Nothing here is far from today; a picker that opens on the year is
+        // two clicks from being useful.
+        field: { clearable: !required },
+      }}
+    />
+  );
+}
+
+/**
  * The search box that sits in a list's header.
  *
  * One component so that every list searches the same way and looks the same
@@ -654,22 +736,50 @@ export function PasswordField({ value, ...props }: TextFieldProps) {
  * Page-level actions stay as labelled buttons. "Add band" is a sentence about
  * what the page does; "Edit" beside a row is a verb the row already implies.
  */
+/**
+ * A row's controls.
+ *
+ * Anything destructive — and anything marked `overflow`, which is where undos
+ * and reversals belong — is moved behind the ⋯ menu as soon as the row has two
+ * or more controls. A delete sitting a few pixels from the thing you actually
+ * meant to press is the panel's own foot-gun, and a line of four identical
+ * glyphs says all four are equally the next step when none of them is.
+ *
+ * A row with a single control keeps it in the open whatever it is: there is
+ * nothing to mistake it for, and hiding the only action behind a menu costs a
+ * click for no protection.
+ *
+ * The split is done here rather than at each of the thirteen call sites, so a
+ * screen cannot opt out of it by accident.
+ */
 export function RowActions({ children }: { children: ReactNode }) {
+  const all = Children.toArray(children).filter(isValidElement) as ReactElement<IconActionProps>[];
+  const hidden = all.filter((c) => c.props?.danger || c.props?.overflow);
+  const split = all.length >= 2 && hidden.length > 0;
+
+  const inline = split ? all.filter((c) => !hidden.includes(c)) : all;
+
   return (
-    <Stack direction="row" spacing={0.25} sx={{ justifyContent: 'flex-end' }}>
-      {children}
+    <Stack direction="row" spacing={0.25} sx={{ justifyContent: 'flex-end', alignItems: 'center' }}>
+      {inline}
+      {split && (
+        <MoreActions
+          items={hidden.map((c) => ({
+            label: c.props.label,
+            icon: c.props.icon,
+            onClick: c.props.onClick ?? (() => {}),
+            to: c.props.to,
+            disabled: c.props.disabled,
+            hint: c.props.hint,
+            danger: c.props.danger,
+          }))}
+        />
+      )}
     </Stack>
   );
 }
 
-export function IconAction({
-  label,
-  icon: Icon,
-  onClick,
-  to,
-  disabled,
-  danger,
-}: {
+export interface IconActionProps {
   /** What the control does. Becomes the tooltip and the accessible name. */
   label: string;
   icon: ComponentType<SvgIconProps>;
@@ -677,9 +787,19 @@ export function IconAction({
   /** For an action that is really a link, so it opens in a new tab too. */
   to?: string;
   disabled?: boolean;
+  /** Why it is unavailable, when it is. Falls back to the label. */
+  hint?: string;
   /** Removes, retires or refuses something. Takes the refused tone. */
   danger?: boolean;
-}) {
+  /**
+   * Belongs behind the overflow rather than on the row — an undo, a reversal,
+   * anything occasional. `danger` implies this; use it for the ones that are
+   * merely secondary.
+   */
+  overflow?: boolean;
+}
+
+export function IconAction({ label, icon: Icon, onClick, to, disabled, danger }: IconActionProps) {
   const button = (
     <IconButton
       size="small"
@@ -721,6 +841,91 @@ export function IconAction({
  * the status chip on that row will carry afterwards: approve is `settled`,
  * decline is `refused`.
  */
+/**
+ * A row's extra actions, behind one control.
+ *
+ * A row that has finished — course completed, fee settled — still carries
+ * several things worth doing, and four glyphs in a line reads as four
+ * decisions of equal weight when in truth none of them is the usual next step.
+ * They go behind the overflow, where the labels can be words.
+ *
+ * Items with `danger` are drawn in the refused tone and separated from the
+ * rest, so a delete is never adjacent to the thing above it in the list.
+ */
+export function MoreActions({
+  label = 'More actions',
+  items,
+}: {
+  label?: string;
+  items: {
+    label: string;
+    icon: ComponentType<SvgIconProps>;
+    onClick?: () => void;
+    /** For an item that is really a link. */
+    to?: string;
+    disabled?: boolean;
+    /** Why it is unavailable, when it is. */
+    hint?: string;
+    danger?: boolean;
+  }[];
+}) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const shown = items.filter(Boolean);
+  if (shown.length === 0) return null;
+
+  const close = () => setAnchor(null);
+
+  return (
+    <>
+      <Tooltip title={label} arrow>
+        <IconButton size="small" aria-label={label} onClick={(e) => setAnchor(e.currentTarget)}>
+          <MoreIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      <MuiMenu anchorEl={anchor} open={Boolean(anchor)} onClose={close}>
+        {shown.map((item, i) => {
+          const previous = shown[i - 1];
+          const entry = (
+            <MenuItem
+              key={item.label}
+              disabled={item.disabled}
+              {...(item.to ? { component: RouterLink, to: item.to } : {})}
+              onClick={() => {
+                close();
+                item.onClick?.();
+              }}
+              sx={{
+                fontSize: 13.5,
+                gap: 1.5,
+                ...(item.danger && { color: 'error.main' }),
+                ...(item.danger && previous && !previous.danger && {
+                  borderTop: 1,
+                  borderColor: 'divider',
+                  mt: 0.5,
+                  pt: 1,
+                }),
+              }}
+            >
+              <item.icon fontSize="small" />
+              {item.label}
+            </MenuItem>
+          );
+
+          // A disabled item cannot raise a tooltip of its own, so the reason
+          // is wrapped around it rather than put on it.
+          return item.disabled && item.hint ? (
+            <Tooltip key={item.label} title={item.hint} arrow placement="left">
+              <span>{entry}</span>
+            </Tooltip>
+          ) : (
+            entry
+          );
+        })}
+      </MuiMenu>
+    </>
+  );
+}
+
 export function ToneAction({
   label,
   icon: Icon,
@@ -783,12 +988,19 @@ export function Dialog({
   busy,
   disabled,
   actions,
+  maxWidth = 'sm',
   children,
 }: {
   title: string;
   onClose: () => void;
   onSubmit: () => void;
   submitLabel?: string;
+  /**
+   * `sm` suits a stack of fields, which is what most of these hold. A dialog
+   * showing a table needs the room its columns need — otherwise the last
+   * columns are cut off the right edge with nothing to say they are there.
+   */
+  maxWidth?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   /** A request is in flight. The button says so and stops taking clicks. */
   busy?: boolean;
   /**
@@ -809,7 +1021,7 @@ export function Dialog({
   children: ReactNode;
 }) {
   return (
-    <MuiDialog open onClose={onClose} fullWidth maxWidth="sm">
+    <MuiDialog open onClose={onClose} fullWidth maxWidth={maxWidth}>
       <DialogTitle
         sx={{
           fontSize: '1rem',

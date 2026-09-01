@@ -980,6 +980,39 @@ export const extraPaths: Record<string, unknown> = {
     },
   },
 
+  '/api/enquiries/{id}/followups': {
+    get: {
+      tags: ['Enquiries'],
+      summary: 'The follow-up history of one enquiry',
+      description:
+        'Newest first, each entry naming who made the attempt and how it went. Kept as a log rather than folded into `remark`, which every attempt used to overwrite.',
+      parameters: [idParam],
+      responses: { 200: ok('The history.'), 404: err('Enquiry not found.'), ...guarded },
+    },
+    post: {
+      tags: ['Enquiries'],
+      summary: 'Record a follow-up',
+      description:
+        'Writes three things in step: the log row, the enquiry\'s next follow-up date, and — when one is asked for and it differs — the enquiry\'s status. The move is recorded on the log row as well as applied, so the history says how the enquiry reached its status rather than only what that status is. Closing stamps `closed_at`.',
+      parameters: [idParam],
+      requestBody: body({
+        note: str,
+        outcome: {
+          type: 'string',
+          enum: ['reached', 'no_answer', 'interested', 'not_interested', 'converted'],
+        },
+        next_follow_up_on: { type: ['string', 'null'], format: 'date' },
+        status: { type: 'string', enum: ['new', 'open', 'closed'] },
+      }),
+      responses: {
+        201: ok('Recorded.'),
+        400: err('Unknown outcome, or a date that is not YYYY-MM-DD.'),
+        404: err('Enquiry not found.'),
+        ...guarded,
+      },
+    },
+  },
+
   // ------------------------------------------------------------ customers
   '/api/customers/registered': {
     get: {

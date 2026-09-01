@@ -202,6 +202,10 @@ function enrolmentQuery() {
     .selectFrom('student_courses as sc')
     .leftJoin('students as s', 's.id', 'sc.student_id')
     .leftJoin('courses as c', 'c.id', 'sc.course_id')
+    // Whether a certificate has been issued against this enrolment, and where
+    // the file is. The enrolments list offers it once the course is finished
+    // and the fee is settled, and it cannot offer what it cannot see.
+    .leftJoin('student_certificates as cert', 'cert.student_course_id', 'sc.id')
     .select([
       'sc.id',
       'sc.student_id',
@@ -227,6 +231,10 @@ function enrolmentQuery() {
       's.mobile',
       'c.name as course_name',
       'c.duration',
+      'cert.id as certificate_id',
+      'cert.certificate_no',
+      'cert.file as certificate_file',
+      'cert.issued_on as certificate_issued_on',
     ]);
 }
 

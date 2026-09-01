@@ -19,6 +19,7 @@ import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
 import { useToast } from '../components/Toast';
 import {
+  DateField,
   Dialog,
   IconAction,
   Pager,
@@ -153,12 +154,10 @@ export default function StudentCertificates() {
         alignItems: 'start',
       }}
     >
-      <TextField
+      <DateField
         label="Issued on"
-        type="date"
         value={form.issued_on}
-        onChange={(e) => setForm((f) => ({ ...f, issued_on: e.target.value }))}
-        slotProps={{ inputLabel: { shrink: true } }}
+        onChange={(value) => setForm((f) => ({ ...f, issued_on: value }))}
         helperText="Today, unless you say otherwise."
       />
       <TextField

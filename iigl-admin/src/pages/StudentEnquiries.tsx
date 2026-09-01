@@ -23,6 +23,7 @@ import { messageOf } from '../lib/auth';
 import { useToast } from '../components/Toast';
 import {
   ConfirmDialog,
+  DateField,
   FormPanel,
   IconAction,
   Pager,
@@ -31,6 +32,7 @@ import {
   SearchField,
   StateChip,
   TableFrame,
+  today,
 } from '../components/ui';
 import type { Tone } from '../components/ui';
 import type { Paged } from '../lib/api';
@@ -243,12 +245,10 @@ export default function StudentEnquiries() {
             value={form.course_interested}
             onChange={(e) => set('course_interested', e.target.value)}
           />
-          <TextField
+          <DateField
             label="Enquiry date"
-            type="date"
             value={form.enquiry_date}
-            onChange={(e) => set('enquiry_date', e.target.value)}
-            slotProps={{ inputLabel: { shrink: true } }}
+            onChange={(value) => set('enquiry_date', value)}
           />
           <TextField
             label="Enquiry source"
@@ -276,12 +276,10 @@ export default function StudentEnquiries() {
               </MenuItem>
             ))}
           </TextField>
-          <TextField
+          <DateField
             label="Follow up on"
-            type="date"
             value={form.follow_up_on}
-            onChange={(e) => set('follow_up_on', e.target.value)}
-            slotProps={{ inputLabel: { shrink: true } }}
+            onChange={(value) => set('follow_up_on', value)}
           />
           <TextField
             label="Follow-up / remarks"
@@ -311,7 +309,10 @@ export default function StudentEnquiries() {
             <Button
               variant="contained"
               startIcon={<AddIcon />}
-              onClick={() => setForm({ ...BLANK })}
+              // Dated today unless somebody says otherwise: an enquiry is
+              // recorded when it comes in, so today is right nearly every time
+              // and typing it is a step that adds nothing.
+              onClick={() => setForm({ ...BLANK, enquiry_date: today() })}
             >
               New enquiry
             </Button>

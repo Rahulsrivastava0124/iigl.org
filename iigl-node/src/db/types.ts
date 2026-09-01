@@ -188,6 +188,7 @@ export interface Enquiries {
   closed_at: Date | null;
   created_at: Date | null;
   email: string | null;
+  follow_up_on: Date | null;
   id: Generated<number>;
   kind: Generated<string>;
   lab_id: number | null;
@@ -198,6 +199,19 @@ export interface Enquiries {
   source: string | null;
   status: Generated<string>;
   subject: string | null;
+  updated_at: Date | null;
+}
+
+export interface EnquiryFollowups {
+  created_at: Date | null;
+  done_by: number | null;
+  enquiry_id: number;
+  id: Generated<number>;
+  next_follow_up_on: Date | null;
+  note: string | null;
+  outcome: Generated<string>;
+  status_from: string | null;
+  status_to: string | null;
   updated_at: Date | null;
 }
 
@@ -591,6 +605,7 @@ export interface DB {
   discount_coupons: DiscountCoupons;
   employements: Employements;
   enquiries: Enquiries;
+  enquiry_followups: EnquiryFollowups;
   failed_jobs: FailedJobs;
   formlayouts: Formlayouts;
   holidays: Holidays;

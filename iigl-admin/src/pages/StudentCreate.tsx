@@ -13,7 +13,7 @@ import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Panel } from '../components/ui';
+import { DateField, Panel } from '../components/ui';
 import FileField from '../components/FileField';
 
 interface Course {
@@ -115,12 +115,10 @@ export default function StudentCreate() {
             />
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
-            <TextField
+            <DateField
               label="Date of Birth"
-              type="date"
               value={form.dob}
-              onChange={(e) => set('dob', e.target.value)}
-              slotProps={{ inputLabel: { shrink: true } }}
+              onChange={(value) => set('dob', value)}
             />
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
@@ -192,12 +190,10 @@ export default function StudentCreate() {
 
           {/* Registration Details */}
           <Grid size={{ xs: 12, md: 4 }}>
-            <TextField
+            <DateField
               label="Registration Date"
-              type="date"
               value={form.registration_date}
-              onChange={(e) => set('registration_date', e.target.value)}
-              slotProps={{ inputLabel: { shrink: true } }}
+              onChange={(value) => set('registration_date', value)}
               helperText="Registration number is issued on save."
             />
           </Grid>

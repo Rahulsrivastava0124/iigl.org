@@ -23,6 +23,7 @@ import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
 import { useToast } from '../components/Toast';
 import {
+  DateField,
   Dialog,
   FormPanel,
   IconAction,
@@ -309,19 +310,15 @@ export default function Coupons() {
             onChange={(e) => set('min_amount', e.target.value)}
             helperText="Blank is any fee."
           />
-          <TextField
+          <DateField
             label="First day"
-            type="date"
             value={form.valid_from}
-            onChange={(e) => set('valid_from', e.target.value)}
-            slotProps={{ inputLabel: { shrink: true } }}
+            onChange={(value) => set('valid_from', value)}
           />
-          <TextField
+          <DateField
             label="Last day"
-            type="date"
             value={form.valid_to}
-            onChange={(e) => set('valid_to', e.target.value)}
-            slotProps={{ inputLabel: { shrink: true } }}
+            onChange={(value) => set('valid_to', value)}
           />
 
           <TextField

@@ -27,10 +27,11 @@ import PaymentIcon from '@mui/icons-material/PaymentsOutlined';
 import BackIcon from '@mui/icons-material/UndoOutlined';
 import CloseIcon from '@mui/icons-material/CloseOutlined';
 import PrintIcon from '@mui/icons-material/PrintOutlined';
+import CertificateIcon from '@mui/icons-material/WorkspacePremiumOutlined';
 import { useDebounced, useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
-import { messageOf, useAuth } from '../lib/auth';
-import { apiUrl } from '../lib/config';
+import { messageOf } from '../lib/auth';
+import { apiUrl, fileUrl } from '../lib/config';
 import { useToast } from '../components/Toast';
 import {
   ConfirmDialog,
@@ -88,6 +89,12 @@ interface Enrolment {
   fee_paid: string;
   status: CourseStatus;
   completed_on: string | null;
+  /** The certificate issued against this enrolment, if one has been. */
+  certificate_id: number | null;
+  certificate_no: string | null;
+  /** `public/uploads/…` — the signed certificate, when one has been attached. */
+  certificate_file: string | null;
+  certificate_issued_on: string | null;
 }
 
 const BLANK_COURSE = {
@@ -111,7 +118,6 @@ const BLANK_COURSE = {
  */
 export default function Courses() {
   const toast = useToast();
-  const { user } = useAuth();
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') === 'enrolments' ? 'enrolments' : 'catalogue';
   const status = params.get('status') as CourseStatus | null;
@@ -205,6 +211,15 @@ export default function Courses() {
    */
   const printReceipt = (e: Enrolment) => {
     window.open(apiUrl(`/courses/enrolments/${e.id}/statement`), '_blank', 'noopener');
+  };
+
+  /**
+   * The signed certificate, as attached on the Certificates screen. Served
+   * from the uploads mount, so it opens in a tab like the statement does.
+   */
+  const openCertificate = (e: Enrolment) => {
+    const url = fileUrl(e.certificate_file);
+    if (url) window.open(url, '_blank', 'noopener');
   };
 
   const closeFee = () => {
@@ -662,9 +677,9 @@ export default function Courses() {
               <TableHead>
                 <TableRow>
                   <TableCell>Student</TableCell>
+                  <TableCell>Registration no.</TableCell>
                   <TableCell>Course</TableCell>
                   <TableCell>Batch</TableCell>
-                  <TableCell>Runs</TableCell>
                   <TableCell align="right">Fee</TableCell>
                   <TableCell align="right">Discount</TableCell>
                   <TableCell align="right">Due</TableCell>
@@ -677,15 +692,10 @@ export default function Courses() {
                   <TableRow key={e.id} hover>
                     <TableCell sx={{ whiteSpace: 'normal', minWidth: 150 }}>
                       {e.student_name}
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                        {e.registration_no}
-                      </Typography>
                     </TableCell>
+                    <TableCell className="mono">{e.registration_no ?? '—'}</TableCell>
                     <TableCell>{e.course_name}</TableCell>
                     <TableCell>{e.batch ?? '—'}</TableCell>
-                    <TableCell>
-                      {e.start_date?.slice(0, 10) ?? '—'} → {e.end_date?.slice(0, 10) ?? '—'}
-                    </TableCell>
                     <TableCell align="right" className="tabular">
                       {money(e.final_fee)}
                     </TableCell>
@@ -712,6 +722,54 @@ export default function Courses() {
                       <StateChip {...(STATE[e.status] ?? { tone: 'plain', label: e.status })} />
                     </TableCell>
                     <TableCell>
+                      {/*
+                        A finished enrolment with nothing left to pay has no
+                        usual next step — the certificate, the undo and the
+                        statement are all occasional — so they go behind the
+                        overflow rather than sitting as four equal glyphs.
+
+                        Anything still in flight keeps its controls in the open:
+                        there the next step is obvious and worth one click.
+                      */}
+                      {e.status === 'completed' && due(e) <= 0 ? (
+                        <RowActions>
+                          {/*
+                            The certificate and the statement are what anybody
+                            opens on a finished enrolment, so they stay on the
+                            row. The undo and the delete are marked to move
+                            behind the overflow, which `RowActions` does.
+                          */}
+                          <IconAction
+                            label={
+                              e.certificate_file
+                                ? `Download certificate ${e.certificate_no ?? ''}`.trim()
+                                : e.certificate_id
+                                  ? 'Issued, but no file was attached to it'
+                                  : 'No certificate has been issued for this enrolment yet'
+                            }
+                            icon={CertificateIcon}
+                            disabled={!e.certificate_file}
+                            onClick={() => openCertificate(e)}
+                          />
+                          <IconAction
+                            label="Print fee statement"
+                            icon={PrintIcon}
+                            onClick={() => printReceipt(e)}
+                          />
+                          <IconAction
+                            label="Undo — back to ongoing"
+                            icon={BackIcon}
+                            overflow
+                            onClick={() => moveEnrolment(e, 'ongoing')}
+                          />
+                          <IconAction
+                            label="Remove enrolment"
+                            icon={DeleteIcon}
+                            danger
+                            onClick={() => setDeletingEnrolment(e)}
+                          />
+                        </RowActions>
+                      ) : (
                       <RowActions>
                         {/*
                           A course starts once it has been paid for. The button
@@ -751,10 +809,11 @@ export default function Courses() {
                           <IconAction
                             label={
                               e.status === 'completed'
-                                ? 'Back to ongoing'
-                                : 'Back to upcoming'
+                                ? 'Undo — back to ongoing'
+                                : 'Undo — back to upcoming'
                             }
                             icon={BackIcon}
+                            overflow
                             onClick={() =>
                               moveEnrolment(e, e.status === 'completed' ? 'ongoing' : 'upcoming')
                             }
@@ -787,6 +846,7 @@ export default function Courses() {
                           onClick={() => setDeletingEnrolment(e)}
                         />
                       </RowActions>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

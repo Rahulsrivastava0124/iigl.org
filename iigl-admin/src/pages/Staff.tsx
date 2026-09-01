@@ -18,6 +18,7 @@ import { usePermissions } from '../lib/permissions';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
 import {
+  DateField,
   IconAction,
   Pager,
   Panel,
@@ -450,12 +451,10 @@ export default function Staff() {
                   />
                 </Grid>
                 <Grid size={{ xs: 12, md: 4 }}>
-                  <TextField
+                  <DateField
                     label="Joining Date"
-                    type="date"
                     value={form.joining_date}
-                    onChange={(e) => setForm({ ...form, joining_date: e.target.value })}
-                    slotProps={{ inputLabel: { shrink: true } }}
+                    onChange={(value) => setForm({ ...form, joining_date: value })}
                     helperText={form.id ? undefined : 'Blank is today.'}
                   />
                 </Grid>

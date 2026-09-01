@@ -549,6 +549,25 @@ returns `undefined`, and a save guarded on that object silently does nothing.
 | **Divider above** | `borderTop: 1, borderColor: 'divider'` separates from fields |
 | **Spacing** | `mt: 3, pt: 2` — margin above divider, padding below |
 
+### Dates
+
+**A date is a `DateField`, never a `TextField type="date"`.** It renders the
+Material UI calendar and is shown as `DD-MM-YYYY`, the way the Laravel panel
+printed dates and the way everybody here reads them.
+
+```tsx
+<DateField label="Enquiry date" value={form.enquiry_date} onChange={(v) => set('enquiry_date', v)} />
+```
+
+The value stays a `YYYY-MM-DD` string in and out — that is what the API takes
+and what form state already holds — so the component does the conversion and
+nothing else changes. A cleared or unparseable date gives back `''` rather than
+a partial string: a half-typed date reaching the API as a date is worse than one
+that never leaves the field.
+
+One `LocalizationProvider` wraps the whole panel in `src/main.tsx`, as the
+Pickers documentation asks. Do not wrap a screen in another one.
+
 ### Full-page forms (Create / Edit)
 
 A full-page form like Laboratory Create or Edit follows this structure:
@@ -929,6 +948,37 @@ able to explain itself.
 
 `danger` takes the refused tone. An action that is really a link takes `to`
 rather than `onClick`, so it renders as an anchor and middle-click still works.
+
+### Delete and undo live behind the overflow
+
+**As soon as a row has two or more controls, every `danger` action and every
+action marked `overflow` moves into the ⋯ menu.** `RowActions` does this
+itself — a screen cannot opt out of it by writing the row differently:
+
+```tsx
+<RowActions>
+  <IconAction label="Download certificate" icon={CertificateIcon} onClick={…} />
+  <IconAction label="Print fee statement" icon={PrintIcon} onClick={…} />
+  <IconAction label="Undo — back to ongoing" icon={BackIcon} overflow onClick={…} />
+  <IconAction label="Remove enrolment" icon={DeleteIcon} danger onClick={…} />
+</RowActions>
+```
+
+renders two icons and a ⋯ holding the other two.
+
+Two reasons. A delete sitting a few pixels from the control you actually meant
+to press is the panel's own foot-gun; and a line of four identical glyphs says
+all four are equally the next step, when the usual next step is one of them.
+Behind the overflow the labels can be words, which is what a reversal or a
+deletion needs.
+
+`overflow` is the opt-in for actions that are not destructive but are still
+occasional — undos, reversals, anything you reach for rarely. `danger` implies
+it, so a delete never needs both.
+
+**A row with a single control keeps it in the open**, whatever it is. There is
+nothing to mistake it for, and hiding the only action behind a menu costs a
+click and protects nobody.
 
 **Page-level actions stay labelled.** "Add band" is a sentence about what the
 page does; "Edit" beside a row is a verb the row already implies. The one row

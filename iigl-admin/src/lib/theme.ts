@@ -33,6 +33,15 @@ export const BRAND = {
   bodyText: '#3c4252',
   mutedText: '#4a5265',
   cardBorder: '#e6e8ee',
+  /**
+   * The line between two table rows.
+   *
+   * A shade darker than `cardBorder`: at 1.23:1 against white that border is
+   * right for the edge of a card, where a shadow is doing most of the work,
+   * and too faint between rows, where the line is the only thing saying where
+   * one record ends and the next begins.
+   */
+  tableRule: '#dfe3ea',
   sectionBg: '#f8f9fb',
   /**
    * The table header row is filled with the brand navy rather than the pale
@@ -154,6 +163,8 @@ export const theme = createTheme({
     MuiTableCell: {
       styleOverrides: {
         root: { paddingTop: 9, paddingBottom: 9, whiteSpace: 'nowrap' },
+        // Every row in the panel is separated, and by the same line.
+        body: { borderBottom: `1px solid ${BRAND.tableRule}` },
         head: {
           textTransform: 'uppercase',
           fontSize: '0.76rem',
@@ -172,6 +183,9 @@ export const theme = createTheme({
     },
     MuiTableRow: {
       styleOverrides: {
+        // The last row keeps no rule of its own: the panel closes with its own
+        // border — the count footer or the pager — and two lines a pixel apart
+        // read as a mistake.
         root: { '&:last-child td': { borderBottom: 0 } },
       },
     },
