@@ -15,12 +15,15 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/AddOutlined';
 import EditIcon from '@mui/icons-material/EditOutlined';
+import ViewIcon from '@mui/icons-material/VisibilityOutlined';
+import FollowIcon from '@mui/icons-material/PhoneInTalkOutlined';
 import ConvertIcon from '@mui/icons-material/HowToRegOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import { useDebounced, useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
 import { useToast } from '../components/Toast';
+import { EnquiryViewDialog, FollowupDialog } from '../components/EnquiryFollowups';
 import {
   ConfirmDialog,
   DateField,
@@ -32,6 +35,7 @@ import {
   SearchField,
   StateChip,
   TableFrame,
+  ToneAction,
   today,
 } from '../components/ui';
 import type { Tone } from '../components/ui';
@@ -70,6 +74,9 @@ interface Enquiry {
   remarks: string | null;
   follow_up_on: string | null;
   student_id: number | null;
+  /** How many times somebody has tried, and when they last did. */
+  followups: number;
+  last_followup_at: string | null;
 }
 
 interface Course {
@@ -112,6 +119,8 @@ export default function StudentEnquiries() {
 
   const [form, setForm] = useState<typeof BLANK | null>(null);
   const [converting, setConverting] = useState<Enquiry | null>(null);
+  const [following, setFollowing] = useState<Enquiry | null>(null);
+  const [viewing, setViewing] = useState<Enquiry | null>(null);
   const [deleting, setDeleting] = useState<Enquiry | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -343,12 +352,35 @@ export default function StudentEnquiries() {
                   <TableCell>{courseName(e)}</TableCell>
                   <TableCell>{e.source ?? '—'}</TableCell>
                   <TableCell>{e.enquiry_date?.slice(0, 10) ?? '—'}</TableCell>
-                  <TableCell>{e.follow_up_on?.slice(0, 10) ?? '—'}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'normal', minWidth: 130 }}>
+                    {e.follow_up_on?.slice(0, 10) ?? '—'}
+                    {e.followups > 0 && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                        {e.followups} {e.followups === 1 ? 'attempt' : 'attempts'}
+                      </Typography>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <StateChip {...(STATE[e.status] ?? { tone: 'plain', label: e.status })} />
                   </TableCell>
                   <TableCell>
                     <RowActions>
+                      <IconAction
+                        label="View enquiry and its history"
+                        icon={ViewIcon}
+                        onClick={() => setViewing(e)}
+                      />
+                      {/* Following up is the work this screen exists for, so it
+                          is the one control that keeps its word. */}
+                      {!e.student_id && (
+                        <ToneAction
+                          label="Follow"
+                          icon={FollowIcon}
+                          tone="waiting"
+                          size="small"
+                          onClick={() => setFollowing(e)}
+                        />
+                      )}
                       {!e.student_id && (
                         <Button
                           size="small"
@@ -362,6 +394,7 @@ export default function StudentEnquiries() {
                       )}
                       <IconAction
                         label="Edit enquiry"
+                        overflow
                         icon={EditIcon}
                         onClick={() =>
                           setForm({
@@ -403,6 +436,32 @@ export default function StudentEnquiries() {
         Converted is not a status you set by hand: converting creates the registration and the
         status follows, so an enquiry marked converted always has a student behind it.
       </Typography>
+
+      {following && (
+        <FollowupDialog
+          book="student"
+          enquiry={following}
+          onClose={() => setFollowing(null)}
+          onSaved={() => source.reload()}
+        />
+      )}
+
+      {viewing && (
+        <EnquiryViewDialog
+          book="student"
+          enquiry={{
+            ...viewing,
+            // The course book has no `kind`, `subject` or `message`: what was
+            // asked about is the course, and the notes are the remarks.
+            kind: 'Course enquiry',
+            subject: courseName(viewing),
+            message: null,
+            remark: viewing.remarks,
+            created_at: viewing.enquiry_date,
+          }}
+          onClose={() => setViewing(null)}
+        />
+      )}
 
       <ConfirmDialog
         open={Boolean(converting)}

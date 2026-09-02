@@ -5,6 +5,7 @@ import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { paged, readPage } from '../lib/paginate.js';
 import { requireAdmin } from '../middleware/auth.js';
 import { numericId } from '../middleware/params.js';
+import { followupCounts, followupsFor, recordFollowup } from '../services/followup.service.js';
 
 /**
  * The student pipeline.
@@ -110,7 +111,23 @@ studentRoutes.get(
       ).executeTakeFirstOrThrow(),
     ]);
 
-    res.json(paged(rows, Number(count.n), p));
+    // How many times each has been tried, and when last. The list is a
+    // worklist: those two decide whether to call again, and they should not
+    // take a click to find out.
+    const enquiryRows = rows as { id: number }[];
+    const tries = await followupCounts('student', enquiryRows.map((r) => Number(r.id)));
+
+    res.json(
+      paged(
+        enquiryRows.map((r) => ({
+          ...r,
+          followups: tries.get(Number(r.id))?.n ?? 0,
+          last_followup_at: tries.get(Number(r.id))?.last_at ?? null,
+        })),
+        Number(count.n),
+        p,
+      ),
+    );
   }),
 );
 
@@ -181,6 +198,28 @@ studentRoutes.patch(
 
     await db.updateTable('student_enquiries').set(patch).where('id', '=', enquiryId).execute();
     res.json({ ok: true });
+  }),
+);
+
+/**
+ * The follow-up history of one course enquiry, newest first, and how to add to
+ * it. The same log and the same code as the general enquiry book — see
+ * `followup.service`.
+ */
+studentRoutes.get(
+  '/enquiries/:id/followups',
+  numericId,
+  wrap(async (req, res) => {
+    res.json({ data: await followupsFor('student', Number(req.params.id)) });
+  }),
+);
+
+studentRoutes.post(
+  '/enquiries/:id/followups',
+  numericId,
+  wrap(async (req, res) => {
+    const data = await recordFollowup('student', Number(req.params.id), req.body ?? {}, req.user.id);
+    res.status(201).json({ data });
   }),
 );
 

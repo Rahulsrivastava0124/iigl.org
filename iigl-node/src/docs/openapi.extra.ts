@@ -473,6 +473,42 @@ export const extraPaths: Record<string, unknown> = {
     },
   },
 
+  '/api/students/enquiries/{id}/followups': {
+    get: {
+      tags: ['Students'],
+      summary: 'The follow-up history of one course enquiry',
+      description:
+        'Newest first. The same log and the same code as `/api/enquiries/{id}/followups` — both books are worked the same way, so one mechanism serves them.',
+      parameters: [idParam],
+      responses: { 200: ok('The history.'), 404: err('Enquiry not found.'), ...guarded },
+    },
+    post: {
+      tags: ['Students'],
+      summary: 'Record a follow-up on a course enquiry',
+      description:
+        "Writes the log row, the enquiry's next follow-up date, and — when one is asked for and it differs — its status. The move is written onto the log row as well as applied, so the history says how the enquiry reached its status.",
+      parameters: [idParam],
+      requestBody: body({
+        note: str,
+        outcome: {
+          type: 'string',
+          enum: ['reached', 'no_answer', 'interested', 'not_interested', 'converted'],
+        },
+        next_follow_up_on: { type: ['string', 'null'], format: 'date' },
+        status: {
+          type: 'string',
+          enum: ['new', 'contacted', 'interested', 'converted', 'not_interested'],
+        },
+      }),
+      responses: {
+        201: ok('Recorded.'),
+        400: err('Unknown outcome or status, or a date that is not YYYY-MM-DD.'),
+        404: err('Enquiry not found.'),
+        ...guarded,
+      },
+    },
+  },
+
   '/api/students/enquiries/{id}/convert': {
     post: {
       tags: ['Students'],
@@ -985,7 +1021,7 @@ export const extraPaths: Record<string, unknown> = {
       tags: ['Enquiries'],
       summary: 'The follow-up history of one enquiry',
       description:
-        'Newest first, each entry naming who made the attempt and how it went. Kept as a log rather than folded into `remark`, which every attempt used to overwrite.',
+        'Newest first, each entry naming who made the attempt and how it went. Kept as a log rather than folded into `remark`, which every attempt used to overwrite. One log serves both enquiry books, keyed by `enquiry_type`.',
       parameters: [idParam],
       responses: { 200: ok('The history.'), 404: err('Enquiry not found.'), ...guarded },
     },

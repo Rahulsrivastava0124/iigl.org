@@ -1,6 +1,6 @@
 # IIGL API
 
-161 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
+163 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
 
 The interactive version is at `/docs` when the server is running, and the raw
 document at `/openapi.json`.
@@ -348,6 +348,8 @@ The student pipeline: enquiry, registration, course, discount, certificate. New 
 | PATCH | `/api/students/enquiries/{id}` | session | — | name, mobile, email, course_id, course_interested, enquiry_date, source, status, +2 more | 400, 401, 403, 404 | Update a course enquiry |
 | DELETE | `/api/students/enquiries/{id}` | session | — | — | 401, 403, 404 | Delete a course enquiry |
 | POST | `/api/students/enquiries/{id}/convert` | session | — | name, mobile, email, course_id, registration_date, status | 401, 403, 404, 409 | Convert an enquiry into a registration |
+| GET | `/api/students/enquiries/{id}/followups` | session | — | — | 401, 403, 404 | The follow-up history of one course enquiry |
+| POST | `/api/students/enquiries/{id}/followups` | session | — | note, outcome, next_follow_up_on, status | 400, 401, 403, 404 | Record a follow-up on a course enquiry |
 | GET | `/api/students/summary` | session | — | — | 401, 403 | Counts across the whole pipeline |
 
 ## Courses
@@ -387,4 +389,4 @@ The general enquiry book: questions, visits, leads and complaints.
 
 Bold body fields are required.
 
-161 endpoints: 16 public, 145 requiring a session.
+163 endpoints: 16 public, 147 requiring a session.

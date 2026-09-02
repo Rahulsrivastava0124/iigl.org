@@ -5,6 +5,7 @@ import { badRequest, notFound } from '../lib/errors.js';
 import { paged, readPage } from '../lib/paginate.js';
 import { requireAdmin } from '../middleware/auth.js';
 import { numericId } from '../middleware/params.js';
+import { followupCounts, followupsFor, recordFollowup } from '../services/followup.service.js';
 
 /**
  * Enquiries.
@@ -28,29 +29,12 @@ enquiryRoutes.use(requireAdmin);
 export const ENQUIRY_KIND = ['ask', 'visit', 'lead', 'complaint'] as const;
 /** How far along it is. */
 export const ENQUIRY_STATUS = ['new', 'open', 'closed'] as const;
-/** How one attempt to reach somebody went. */
-export const FOLLOWUP_OUTCOME = [
-  'reached',
-  'no_answer',
-  'interested',
-  'not_interested',
-  'converted',
-] as const;
 
 type Kind = (typeof ENQUIRY_KIND)[number];
 type Status = (typeof ENQUIRY_STATUS)[number];
 
 const text = (v: unknown): string | null => (v == null || v === '' ? null : String(v).trim());
 
-/** `YYYY-MM-DD` in, a Date the column takes out. */
-const dateOf = (v: unknown): Date | null => {
-  const s = text(v);
-  if (!s) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) throw badRequest('A date must be YYYY-MM-DD.');
-  const d = new Date(`${s}T00:00:00`);
-  if (Number.isNaN(d.getTime())) throw badRequest(`${s} is not a date.`);
-  return d;
-};
 
 const requireText = (v: unknown, field: string): string => {
   const s = text(v);
@@ -125,27 +109,14 @@ enquiryRoutes.get(
     // How many times each has been tried, and when it was last tried. The list
     // is a worklist: "called twice, last on Tuesday" is the thing that decides
     // whether to call again, and it should not take a click to find out.
-    const ids = rows.map((r) => Number(r.id));
-    const tries = ids.length
-      ? await db
-          .selectFrom('enquiry_followups')
-          .select(({ fn }) => [
-            'enquiry_id',
-            fn.countAll().as('n'),
-            fn.max('created_at').as('last_at'),
-          ])
-          .where('enquiry_id', 'in', ids)
-          .groupBy('enquiry_id')
-          .execute()
-      : [];
-    const byEnquiry = new Map(tries.map((t) => [Number(t.enquiry_id), t]));
+    const tries = await followupCounts('enquiry', rows.map((r) => Number(r.id)));
 
     res.json(
       paged(
         rows.map((r) => ({
           ...r,
-          followups: Number(byEnquiry.get(Number(r.id))?.n ?? 0),
-          last_followup_at: byEnquiry.get(Number(r.id))?.last_at ?? null,
+          followups: tries.get(Number(r.id))?.n ?? 0,
+          last_followup_at: tries.get(Number(r.id))?.last_at ?? null,
         })),
         Number(count.n),
         p,
@@ -202,105 +173,24 @@ enquiryRoutes.get(
  * used to overwrite: what matters when somebody picks up a lead is not the last
  * thing that was thought about it but how many times it has been tried, by
  * whom, and what was said each time.
+ *
+ * The log is shared with the course enquiry book — see `followup.service`.
  */
 enquiryRoutes.get(
   '/:id/followups',
   numericId,
   wrap(async (req, res) => {
-    const enquiryId = Number(req.params.id);
-    const enquiry = await db
-      .selectFrom('enquiries')
-      .select('id')
-      .where('id', '=', enquiryId)
-      .executeTakeFirst();
-    if (!enquiry) throw notFound('Enquiry not found.');
-
-    const rows = await db
-      .selectFrom('enquiry_followups as f')
-      .leftJoin('users as u', 'u.id', 'f.done_by')
-      .select([
-        'f.id',
-        'f.enquiry_id',
-        'f.note',
-        'f.outcome',
-        'f.next_follow_up_on',
-        'f.status_from',
-        'f.status_to',
-        'f.done_by',
-        'f.created_at',
-        'u.fullname as done_by_name',
-      ])
-      .where('f.enquiry_id', '=', enquiryId)
-      .orderBy('f.id', 'desc')
-      .execute();
-
-    res.json({ data: rows });
+    res.json({ data: await followupsFor('enquiry', Number(req.params.id)) });
   }),
 );
 
-/**
- * Record one attempt.
- *
- * Writes three things in step: the log row, the enquiry's next follow-up date,
- * and — when the attempt moved it — the enquiry's status. The move is recorded
- * on the log row as well as applied, so the history says how the enquiry got to
- * where it is rather than only where it ended up.
- */
+/** Record one attempt. */
 enquiryRoutes.post(
   '/:id/followups',
   numericId,
   wrap(async (req, res) => {
-    const enquiryId = Number(req.params.id);
-    const b = req.body ?? {};
-
-    const enquiry = await db
-      .selectFrom('enquiries')
-      .select(['id', 'status'])
-      .where('id', '=', enquiryId)
-      .executeTakeFirst();
-    if (!enquiry) throw notFound('Enquiry not found.');
-
-    const outcome = String(b.outcome ?? 'reached');
-    if (!(FOLLOWUP_OUTCOME as readonly string[]).includes(outcome)) {
-      throw badRequest(`Unknown outcome. Expected one of: ${FOLLOWUP_OUTCOME.join(', ')}.`);
-    }
-
-    const note = text(b.note);
-    const next = dateOf(b.next_follow_up_on);
-
-    // A status is only moved when one is asked for, and only recorded on the
-    // log row when it actually changed — so "called, nothing moved" and "called
-    // and closed it" are different entries rather than the same one.
-    const from = String(enquiry.status);
-    const to = b.status === undefined || b.status === null || b.status === '' ? null : statusOf(b.status);
-    const moved = to !== null && to !== from;
-
-    const result = await db
-      .insertInto('enquiry_followups')
-      .values({
-        enquiry_id: enquiryId,
-        note,
-        outcome,
-        next_follow_up_on: next,
-        status_from: moved ? from : null,
-        status_to: moved ? to : null,
-        done_by: req.user.id,
-        created_at: new Date(),
-        updated_at: new Date(),
-      })
-      .executeTakeFirst();
-
-    const patch: Record<string, unknown> = { follow_up_on: next, updated_at: new Date() };
-    if (moved) {
-      patch.status = to;
-      // Closing an enquiry stamps when, the same way the status endpoint does.
-      patch.closed_at = to === 'closed' ? new Date() : null;
-    }
-    await db.updateTable('enquiries').set(patch as never).where('id', '=', enquiryId).execute();
-
-    res.status(201).json({
-      data: { id: Number(result.insertId), status: moved ? to : from, follow_up_on: next },
-    });
+    const data = await recordFollowup('enquiry', Number(req.params.id), req.body ?? {}, req.user.id);
+    res.status(201).json({ data });
   }),
 );
 

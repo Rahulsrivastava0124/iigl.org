@@ -206,6 +206,7 @@ export interface EnquiryFollowups {
   created_at: Date | null;
   done_by: number | null;
   enquiry_id: number;
+  enquiry_type: Generated<string>;
   id: Generated<number>;
   next_follow_up_on: Date | null;
   note: string | null;

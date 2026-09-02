@@ -5,15 +5,57 @@ import { messageOf } from '../lib/auth';
 import { DateField, Dialog, Notice, StateChip, type Tone } from './ui';
 import { useToast } from './Toast';
 
-export type EnquiryStatus = 'new' | 'open' | 'closed';
+/**
+ * The two enquiry books.
+ *
+ * They are different records — a complaint is not a course enquiry — but they
+ * are worked identically, so one log, one set of endpoints and these same two
+ * dialogs serve both. A book supplies only what differs: where its endpoints
+ * are, and what its status column allows.
+ */
+export type Book = 'enquiry' | 'student';
 
-/** How one attempt to reach somebody went. Mirrors `FOLLOWUP_OUTCOME` on the API. */
-const OUTCOMES: { id: string; label: string; tone: Tone; moves?: EnquiryStatus }[] = [
-  { id: 'reached', label: 'Reached them', tone: 'settled', moves: 'open' },
+const BOOKS: Record<
+  Book,
+  { path: (id: number) => string; statuses: { id: string; label: string }[] }
+> = {
+  enquiry: {
+    path: (id) => `/enquiries/${id}/followups`,
+    statuses: [
+      { id: 'new', label: 'New' },
+      { id: 'open', label: 'Open' },
+      { id: 'closed', label: 'Closed' },
+    ],
+  },
+  student: {
+    path: (id) => `/students/enquiries/${id}/followups`,
+    statuses: [
+      { id: 'new', label: 'New' },
+      { id: 'contacted', label: 'Contacted' },
+      { id: 'interested', label: 'Interested' },
+      { id: 'converted', label: 'Converted' },
+      { id: 'not_interested', label: 'Not interested' },
+    ],
+  },
+};
+
+/**
+ * How one attempt went, and where it usually leaves the enquiry.
+ *
+ * The two books name their middle state differently — the general book calls
+ * it `open`, the course book `contacted` — so the suggested move is per book.
+ */
+const OUTCOMES: {
+  id: string;
+  label: string;
+  tone: Tone;
+  moves?: Record<Book, string | undefined>;
+}[] = [
+  { id: 'reached', label: 'Reached them', tone: 'settled', moves: { enquiry: 'open', student: 'contacted' } },
   { id: 'no_answer', label: 'No answer', tone: 'waiting' },
-  { id: 'interested', label: 'Interested', tone: 'settled', moves: 'open' },
-  { id: 'not_interested', label: 'Not interested', tone: 'refused', moves: 'closed' },
-  { id: 'converted', label: 'Converted', tone: 'settled', moves: 'closed' },
+  { id: 'interested', label: 'Interested', tone: 'settled', moves: { enquiry: 'open', student: 'interested' } },
+  { id: 'not_interested', label: 'Not interested', tone: 'refused', moves: { enquiry: 'closed', student: 'not_interested' } },
+  { id: 'converted', label: 'Converted', tone: 'settled', moves: { enquiry: 'closed', student: 'converted' } },
 ];
 
 const outcomeOf = (id: string) =>
@@ -24,8 +66,8 @@ export interface Followup {
   note: string | null;
   outcome: string;
   next_follow_up_on: string | null;
-  status_from: EnquiryStatus | null;
-  status_to: EnquiryStatus | null;
+  status_from: string | null;
+  status_to: string | null;
   done_by_name: string | null;
   created_at: string | null;
 }
@@ -99,7 +141,7 @@ export function FollowupHistory({ rows, loading }: { rows: Followup[]; loading: 
 }
 
 /** Loads one enquiry's history. Shared by both dialogs below. */
-function useFollowups(enquiryId: number, reloadKey = 0) {
+function useFollowups(book: Book, enquiryId: number, reloadKey = 0) {
   const [rows, setRows] = useState<Followup[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -107,14 +149,14 @@ function useFollowups(enquiryId: number, reloadKey = 0) {
     let live = true;
     setLoading(true);
     api
-      .get<{ data: Followup[] }>(`/enquiries/${enquiryId}/followups`)
+      .get<{ data: Followup[] }>(BOOKS[book].path(enquiryId))
       .then((r) => live && setRows(r.data))
       .catch(() => live && setRows([]))
       .finally(() => live && setLoading(false));
     return () => {
       live = false;
     };
-  }, [enquiryId, reloadKey]);
+  }, [book, enquiryId, reloadKey]);
 
   return { rows, loading };
 }
@@ -128,32 +170,34 @@ function useFollowups(enquiryId: number, reloadKey = 0) {
  * the history beside it.
  */
 export function FollowupDialog({
+  book = 'enquiry',
   enquiry,
   onClose,
   onSaved,
 }: {
-  enquiry: { id: number; name: string; status: EnquiryStatus };
+  book?: Book;
+  enquiry: { id: number; name: string; status: string };
   onClose: () => void;
   onSaved: () => void;
 }) {
   const toast = useToast();
-  const { rows, loading } = useFollowups(enquiry.id);
+  const { rows, loading } = useFollowups(book, enquiry.id);
 
   const [outcome, setOutcome] = useState('reached');
   const [note, setNote] = useState('');
   const [next, setNext] = useState('');
-  const [status, setStatus] = useState<EnquiryStatus | ''>('');
+  const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
 
   // The suggestion follows the outcome until the status is set by hand.
   const [touched, setTouched] = useState(false);
-  const suggested = outcomeOf(outcome).moves ?? '';
+  const suggested = (outcomeOf(outcome) as { moves?: Record<Book, string | undefined> }).moves?.[book] ?? '';
   const effective = touched ? status : suggested;
 
   const save = async () => {
     setBusy(true);
     try {
-      await api.post(`/enquiries/${enquiry.id}/followups`, {
+      await api.post(BOOKS[book].path(enquiry.id), {
         outcome,
         note: note.trim(),
         next_follow_up_on: next || null,
@@ -207,14 +251,16 @@ export function FollowupDialog({
             value={effective}
             onChange={(e) => {
               setTouched(true);
-              setStatus(e.target.value as EnquiryStatus | '');
+              setStatus(e.target.value);
             }}
             sx={{ width: 220 }}
           >
             <MenuItem value="">Leave it as {enquiry.status}</MenuItem>
-            <MenuItem value="new">New</MenuItem>
-            <MenuItem value="open">Open</MenuItem>
-            <MenuItem value="closed">Closed</MenuItem>
+            {BOOKS[book].statuses.map((st) => (
+              <MenuItem key={st.id} value={st.id}>
+                {st.label}
+              </MenuItem>
+            ))}
           </TextField>
         </Stack>
 
@@ -241,9 +287,11 @@ export function FollowupDialog({
 
 /** The enquiry as it stands, with everything that has been tried on it. */
 export function EnquiryViewDialog({
+  book = 'enquiry',
   enquiry,
   onClose,
 }: {
+  book?: Book;
   enquiry: {
     id: number;
     name: string;
@@ -253,13 +301,13 @@ export function EnquiryViewDialog({
     subject: string | null;
     message: string | null;
     source: string | null;
-    status: EnquiryStatus;
+    status: string;
     remark: string | null;
     created_at: string | null;
   };
   onClose: () => void;
 }) {
-  const { rows, loading } = useFollowups(enquiry.id);
+  const { rows, loading } = useFollowups(book, enquiry.id);
 
   const line = (label: string, value: string | null | undefined) => (
     <Box sx={{ minWidth: 180 }}>

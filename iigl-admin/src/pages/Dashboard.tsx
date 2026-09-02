@@ -24,7 +24,14 @@ import TodayIcon from '@mui/icons-material/TodayOutlined';
 import CertificateIcon from '@mui/icons-material/WorkspacePremiumOutlined';
 
 /** Four to a row on a wide screen, two on a phone: the shape of every group. */
-const CELL = { xs: 6, sm: 6, md: 3 } as const;
+/**
+ * How wide a card is.
+ *
+ * Three to a row rather than four: a card holds a word, a figure and an icon,
+ * and at a quarter of a wide screen the figure — the only part anybody is
+ * actually reading — was the smallest thing on it.
+ */
+const CELL = { xs: 12, sm: 6, md: 4 } as const;
 
 /**
  * Dashboard cards are tinted rather than outlined, and the colour says what
@@ -51,189 +58,192 @@ export default function Dashboard() {
 
       {s && (
         <>
-          <Panel title="Account">
-            <Grid container spacing={1} sx={{ p: 1.5 }}>
-              <Grid size={CELL}>
-                <Tile
-                  label="Total collected"
-                  value={n(s.orders.total)}
-                  note="orders"
-                  fill="brand"
-                  icon={OrdersIcon}
-                />
-              </Grid>
-              <Grid size={CELL}>
-                <Tile
-                  label="Completed tested"
-                  value={n(s.orders.delivered)}
-                  fill="settled"
-                  icon={DeliveredIcon}
-                />
-              </Grid>
-              <Grid size={CELL}>
-                <Tile
-                  label="Smart report"
-                  value={n(s.cards.smart)}
-                  fill="brand"
-                  icon={SmartCardIcon}
-                />
-              </Grid>
-              <Grid size={CELL}>
-                <Tile
-                  label="Classic report"
-                  value={n(s.cards.classic)}
-                  fill="brand"
-                  icon={ClassicCardIcon}
-                />
-              </Grid>
-              <Grid size={CELL}>
-                <Tile
-                  label="Active order"
-                  value={n(s.orders.active)}
-                  fill="waiting"
-                  icon={ActiveIcon}
-                />
-              </Grid>
-              <Grid size={CELL}>
-                <Tile label="Total sale" value={money(s.money.sale)} fill="brand" icon={SaleIcon} />
-              </Grid>
-              <Grid size={CELL}>
-                <Tile
-                  label="Paid amount"
-                  value={money(s.money.paid)}
-                  fill="settled"
-                  icon={PaidIcon}
-                />
-              </Grid>
-              <Grid size={CELL}>
-                <Tile
-                  label="Dues amount"
-                  value={money(s.money.dues)}
-                  fill={owed(s.money.dues)}
-                  icon={DuesIcon}
-                />
-              </Grid>
+          <Typography variant="h2" sx={{ mt: 0, mb: 1.5 }}>
+            Account
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid size={CELL}>
+              <Tile
+                label="Total collected"
+                value={n(s.orders.total)}
+                note="orders"
+                fill="brand"
+                icon={OrdersIcon}
+              />
             </Grid>
-          </Panel>
+            <Grid size={CELL}>
+              <Tile
+                label="Completed tested"
+                value={n(s.orders.delivered)}
+                fill="settled"
+                icon={DeliveredIcon}
+              />
+            </Grid>
+            <Grid size={CELL}>
+              <Tile
+                label="Smart report"
+                value={n(s.cards.smart)}
+                fill="brand"
+                icon={SmartCardIcon}
+              />
+            </Grid>
+            <Grid size={CELL}>
+              <Tile
+                label="Classic report"
+                value={n(s.cards.classic)}
+                fill="brand"
+                icon={ClassicCardIcon}
+              />
+            </Grid>
+            <Grid size={CELL}>
+              <Tile
+                label="Active order"
+                value={n(s.orders.active)}
+                fill="waiting"
+                icon={ActiveIcon}
+              />
+            </Grid>
+            <Grid size={CELL}>
+              <Tile label="Total sale" value={money(s.money.sale)} fill="brand" icon={SaleIcon} />
+            </Grid>
+            <Grid size={CELL}>
+              <Tile
+                label="Paid amount"
+                value={money(s.money.paid)}
+                fill="settled"
+                icon={PaidIcon}
+              />
+            </Grid>
+            <Grid size={CELL}>
+              <Tile
+                label="Dues amount"
+                value={money(s.money.dues)}
+                fill={owed(s.money.dues)}
+                icon={DuesIcon}
+              />
+            </Grid>
+          </Grid>
 
-          <Box sx={{ mt: 2 }}>
-            <Panel title="Wallet">
-              <Grid container spacing={1} sx={{ p: 1.5 }}>
-                <Grid size={CELL}>
-                  <Tile
-                    label="Current wallet"
-                    value={money(s.wallet.balance)}
-                    fill="brand"
-                    icon={WalletIcon}
-                    to="/wallet"
-                  />
-                </Grid>
-                <Grid size={CELL}>
-                  <Tile
-                    label="Total commission"
-                    value={money(s.wallet.commission_accrued)}
-                    note="accrued"
-                    fill="brand"
-                    icon={CommissionIcon}
-                  />
-                </Grid>
-                <Grid size={CELL}>
-                  <Tile
-                    label="Dues amount"
-                    value={money(s.wallet.commission_dues)}
-                    fill={owed(s.wallet.commission_dues)}
-                    icon={DuesIcon}
-                  />
-                </Grid>
-                <Grid size={CELL}>
-                  <Tile
-                    label="On approval"
-                    value={money(s.wallet.on_approval)}
-                    fill={s.wallet.on_approval > 0 ? 'waiting' : 'plain'}
-                    icon={ApprovalIcon}
-                  />
-                </Grid>
+          <Typography variant="h2" sx={{ mt: 4, mb: 1.5 }}>
+            Wallet
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid size={CELL}>
+              <Tile
+                label="Current wallet"
+                value={money(s.wallet.balance)}
+                fill="brand"
+                icon={WalletIcon}
+                to="/wallet"
+              />
+            </Grid>
+            <Grid size={CELL}>
+              <Tile
+                label="Total commission"
+                value={money(s.wallet.commission_accrued)}
+                note="accrued"
+                fill="brand"
+                icon={CommissionIcon}
+              />
+            </Grid>
+            <Grid size={CELL}>
+              <Tile
+                label="Dues amount"
+                value={money(s.wallet.commission_dues)}
+                fill={owed(s.wallet.commission_dues)}
+                icon={DuesIcon}
+              />
+            </Grid>
+            <Grid size={CELL}>
+              <Tile
+                label="On approval"
+                value={money(s.wallet.on_approval)}
+                fill={s.wallet.on_approval > 0 ? 'waiting' : 'plain'}
+                icon={ApprovalIcon}
+              />
+            </Grid>
+          </Grid>
+
+          <Typography variant="h2" sx={{ mt: 4, mb: 1.5 }}>
+            People
+          </Typography>
+          <Grid container spacing={2}>
+            {s.people.laboratories !== null && (
+              <Grid size={CELL}>
+                <Tile
+                  label="Total franchise"
+                  value={n(s.people.laboratories)}
+                  fill="brand"
+                  icon={LabIcon}
+                />
               </Grid>
-            </Panel>
-          </Box>
+            )}
+            <Grid size={CELL}>
+              <Tile
+                label="Total employee"
+                value={n(s.people.employees)}
+                fill="brand"
+                icon={StaffIcon}
+              />
+            </Grid>
+            <Grid size={CELL}>
+              <Tile
+                label="Registered customer"
+                value={n(s.people.customers_registered)}
+                note="with GST"
+                fill="settled"
+                icon={RegisteredIcon}
+              />
+            </Grid>
+            <Grid size={CELL}>
+              <Tile
+                label="Non-registered customer"
+                value={n(s.people.customers_unregistered)}
+                fill="plain"
+                icon={CustomerIcon}
+              />
+            </Grid>
+          </Grid>
 
-          <Box sx={{ mt: 2 }}>
-            <Panel title="People">
-              <Grid container spacing={1} sx={{ p: 1.5 }}>
-                {s.people.laboratories !== null && (
-                  <Grid size={CELL}>
-                    <Tile
-                      label="Total franchise"
-                      value={n(s.people.laboratories)}
-                      fill="brand"
-                      icon={LabIcon}
-                    />
-                  </Grid>
-                )}
-                <Grid size={CELL}>
-                  <Tile
-                    label="Total employee"
-                    value={n(s.people.employees)}
-                    fill="brand"
-                    icon={StaffIcon}
-                  />
-                </Grid>
-                <Grid size={CELL}>
-                  <Tile
-                    label="Registered customer"
-                    value={n(s.people.customers_registered)}
-                    note="with GST"
-                    fill="settled"
-                    icon={RegisteredIcon}
-                  />
-                </Grid>
-                <Grid size={CELL}>
-                  <Tile
-                    label="Non-registered customer"
-                    value={n(s.people.customers_unregistered)}
-                    fill="plain"
-                    icon={CustomerIcon}
-                  />
-                </Grid>
-              </Grid>
-            </Panel>
-          </Box>
+          <Typography variant="h2" sx={{ mt: 4, mb: 1.5 }}>
+            Today
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid size={CELL}>
+              <Tile
+                label="Orders taken"
+                value={n(s.orders.today)}
+                fill="brand"
+                icon={TodayIcon}
+              />
+            </Grid>
+            <Grid size={CELL}>
+              <Tile
+                label="Billed"
+                value={money(s.money.sale_today)}
+                fill="brand"
+                icon={SaleIcon}
+              />
+            </Grid>
+            <Grid size={CELL}>
+              <Tile
+                label="Certificates"
+                value={n(s.reports.total)}
+                note="all time"
+                fill="brand"
+                icon={CertificateIcon}
+              />
+            </Grid>
+          </Grid>
 
-          <Box sx={{ mt: 2 }}>
-            <Panel title="Today">
-              <Grid container spacing={1} sx={{ p: 1.5 }}>
-                <Grid size={CELL}>
-                  <Tile
-                    label="Orders taken"
-                    value={n(s.orders.today)}
-                    fill="brand"
-                    icon={TodayIcon}
-                  />
-                </Grid>
-                <Grid size={CELL}>
-                  <Tile
-                    label="Billed"
-                    value={money(s.money.sale_today)}
-                    fill="brand"
-                    icon={SaleIcon}
-                  />
-                </Grid>
-                <Grid size={CELL}>
-                  <Tile
-                    label="Certificates"
-                    value={n(s.reports.total)}
-                    note="all time"
-                    fill="brand"
-                    icon={CertificateIcon}
-                  />
-                </Grid>
-              </Grid>
-            </Panel>
-          </Box>
-
-          <Box sx={{ mt: 2 }}>
+          {/*
+            The charts keep a panel of their own. A tile is a figure and the
+            group heading is enough to hold a row of them together; a chart has
+            axes and a plot area, and needs an edge to sit inside.
+          */}
+          <Box sx={{ mt: 4 }}>
             <Panel title="Last twelve months">
-              <Grid container spacing={1} sx={{ p: 1.5 }}>
+              <Grid container spacing={2} sx={{ p: 2 }}>
                 <Grid size={{ xs: 12, md: 6 }}>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                     Orders taken
