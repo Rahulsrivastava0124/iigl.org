@@ -1,8 +1,19 @@
 import { useEffect, useState } from 'react';
-import { Box, CircularProgress, MenuItem, Stack, TextField, Typography } from '@mui/material';
+import {
+  Box,
+  MenuItem,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from '@mui/material';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { DateField, Dialog, Notice, StateChip, type Tone } from './ui';
+import { DateField, Dialog, Notice, StateChip, TableFrame, type Tone } from './ui';
 import { useToast } from './Toast';
 
 /**
@@ -80,64 +91,90 @@ export interface Followup {
  * time is the point of having it open.
  */
 export function FollowupHistory({ rows, loading }: { rows: Followup[]; loading: boolean }) {
-  if (loading) {
-    return (
-      <Stack sx={{ alignItems: 'center', py: 3 }}>
-        <CircularProgress size={22} />
-      </Stack>
-    );
-  }
-
-  if (rows.length === 0) {
-    return (
-      <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-        Nobody has followed this up yet.
-      </Typography>
-    );
-  }
-
   return (
-    <Stack spacing={0}>
-      {rows.map((f, i) => {
-        const outcome = outcomeOf(f.outcome);
-        return (
-          <Box
-            key={f.id}
-            sx={{
-              py: 1.5,
-              ...(i > 0 && { borderTop: 1, borderColor: 'divider' }),
-            }}
-          >
-            <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-              <StateChip tone={outcome.tone} label={outcome.label} />
-              {f.status_from && (
-                <Typography variant="caption" color="text.secondary">
-                  {f.status_from} → {f.status_to}
-                </Typography>
-              )}
-              <Box sx={{ flex: 1 }} />
-              <Typography variant="caption" color="text.secondary">
-                {String(f.created_at ?? '').slice(0, 16).replace('T', ' ')}
-                {f.done_by_name ? ` · ${f.done_by_name}` : ''}
-              </Typography>
-            </Stack>
+    <TableFrame
+      loading={loading}
+      error={null}
+      empty={rows.length === 0}
+      emptyText="Nobody has followed this up yet."
+    >
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>When</TableCell>
+            <TableCell>Outcome</TableCell>
+            <TableCell>Moved</TableCell>
+            <TableCell>What was said</TableCell>
+            <TableCell>Next due</TableCell>
+            <TableCell>By</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((f) => {
+            const outcome = outcomeOf(f.outcome);
+            return (
+              <TableRow key={f.id} hover>
+                {/*
+                  Date over time in one column rather than two: the pair is one
+                  fact, and a table this narrow cannot spare a column to split
+                  it across.
+                */}
+                <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                  {dayLabel(String(f.created_at ?? '').slice(0, 10))}
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                    {timeOf(f.created_at)}
+                  </Typography>
+                </TableCell>
 
-            {f.note && (
-              <Typography variant="body2" sx={{ mt: 0.75, whiteSpace: 'pre-wrap' }}>
-                {f.note}
-              </Typography>
-            )}
+                <TableCell>
+                  <StateChip tone={outcome.tone} label={outcome.label} />
+                </TableCell>
 
-            {f.next_follow_up_on && (
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                Next attempt due {String(f.next_follow_up_on).slice(0, 10)}
-              </Typography>
-            )}
-          </Box>
-        );
-      })}
-    </Stack>
+                <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                  {f.status_from ? `${f.status_from} → ${f.status_to}` : '—'}
+                </TableCell>
+
+                {/* The only column worth wrapping: everything else is a word. */}
+                <TableCell sx={{ whiteSpace: 'pre-wrap', minWidth: 200 }}>
+                  {f.note || '—'}
+                </TableCell>
+
+                <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                  {f.next_follow_up_on ? dayLabel(String(f.next_follow_up_on).slice(0, 10)) : '—'}
+                </TableCell>
+
+                <TableCell sx={{ whiteSpace: 'nowrap' }}>{f.done_by_name ?? '—'}</TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </TableFrame>
   );
+}
+
+/** The time of an attempt, to the minute. Empty when the row carries none. */
+const timeOf = (at: string | null) => String(at ?? '').slice(11, 16);
+
+/**
+ * `2026-09-02` as `2 Sep 2026`, and today and yesterday by name.
+ *
+ * Built from the parts rather than passed to `new Date(string)`: a bare date
+ * string is parsed as UTC, which in this timezone renders the day before.
+ */
+function dayLabel(date: string): string {
+  const [y, m, d] = date.split('-').map(Number);
+  if (!y || !m || !d) return date || '—';
+
+  const when = new Date(y, m - 1, d);
+  const today = new Date();
+  const midnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const days = Math.round((midnight.getTime() - when.getTime()) / 86_400_000);
+
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+
+  return when.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 /** Loads one enquiry's history. Shared by both dialogs below. */

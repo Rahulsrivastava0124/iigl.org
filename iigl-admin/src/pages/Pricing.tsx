@@ -12,6 +12,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import GstField, { type GstRate } from '../components/GstField';
 import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
@@ -48,6 +49,9 @@ const BLANK = {
   max_wt: '',
   smart_price: '',
   classic_price: '',
+  gst_id: '',
+  /** A rate typed for this band alone, when it is not one from the list. */
+  gst_percent: '',
 };
 
 type PriceWithCategory = Price & { category_name?: string };
@@ -63,6 +67,12 @@ export default function Pricing() {
   const categories = useFetch<{ data: Category[] }>('/catalog/categories');
   const labs = useFetch<{ data: Lab[] }>('/users/laboratories');
   const prices = useFetch<{ data: Price[] }>(`/admin/prices?lab_id=${scope}`);
+  // Only the rates still in use. A retired one stays readable on the bands
+  // that already name it.
+  // Every rate, not only the active ones: the table has to name the rate on a
+  // band that already points at a retired one, and `?active=1` would show it
+  // as having none.
+  const gst = useFetch<{ data: GstRate[] }>('/master/gst');
 
   const [form, setForm] = useState(BLANK);
   const [deleting, setDeleting] = useState<PriceWithCategory | null>(null);
@@ -78,6 +88,15 @@ export default function Pricing() {
   const allPrices = prices.data?.data ?? [];
   const [search, setSearch] = useState('');
   const catName = (id: string) => cats.find((c) => String(c.id) === String(id))?.name ?? `#${id}`;
+  /** The rate a band names, as a percentage. Em dash where it names none. */
+  const gstName = (p: Price) => {
+    if (p.gst_id) {
+      const rate = gst.data?.data.find((g) => g.id === p.gst_id);
+      return rate ? `${Number(rate.percent)}%` : `#${p.gst_id}`;
+    }
+    // Typed for this band alone. Marked, so it is not mistaken for a list rate.
+    return p.gst_percent == null ? '—' : `${Number(p.gst_percent)}% custom`;
+  };
   // Filtered after catName exists, so a search on the category name works even
   // though the row itself only carries the id.
   const rows = allPrices.filter((p) =>
@@ -92,6 +111,10 @@ export default function Pricing() {
         max_wt: Number(form.max_wt),
         smart_price: Number(form.smart_price),
         classic_price: Number(form.classic_price),
+        // One of the two. The API clears whichever was not chosen, so the
+        // pair cannot end up disagreeing.
+        gst_id: form.gst_id ? Number(form.gst_id) : null,
+        gst_percent: form.gst_id ? null : form.gst_percent || null,
       };
       if (form.id) {
         await api.patch(`/admin/prices/${form.id}`, body);
@@ -194,6 +217,23 @@ export default function Pricing() {
           sx={{ minWidth: 150 }}
           required
         />
+        {/*
+          The rate this band is quoted at, from Master › GST.
+
+          "None" is a real value, not an empty string: a Select renders the
+          chosen item's text only when it has one, so at `value=""` it drew an
+          empty box whatever the item said and the field looked unset.
+        */}
+        {/*
+          Pick a rate or type one, in one control. See GstField: two controls
+          and a "Custom" mode was two ways of asking one question.
+        */}
+        <GstField
+          rates={gst.data?.data ?? []}
+          value={{ gst_id: form.gst_id, gst_percent: form.gst_percent }}
+          onChange={(next) => setForm({ ...form, ...next })}
+          sx={{ minWidth: 150 }}
+        />
         </FormPanel>
       )}
 
@@ -238,6 +278,7 @@ export default function Pricing() {
                 <TableCell align="right">To</TableCell>
                 <TableCell align="right">Smart card</TableCell>
                 <TableCell align="right">Classic card</TableCell>
+                <TableCell>GST</TableCell>
                 <TableCell />
               </TableRow>
             </TableHead>
@@ -257,6 +298,13 @@ export default function Pricing() {
                   <TableCell align="right" className="tabular">
                     {money(p.classic_price)}
                   </TableCell>
+                  {/*
+                    Named from the master list rather than joined by the API:
+                    the rates are a handful of rows the page already holds, and
+                    a join for a label the panel can look up itself is a query
+                    per list for nothing.
+                  */}
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{gstName(p)}</TableCell>
                   <TableCell>
                     <RowActions>
                       <IconAction
@@ -271,6 +319,8 @@ export default function Pricing() {
                             max_wt: String(p.max_wt),
                             smart_price: String(p.smart_price),
                             classic_price: String(p.classic_price),
+                            gst_id: p.gst_id ? String(p.gst_id) : '',
+                            gst_percent: p.gst_percent == null ? '' : String(p.gst_percent),
                           })
                         }
                       />

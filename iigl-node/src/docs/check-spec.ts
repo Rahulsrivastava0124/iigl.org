@@ -30,6 +30,8 @@ import { courseRoutes } from '../routes/course.routes.js';
 import { studentCertificateRoutes } from '../routes/student-certificate.routes.js';
 import { enquiryRoutes } from '../routes/enquiry.routes.js';
 import { couponRoutes } from '../routes/coupon.routes.js';
+import { masterRoutes } from '../routes/master.routes.js';
+import { settingsRoutes } from '../routes/settings.routes.js';
 import { db } from '../db/index.js';
 
 const MOUNTS: Array<[string, Router]> = [
@@ -53,6 +55,8 @@ const MOUNTS: Array<[string, Router]> = [
   ['/api/student-certificates', studentCertificateRoutes],
   ['/api/enquiries', enquiryRoutes],
   ['/api/coupons', couponRoutes],
+  ['/api/master', masterRoutes],
+  ['/api/settings', settingsRoutes],
 ];
 
 /** Routes registered directly on the app rather than through a router. */

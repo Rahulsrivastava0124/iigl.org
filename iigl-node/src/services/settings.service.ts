@@ -1,0 +1,236 @@
+import { db } from '../db/index.js';
+import { env } from '../lib/env.js';
+import { badRequest } from '../lib/errors.js';
+
+/**
+ * Settings.
+ *
+ * The values that were constants in code or lines in `.env`, and that head
+ * office should be able to change without a deploy.
+ *
+ * **Every setting has a default, and the default is exactly what the code did
+ * before.** An empty table therefore behaves identically to the hardcoded
+ * version — that is what makes this safe to switch on against a live database,
+ * and it is why nothing is seeded. A row exists only where somebody has
+ * deliberately said "not the default".
+ *
+ * Read through `settings()`, which caches for a minute: these are read on every
+ * quote, every certificate and every mail, and they change a few times a year.
+ */
+
+export type SettingKind = 'text' | 'number' | 'email' | 'url' | 'multiline';
+
+export interface SettingSpec {
+  key: string;
+  label: string;
+  kind: SettingKind;
+  /** What the code used before this table existed. */
+  fallback: () => string;
+  help?: string;
+  /** Shown on the form but never sent back to it. */
+  secret?: boolean;
+  /** Refuses a value the readers could not use. */
+  check?: (value: string) => void;
+}
+
+const number = (label: string, min: number, max: number) => (value: string) => {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < min || n > max) {
+    throw badRequest(`${label} must be a number between ${min} and ${max}.`);
+  }
+};
+
+/**
+ * Every setting, in the four groups the screen tabs by. The part of the key
+ * before the dot is the group, so the screen needs no second list.
+ */
+export const SETTINGS: SettingSpec[] = [
+  // ------------------------------------------------------------- company
+  {
+    key: 'company.name',
+    label: 'Company name',
+    kind: 'text',
+    fallback: () => 'International Institute of Gemology & Laboratory',
+    help: 'Printed on certificates and invoices.',
+  },
+  { key: 'company.address', label: 'Address', kind: 'multiline', fallback: () => '' },
+  { key: 'company.city', label: 'City', kind: 'text', fallback: () => '' },
+  { key: 'company.state', label: 'State', kind: 'text', fallback: () => '' },
+  { key: 'company.pincode', label: 'Pincode', kind: 'text', fallback: () => '' },
+  { key: 'company.phone', label: 'Phone', kind: 'text', fallback: () => '' },
+  { key: 'company.email', label: 'Email', kind: 'email', fallback: () => '' },
+  {
+    key: 'company.gstin',
+    label: 'GSTIN',
+    kind: 'text',
+    fallback: () => '',
+    help: 'The registration number printed on an invoice.',
+  },
+  {
+    key: 'company.website',
+    label: 'Website',
+    kind: 'url',
+    fallback: () => env.publicSiteUrl,
+    help: 'Also the origin printed QR codes resolve against.',
+  },
+
+  // --------------------------------------------------------- certificate
+  {
+    key: 'certificate.prefix',
+    label: 'Certificate prefix',
+    kind: 'text',
+    fallback: () => '',
+    help:
+      'Put in front of every new certificate number. The number itself is composed ' +
+      'as laboratory, day, counter, year, month — that part is ported behaviour and ' +
+      'is not editable. Certificates already issued keep the number they were printed with.',
+  },
+  {
+    key: 'certificate.counter_width',
+    label: 'Counter width',
+    kind: 'number',
+    fallback: () => '4',
+    help: 'How many digits the daily counter is padded to. Four gives 0001.',
+    check: number('Counter width', 1, 8),
+  },
+
+  // ---------------------------------------------------------- session and mail
+  {
+    key: 'session.hours',
+    label: 'Session length, hours',
+    kind: 'number',
+    fallback: () => '48',
+    help:
+      'How long a sign-in lasts. Two days by default. Applies to sessions issued after ' +
+      'the change: one already handed out keeps the length it was signed with, because ' +
+      'the expiry is inside the cookie and nothing can revoke it early.',
+    check: number('Session length', 1, 720),
+  },
+  {
+    key: 'mail.panel_url',
+    label: 'Panel URL',
+    kind: 'url',
+    fallback: () => env.panelUrl,
+    help: 'Where a password reset link points. It has to be the address people open.',
+  },
+  {
+    key: 'mail.from',
+    label: 'Mail from',
+    kind: 'text',
+    fallback: () => env.mailFrom,
+    help: 'The From address on outgoing mail.',
+  },
+  {
+    key: 'mail.smtp_url',
+    label: 'SMTP URL',
+    kind: 'text',
+    secret: true,
+    fallback: () => env.smtpUrl,
+    help:
+      'smtps://user:password@host:465. Held back from the form once set, because it ' +
+      'carries a password; saving an empty value leaves it as it is.',
+  },
+];
+
+const SPEC = new Map(SETTINGS.map((s) => [s.key, s]));
+
+let cache: { at: number; values: Map<string, string> } | null = null;
+const TTL = 60_000;
+
+/** Every stored value, keyed. Absent keys are absent, not defaulted. */
+async function stored(): Promise<Map<string, string>> {
+  if (cache && Date.now() - cache.at < TTL) return cache.values;
+  const values = new Map<string, string>();
+  try {
+    for (const row of await db.selectFrom('settings').select(['key', 'value']).execute()) {
+      if (row.value !== null && row.value !== '') values.set(String(row.key), String(row.value));
+    }
+    cache = { at: Date.now(), values };
+  } catch {
+    // No table, or it cannot be read. Every caller falls back to its default,
+    // which is what the code did before this existed.
+  }
+  return values;
+}
+
+/** One setting, as text. The default when nobody has set it. */
+export async function setting(key: string): Promise<string> {
+  const spec = SPEC.get(key);
+  if (!spec) throw new Error(`Unknown setting: ${key}`);
+  return (await stored()).get(key) ?? spec.fallback();
+}
+
+export async function settingNumber(key: string): Promise<number> {
+  return Number(await setting(key));
+}
+
+/** What the settings screen reads: every setting, its value and its default. */
+export async function allSettings() {
+  const values = await stored();
+  return SETTINGS.map((s) => ({
+    key: s.key,
+    group: s.key.split('.')[0],
+    label: s.label,
+    kind: s.kind,
+    help: s.help ?? null,
+    // A secret is never sent back. `set` says whether one is stored, which is
+    // all the form needs to show "leave blank to keep it".
+    value: s.secret ? '' : (values.get(s.key) ?? s.fallback()),
+    secret: Boolean(s.secret),
+    set: values.has(s.key),
+    /** What it falls back to, so the screen can say what "empty" means. */
+    fallback: s.secret ? '' : s.fallback(),
+  }));
+}
+
+/**
+ * Writes settings. Unknown keys are refused rather than stored: a typo that
+ * silently becomes a row is a setting nobody can find and nothing reads.
+ *
+ * An empty value deletes the row, which is how a setting is put back to its
+ * default — except a secret, where empty means "leave what is there".
+ */
+export async function saveSettings(
+  patch: Record<string, unknown>,
+  userId: number,
+): Promise<string[]> {
+  const written: string[] = [];
+
+  for (const [key, raw] of Object.entries(patch)) {
+    const spec = SPEC.get(key);
+    if (!spec) throw badRequest(`Unknown setting: ${key}.`);
+
+    const value = raw == null ? '' : String(raw).trim();
+
+    if (value === '') {
+      if (spec.secret) continue;
+      await db.deleteFrom('settings').where('key', '=', key).execute();
+      written.push(key);
+      continue;
+    }
+
+    spec.check?.(value);
+
+    await db
+      .insertInto('settings')
+      .values({
+        key,
+        value,
+        updated_by: userId,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })
+      .onDuplicateKeyUpdate({ value, updated_by: userId, updated_at: new Date() })
+      .execute();
+    written.push(key);
+  }
+
+  // The next read sees what was just written rather than waiting out the TTL.
+  cache = null;
+  return written;
+}
+
+/** Drops the cache. For tests, and for anything that writes rows directly. */
+export function forgetSettings(): void {
+  cache = null;
+}

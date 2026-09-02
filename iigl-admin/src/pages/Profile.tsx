@@ -167,7 +167,13 @@ export default function Profile() {
 
         <Grid container spacing={3} sx={{ px: 2, pb: 2.5 }}>
           <Grid size={{ xs: 12, sm: 4 }}>
-            <FileField label="Profile photo" bucket="employee" value={photo} onChange={setPhoto} />
+            <FileField
+              label="Profile photo"
+              bucket="employee"
+              value={photo}
+              onChange={setPhoto}
+              ratio="1 / 1"
+            />
           </Grid>
           {lab && (
             <>
@@ -224,25 +230,41 @@ export default function Profile() {
       </Typography>
 
       <Panel>
-        <Stack spacing={2} sx={{ p: 2, maxWidth: 380 }}>
-          <PasswordField
-            label="New password"
-            autoComplete="new-password"
-            helperText="Eight characters or more. Check it with the eye before saving — it is not asked for twice."
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-          />
-          <Button
-            variant="contained"
-            disabled={pwBusy || newPassword.length < 8}
-            onClick={changePassword}
-            sx={{ alignSelf: 'flex-start' }}
+        <Stack spacing={1.5} sx={{ p: 2 }}>
+          {/*
+            Field and button on one line: this is one action with one input,
+            and stacking them put the button a paragraph away from the box it
+            acts on. `alignItems: flex-start` keeps the button level with the
+            field rather than centred against the field plus its helper text.
+          */}
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1.5}
+            sx={{ alignItems: { xs: 'stretch', sm: 'flex-start' } }}
           >
-            {pwBusy ? 'Changing…' : 'Change password'}
-          </Button>
+            <PasswordField
+              label="New password"
+              autoComplete="new-password"
+              helperText="Eight characters or more. Check it with the eye before saving — it is not asked for twice."
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              sx={{ width: { xs: '100%', sm: 320 } }}
+            />
+            <Button
+              variant="contained"
+              disabled={pwBusy || newPassword.length < 8}
+              onClick={changePassword}
+              // Matches the field's own height, so the two read as one control
+              // rather than a button that happens to sit beside a box.
+              sx={{ whiteSpace: 'nowrap', height: 56 }}
+            >
+              {pwBusy ? 'Changing…' : 'Change password'}
+            </Button>
+          </Stack>
+
           <Typography variant="caption" color="text.secondary">
-            This takes effect at once and does not sign out other devices. Sessions last eight
-            hours.
+            This takes effect at once and does not sign out other devices. A sign-in lasts
+            two days.
           </Typography>
         </Stack>
       </Panel>

@@ -105,7 +105,7 @@ w('```');
 w();
 w('The response sets an httpOnly cookie named `iigl.sid`. Send it with every');
 w('subsequent request — `credentials: "include"` in the browser, `-b` with curl.');
-w('Sessions last eight hours.');
+w('Sessions last two days by default, and the length is a setting.');
 w();
 w('Passwords are the existing Laravel bcrypt hashes, so credentials carried over');
 w('from the PHP application unchanged.');

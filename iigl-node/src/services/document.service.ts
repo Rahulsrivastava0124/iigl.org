@@ -185,6 +185,8 @@ export async function feeStatementHtml(enrolmentId: number, issuedBy: string): P
       'sc.discount_amount',
       'sc.discount_reason',
       'sc.final_fee',
+      'sc.gst_percent',
+      'sc.gst_amount',
       'sc.fee_paid',
       's.name as student_name',
       's.registration_no',
@@ -198,7 +200,14 @@ export async function feeStatementHtml(enrolmentId: number, issuedBy: string): P
     FEE_TEMPLATE,
     {
       enrolment,
-      due: Number(enrolment.final_fee ?? 0) - Number(enrolment.fee_paid ?? 0),
+      // What is owed: the fee after discount, plus its tax, less what has come
+      // in. Zero tax on an enrolment made before 020, so those statements read
+      // exactly as they did.
+      payable: Number(enrolment.final_fee ?? 0) + Number(enrolment.gst_amount ?? 0),
+      due:
+        Number(enrolment.final_fee ?? 0) +
+        Number(enrolment.gst_amount ?? 0) -
+        Number(enrolment.fee_paid ?? 0),
       issuedBy,
       issuedAt: new Date().toLocaleString('en-IN'),
       logo: await brandLogo(),

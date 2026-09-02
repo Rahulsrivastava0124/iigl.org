@@ -93,10 +93,15 @@ studentRoutes.get(
     const p = readPage(req);
     const status = req.query.status ? oneOf(ENQUIRY_STATUS, req.query.status) : null;
     const term = String(req.query.q ?? '').trim();
+    // Which laboratory took the enquiry. Only head office reaches this router,
+    // so this narrows a view rather than enforcing one: nobody is kept out of
+    // another laboratory's enquiries by leaving it off.
+    const labId = id(req.query.lab_id);
 
     const build = (base: any) => {
       let q = base;
       if (status) q = q.where('status', '=', status);
+      if (labId) q = q.where('lab_id', '=', labId);
       return search(q, term, ['name', 'mobile', 'email', 'course_interested']);
     };
 

@@ -23,15 +23,12 @@ import CustomerIcon from '@mui/icons-material/PersonOutlineOutlined';
 import TodayIcon from '@mui/icons-material/TodayOutlined';
 import CertificateIcon from '@mui/icons-material/WorkspacePremiumOutlined';
 
-/** Four to a row on a wide screen, two on a phone: the shape of every group. */
 /**
- * How wide a card is.
- *
- * Three to a row rather than four: a card holds a word, a figure and an icon,
- * and at a quarter of a wide screen the figure — the only part anybody is
- * actually reading — was the smallest thing on it.
+ * How wide a card is: four to a row on a wide screen, two on a tablet, one on
+ * a phone. The groups are counts of four and eight, so four to a row is the
+ * width that leaves no card stranded at the end of a row.
  */
-const CELL = { xs: 12, sm: 6, md: 4 } as const;
+const CELL = { xs: 12, sm: 6, md: 3 } as const;
 
 /**
  * Dashboard cards are tinted rather than outlined, and the colour says what
@@ -58,7 +55,7 @@ export default function Dashboard() {
 
       {s && (
         <>
-          <Typography variant="h2" sx={{ mt: 0, mb: 1.5 }}>
+          <Typography variant="h2" sx={{ mt: 0, mb: 1 }}>
             Account
           </Typography>
           <Grid container spacing={2}>
@@ -124,7 +121,7 @@ export default function Dashboard() {
             </Grid>
           </Grid>
 
-          <Typography variant="h2" sx={{ mt: 4, mb: 1.5 }}>
+          <Typography variant="h2" sx={{ mt: 2.5, mb: 1 }}>
             Wallet
           </Typography>
           <Grid container spacing={2}>
@@ -164,7 +161,7 @@ export default function Dashboard() {
             </Grid>
           </Grid>
 
-          <Typography variant="h2" sx={{ mt: 4, mb: 1.5 }}>
+          <Typography variant="h2" sx={{ mt: 2.5, mb: 1 }}>
             People
           </Typography>
           <Grid container spacing={2}>
@@ -205,7 +202,7 @@ export default function Dashboard() {
             </Grid>
           </Grid>
 
-          <Typography variant="h2" sx={{ mt: 4, mb: 1.5 }}>
+          <Typography variant="h2" sx={{ mt: 2.5, mb: 1 }}>
             Today
           </Typography>
           <Grid container spacing={2}>

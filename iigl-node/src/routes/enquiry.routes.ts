@@ -25,8 +25,48 @@ import { followupCounts, followupsFor, recordFollowup } from '../services/follow
 export const enquiryRoutes = Router();
 enquiryRoutes.use(requireAdmin);
 
-/** What the enquiry is about. The old menu's four entries. */
-export const ENQUIRY_KIND = ['ask', 'visit', 'lead', 'complaint'] as const;
+/**
+ * What the enquiry is about. The old menu's four entries, plus one.
+ *
+ * `laboratory` is somebody asking about opening one — a franchise enquiry. It
+ * belongs in this book rather than in a table of its own for the same reason
+ * the other four do: it differs in what it is about, not in what is recorded,
+ * and it is worked the same way, with the same follow-up log behind it.
+ *
+ * `enquiries.kind` is a varchar, so a fifth value needs no migration. Rows
+ * already written keep the kind they were written with.
+ */
+export const ENQUIRY_KIND = ['ask', 'visit', 'lead', 'complaint', 'laboratory'] as const;
+
+/**
+ * The kinds that actually exist, read from `enquiry_types` (migration 017).
+ *
+ * The constant above is the seed and the fallback: it is what the table was
+ * created holding, and it is what answers if the table cannot be read, so a
+ * master list nobody has touched behaves exactly as the hardcoded list did.
+ * A kind added on the Master screen is accepted here without a deploy.
+ *
+ * Cached for a minute. This is checked on every write to the book and the list
+ * changes a few times a year; a query per enquiry would be a join to answer a
+ * question whose answer is the same all afternoon.
+ */
+let kindCache: { at: number; codes: string[] } | null = null;
+const KIND_TTL = 60_000;
+
+async function liveKinds(): Promise<string[]> {
+  if (kindCache && Date.now() - kindCache.at < KIND_TTL) return kindCache.codes;
+  try {
+    const rows = await db.selectFrom('enquiry_types').select('code').execute();
+    const codes = rows.map((r) => String(r.code));
+    if (codes.length) {
+      kindCache = { at: Date.now(), codes };
+      return codes;
+    }
+  } catch {
+    // The table is missing or unreadable. The seeded constant is still true.
+  }
+  return [...ENQUIRY_KIND];
+}
 /** How far along it is. */
 export const ENQUIRY_STATUS = ['new', 'open', 'closed'] as const;
 
@@ -35,6 +75,15 @@ type Status = (typeof ENQUIRY_STATUS)[number];
 
 const text = (v: unknown): string | null => (v == null || v === '' ? null : String(v).trim());
 
+/** A date column, or null. An unparseable one is the caller's mistake, not a null. */
+const date = (v: unknown): Date | null => {
+  const s = text(v);
+  if (!s) return null;
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) throw badRequest(`${s} is not a date.`);
+  return d;
+};
+
 
 const requireText = (v: unknown, field: string): string => {
   const s = text(v);
@@ -42,14 +91,15 @@ const requireText = (v: unknown, field: string): string => {
   return s;
 };
 
-const kindOf = (v: unknown, fallback?: Kind): Kind => {
+const kindOf = async (v: unknown, fallback?: Kind): Promise<Kind> => {
   if (v == null || v === '') {
     if (fallback) return fallback;
     throw badRequest('A kind is required.');
   }
   const s = String(v);
-  if (!(ENQUIRY_KIND as readonly string[]).includes(s)) {
-    throw badRequest(`Unknown kind. Expected one of: ${ENQUIRY_KIND.join(', ')}.`);
+  const allowed = await liveKinds();
+  if (!allowed.includes(s)) {
+    throw badRequest(`Unknown kind. Expected one of: ${allowed.join(', ')}.`);
   }
   return s as Kind;
 };
@@ -70,7 +120,7 @@ enquiryRoutes.get(
   '/',
   wrap(async (req, res) => {
     const p = readPage(req);
-    const kind = req.query.kind ? kindOf(req.query.kind) : null;
+    const kind = req.query.kind ? await kindOf(req.query.kind) : null;
     const status = req.query.status ? statusOf(req.query.status) : null;
     const term = String(req.query.q ?? '').trim();
 
@@ -202,13 +252,24 @@ enquiryRoutes.post(
     const result = await db
       .insertInto('enquiries')
       .values({
-        kind: kindOf(b.kind, 'ask'),
+        kind: await kindOf(b.kind, 'ask'),
         name: requireText(b.name, 'Name'),
         mobile: requireText(b.mobile, 'Mobile number'),
         email: text(b.email),
         subject: text(b.subject),
+        // The course they asked about when we run it, and what they called it
+        // when we do not — the pair `student_enquiries` has always carried.
+        course_id: b.course_id ? Number(b.course_id) : null,
+        course_interested: text(b.course_interested),
         message: text(b.message),
         source: text(b.source),
+        // When it came in, which is not when the row was typed: Friday's
+        // walk-ins get written up on Monday. Absent, `created_at` answers it.
+        enquiry_date: date(b.enquiry_date),
+        // The next attempt's due date. The follow-up endpoint writes this too,
+        // from the newest attempt — setting it here is the same column, said
+        // by hand, exactly as the course enquiry book already allows.
+        follow_up_on: date(b.follow_up_on),
         status: statusOf(b.status, 'new'),
         assigned_to: b.assigned_to ? Number(b.assigned_to) : null,
         lab_id: b.lab_id ? Number(b.lab_id) : null,
@@ -238,13 +299,19 @@ enquiryRoutes.patch(
     const b = req.body ?? {};
     const patch: Record<string, unknown> = {};
 
-    if (b.kind !== undefined) patch.kind = kindOf(b.kind);
+    if (b.kind !== undefined) patch.kind = await kindOf(b.kind);
     if (b.name !== undefined) patch.name = requireText(b.name, 'Name');
     if (b.mobile !== undefined) patch.mobile = requireText(b.mobile, 'Mobile number');
     if (b.email !== undefined) patch.email = text(b.email);
     if (b.subject !== undefined) patch.subject = text(b.subject);
+    if (b.course_id !== undefined) patch.course_id = b.course_id ? Number(b.course_id) : null;
+    if (b.course_interested !== undefined) {
+      patch.course_interested = text(b.course_interested);
+    }
     if (b.message !== undefined) patch.message = text(b.message);
     if (b.source !== undefined) patch.source = text(b.source);
+    if (b.enquiry_date !== undefined) patch.enquiry_date = date(b.enquiry_date);
+    if (b.follow_up_on !== undefined) patch.follow_up_on = date(b.follow_up_on);
     if (b.remark !== undefined) patch.remark = text(b.remark);
     if (b.assigned_to !== undefined) {
       patch.assigned_to = b.assigned_to ? Number(b.assigned_to) : null;

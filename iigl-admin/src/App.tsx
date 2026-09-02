@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { Box, CircularProgress } from '@mui/material';
+import { Box, Button, CircularProgress, Typography } from '@mui/material';
 import { AuthProvider, useAuth } from './lib/auth';
 import { PermissionProvider } from './lib/permissions';
 import { basenameFor, currentPortal, isSuper } from './lib/portal';
@@ -38,6 +38,8 @@ import StudentEnquiries from './pages/StudentEnquiries';
 import Courses from './pages/Courses';
 import StudentCertificates from './pages/StudentCertificates';
 import Enquiries from './pages/Enquiries';
+import Master from './pages/Master';
+import Settings from './pages/Settings';
 
 /**
  * Administrator-only screens. Other roles are sent back to the dashboard.
@@ -51,7 +53,7 @@ function AdminOnly({ children }: { children: React.ReactNode }) {
 }
 
 function Routed() {
-  const { user, loading } = useAuth();
+  const { user, loading, offline } = useAuth();
 
   if (loading) {
     return (
@@ -60,6 +62,32 @@ function Routed() {
       </Box>
     );
   }
+  /*
+    The API did not answer, so we cannot tell whether anybody is signed in.
+    Showing the sign-in form here would send somebody to type a password
+    against a server that cannot check it — and, when the API comes back after
+    a restart, it reads as having been signed out for no reason. Say what has
+    actually happened instead, and offer the one thing that helps.
+  */
+  if (offline) {
+    return (
+      <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', p: 3 }}>
+        <Box sx={{ maxWidth: 420, textAlign: 'center' }}>
+          <Typography variant="h2" sx={{ mb: 1 }}>
+            The server is not responding
+          </Typography>
+          <Typography color="text.secondary" sx={{ mb: 3, fontSize: 14 }}>
+            You have not been signed out. The panel could not reach the API, so it
+            cannot tell who you are. Check that the API is running, then try again.
+          </Typography>
+          <Button variant="contained" onClick={() => window.location.reload()}>
+            Try again
+          </Button>
+        </Box>
+      </Box>
+    );
+  }
+
   // Signed out, the panel is three pages: sign in, asking for a reset link, and
   // the page that link opens. All three have to be reachable by someone who
   // cannot sign in, which is the whole point of them.
@@ -167,6 +195,28 @@ function Routed() {
           element={
             <AdminOnly>
               <Enquiries />
+            </AdminOnly>
+          }
+        />
+        {/*
+          A page per list. `/master` alone lands on the first one rather than
+          on an empty shell — the menu links to the five directly, but a typed
+          or bookmarked bare path should still arrive somewhere.
+        */}
+        <Route path="/master" element={<Navigate to="/master/gst" replace />} />
+        <Route
+          path="/master/:list"
+          element={
+            <AdminOnly>
+              <Master />
+            </AdminOnly>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <AdminOnly>
+              <Settings />
             </AdminOnly>
           }
         />

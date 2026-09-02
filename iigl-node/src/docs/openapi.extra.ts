@@ -94,7 +94,201 @@ export const extraTags = [
   { name: 'Enquiries', description: 'The general enquiry book: questions, visits, leads and complaints.' },
 ];
 
+/**
+ * The five master lists.
+ *
+ * Written from one description rather than five, because the router is one
+ * factory rather than five copies: documenting them by hand would be five
+ * chances for the docs and the code to disagree about the same twenty lines.
+ */
+const MASTER_DOCS: Array<{
+  path: string;
+  noun: string;
+  props: Record<string, unknown>;
+  required: string[];
+  /** A parent filter this list accepts on the query. */
+  parent?: string;
+  note?: string;
+}> = [
+  {
+    path: 'gst',
+    noun: 'GST rate',
+    props: { name: { type: 'string' }, percent: { type: 'number' }, is_active: bool },
+    required: ['name', 'percent'],
+    note: 'Offered when a course fee or a report price is set. Order pricing itself still applies the ported 18% in money.ts.',
+  },
+  {
+    path: 'enquiry-types',
+    noun: 'Enquiry type',
+    props: {
+      code: { type: 'string' },
+      label: { type: 'string' },
+      sort: int,
+      is_active: bool,
+    },
+    required: ['code', 'label'],
+    note: 'What `enquiries.kind` holds. The code is set once and cannot be edited: renaming it would orphan every enquiry filed under the old one.',
+  },
+  {
+    path: 'countries',
+    noun: 'Country',
+    props: { name: { type: 'string' }, code: str, is_active: bool },
+    required: ['name'],
+  },
+  {
+    path: 'states',
+    noun: 'State',
+    props: {
+      country_id: int,
+      name: { type: 'string' },
+      code: str,
+      is_active: bool,
+    },
+    required: ['country_id', 'name'],
+    parent: 'country_id',
+  },
+  {
+    path: 'districts',
+    noun: 'District',
+    props: { state_id: int, name: { type: 'string' }, is_active: bool },
+    required: ['state_id', 'name'],
+    parent: 'state_id',
+  },
+];
+
+const masterPaths: Record<string, unknown> = {};
+for (const m of MASTER_DOCS) {
+  const patchProps = { ...m.props };
+  // The code is immutable; the parent can be corrected.
+  delete (patchProps as Record<string, unknown>).code;
+  if (m.path !== 'enquiry-types') Object.assign(patchProps, {});
+
+  masterPaths[`/api/master/${m.path}`] = {
+    get: {
+      tags: ['Master'],
+      summary: `${m.noun}s`,
+      description: [m.note, 'Administrators only.'].filter(Boolean).join(' '),
+      parameters: [
+        {
+          name: 'active',
+          in: 'query',
+          schema: { type: 'string', enum: ['1'] },
+          description: 'Only what a form should offer. Omit it to see retired rows as well.',
+        },
+        ...(m.parent
+          ? [{ name: m.parent, in: 'query', schema: int, description: 'Only the rows under one parent.' }]
+          : []),
+      ],
+      responses: { 200: ok(`Every ${m.noun.toLowerCase()}.`), ...guarded },
+    },
+    post: {
+      tags: ['Master'],
+      summary: `Add a ${m.noun.toLowerCase()}`,
+      requestBody: body(m.props, m.required),
+      responses: {
+        201: ok(`${m.noun} created.`),
+        400: err('A required field is missing or invalid.'),
+        409: err('One with that value already exists.'),
+        ...guarded,
+      },
+    },
+  };
+
+  masterPaths[`/api/master/${m.path}/{id}`] = {
+    patch: {
+      tags: ['Master'],
+      summary: `Update a ${m.noun.toLowerCase()}`,
+      parameters: [idParam],
+      requestBody: body(patchProps),
+      responses: {
+        200: ok('Updated.'),
+        400: err('Nothing to update, or a value is invalid.'),
+        404: err(`${m.noun} not found.`),
+        ...guarded,
+      },
+    },
+    delete: {
+      tags: ['Master'],
+      summary: `Delete a ${m.noun.toLowerCase()}`,
+      description:
+        'For the row written by mistake. Refused as soon as anything points at it — retire those with the active endpoint instead, so what already refers to them still reads.',
+      parameters: [idParam],
+      responses: {
+        200: ok('Deleted.'),
+        404: err(`${m.noun} not found.`),
+        409: err('Something already refers to it.'),
+        ...guarded,
+      },
+    },
+  };
+
+  masterPaths[`/api/master/${m.path}/{id}/active`] = {
+    patch: {
+      tags: ['Master'],
+      summary: `Retire or restore a ${m.noun.toLowerCase()}`,
+      description:
+        "The ordinary end of a master row's life. A retired row stops being offered on new records and stays readable on old ones.",
+      parameters: [idParam],
+      requestBody: body({ is_active: bool }, ['is_active']),
+      responses: { 200: ok('Updated.'), 404: err(`${m.noun} not found.`), ...guarded },
+    },
+  };
+}
+
 export const extraPaths: Record<string, unknown> = {
+  ...masterPaths,
+
+  '/api/courses/{id}/students': {
+    get: {
+      tags: ['Students'],
+      summary: 'Who is on one course, and what it has brought in',
+      description:
+        'The enrolled students with what each was charged, has paid and still owes, and the same three figures totalled for the course. Totalled from the rows returned, so the figures and the list cannot disagree. Not paged: a course holds a class, and a caller wanting to page through enrolments has /api/courses/enrolments.',
+      parameters: [idParam],
+      responses: {
+        200: ok('The course, its students and its totals.'),
+        404: err('Course not found.'),
+        ...guarded,
+      },
+    },
+  },
+
+  '/api/courses/enrolments/summary': {
+    get: {
+      tags: ['Students'],
+      summary: 'Enrolment money, totalled',
+      description:
+        'Billed, paid and outstanding across every enrolment, with the count. Summed on the server because a client only ever holds one page and would total that page rather than the business. `billed` is the fee after any discount, falling back to `fee` on a row that never had one, so billed minus paid is what is owed. `due` is never negative: an overpayment is a credit to sort out on the enrolment.',
+      responses: { 200: ok('The three totals and the count.'), ...guarded },
+    },
+  },
+
+  '/api/settings': {
+    get: {
+      tags: ['Settings'],
+      summary: 'Every setting',
+      description:
+        'Each setting with its value, its built-in default, and whether anybody has set it. Nothing is seeded: an unset setting reads as the constant or environment variable the code used before the table existed, so an empty table behaves exactly as the hardcoded version did. A secret comes back empty with `set` saying whether one is stored.',
+      responses: { 200: ok('Every setting, grouped by the part of its key before the dot.'), ...guarded },
+    },
+    patch: {
+      tags: ['Settings'],
+      summary: 'Save settings',
+      description:
+        'Send only what changed, keyed. An empty value puts a setting back to its default by deleting the row — except a secret, where empty means leave what is stored. An unknown key is refused rather than written, since a typo that becomes a row is a setting nothing reads.',
+      requestBody: body({
+        'company.name': str,
+        'certificate.prefix': str,
+        'session.hours': str,
+        'mail.smtp_url': str,
+      }),
+      responses: {
+        200: ok('The keys written.'),
+        400: err('An unknown key, or a value the readers could not use.'),
+        ...guarded,
+      },
+    },
+  },
   // ------------------------------------------------------- catalogue admin
   ...crud(
     'Catalogue admin',
@@ -195,10 +389,24 @@ export const extraPaths: Record<string, unknown> = {
       max_wt: { type: 'number' },
       smart_price: { type: 'number' },
       classic_price: { type: 'number' },
+      gst_id: { type: ['integer', 'null'], description: 'A row of the GST master list.' },
+      gst_percent: {
+        type: ['number', 'string', 'null'],
+        description:
+          'A rate typed on this record instead of chosen from the list. One of the two is stored and the other cleared, so they cannot disagree.',
+      },
       rate: str,
     },
     ['category_id', 'min_wt', 'max_wt', 'smart_price', 'classic_price'],
-    { min_wt: { type: 'number' }, max_wt: { type: 'number' }, smart_price: { type: 'number' }, classic_price: { type: 'number' }, rate: str },
+    {
+      min_wt: { type: 'number' },
+      max_wt: { type: 'number' },
+      smart_price: { type: 'number' },
+      classic_price: { type: 'number' },
+      gst_id: { type: ['integer', 'null'] },
+      gst_percent: { type: ['number', 'string', 'null'] },
+      rate: str,
+    },
     {
       '/api/admin/prices': {
         get: {
@@ -412,6 +620,12 @@ export const extraPaths: Record<string, unknown> = {
             type: 'string',
             enum: ['new', 'contacted', 'interested', 'converted', 'not_interested'],
           },
+        },
+        {
+          name: 'lab_id',
+          in: 'query',
+          description: 'Only the enquiries a given laboratory took.',
+          schema: { type: 'integer' },
         },
         { name: 'q', in: 'query', schema: { type: 'string' } },
       ],
@@ -651,7 +865,12 @@ export const extraPaths: Record<string, unknown> = {
         { name: 'active', in: 'query', schema: { type: 'string', enum: ['0', '1'] } },
         { name: 'q', in: 'query', schema: { type: 'string' } },
       ],
-      responses: { 200: ok('Courses, by name.'), ...guarded },
+      responses: {
+        200: ok(
+          'Courses, by name. Each carries `enrolled` — how many are on it — and, where the course names a GST rate either from the master list or typed on itself, the resolved `gst_rate` with `gst_amount` and `fee_with_gst`. All three are null when no rate is named. Rounded, not truncated: the truncation in money.ts is the ported rule for what an order is billed, and a course fee is not an order.',
+        ),
+        ...guarded,
+      },
     },
     post: {
       tags: ['Courses'],
@@ -662,6 +881,12 @@ export const extraPaths: Record<string, unknown> = {
           code: str,
           duration: { type: ['string', 'null'], description: 'Free text — "6 months" — because that is how a prospectus says it.' },
           fee: { type: 'number' },
+          gst_id: { type: ['integer', 'null'], description: 'A row of the GST master list.' },
+          gst_percent: {
+            type: ['number', 'string', 'null'],
+            description:
+              'A rate typed on this record instead of chosen from the list. One of the two is stored and the other cleared.',
+          },
           description: str,
           is_active: bool,
         },
@@ -821,7 +1046,8 @@ export const extraPaths: Record<string, unknown> = {
     post: {
       tags: ['Courses'],
       summary: 'Take a fee payment',
-      description: 'Added to what is already paid rather than replacing it, and refused above the amount due.',
+      description:
+        'Added to what is already paid rather than replacing it, and refused above the amount due. What is due is the fee after discount plus its GST — `final_fee + gst_amount` — where the rate was snapshotted onto the enrolment when it was made. An enrolment created before migration 020 carries zero GST, so its cap is exactly what it always was.',
       parameters: [idParam],
       requestBody: body({ amount: { type: 'number' } }, ['amount']),
       responses: {
@@ -935,7 +1161,7 @@ export const extraPaths: Record<string, unknown> = {
         {
           name: 'kind',
           in: 'query',
-          schema: { type: 'string', enum: ['ask', 'visit', 'lead', 'complaint'] },
+          schema: { type: 'string', enum: ['ask', 'visit', 'lead', 'complaint', 'laboratory'] },
           description: "The old menu's four entries: Ask Me, Visitor's Diary, Lead followup, Complain.",
         },
         { name: 'status', in: 'query', schema: { type: 'string', enum: ['new', 'open', 'closed'] } },
@@ -950,13 +1176,27 @@ export const extraPaths: Record<string, unknown> = {
         'Not public. The website form does not post here yet: an unauthenticated write endpoint needs a rate limit and a captcha decision of its own.',
       requestBody: body(
         {
-          kind: { type: 'string', enum: ['ask', 'visit', 'lead', 'complaint'] },
+          kind: { type: 'string', enum: ['ask', 'visit', 'lead', 'complaint', 'laboratory'] },
           name: { type: 'string' },
           mobile: { type: 'string' },
           email: str,
           subject: str,
+          course_id: { type: ['integer', 'null'] },
+          course_interested: str,
           message: str,
           source: str,
+          enquiry_date: {
+            type: ['string', 'null'],
+            format: 'date',
+            description:
+              'When the enquiry came in, which is not when the row was typed. Absent, `created_at` answers it.',
+          },
+          follow_up_on: {
+            type: ['string', 'null'],
+            format: 'date',
+            description:
+              'When the next attempt is due. Also written by the follow-up endpoint, from the newest attempt.',
+          },
           status: { type: 'string', enum: ['new', 'open', 'closed'] },
           assigned_to: { type: ['integer', 'null'] },
           lab_id: { type: ['integer', 'null'] },
@@ -990,13 +1230,17 @@ export const extraPaths: Record<string, unknown> = {
         'Closing stamps `closed_at`; reopening clears it, so the column answers "when was this finished" rather than "when was it last closed".',
       parameters: [idParam],
       requestBody: body({
-        kind: { type: 'string', enum: ['ask', 'visit', 'lead', 'complaint'] },
+        kind: { type: 'string', enum: ['ask', 'visit', 'lead', 'complaint', 'laboratory'] },
         name: { type: 'string' },
         mobile: { type: 'string' },
         email: str,
         subject: str,
+        course_id: { type: ['integer', 'null'] },
+        course_interested: str,
         message: str,
         source: str,
+        enquiry_date: { type: ['string', 'null'], format: 'date' },
+        follow_up_on: { type: ['string', 'null'], format: 'date' },
         status: { type: 'string', enum: ['new', 'open', 'closed'] },
         assigned_to: { type: ['integer', 'null'] },
         remark: str,

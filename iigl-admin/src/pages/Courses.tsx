@@ -3,6 +3,10 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Box,
   Button,
+  Dialog as MuiDialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   IconButton,
   InputAdornment,
   MenuItem,
@@ -17,6 +21,7 @@ import {
   TextField,
   Tooltip,
   Typography,
+  Grid,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/AddOutlined';
 import EditIcon from '@mui/icons-material/EditOutlined';
@@ -32,6 +37,7 @@ import { useDebounced, useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
 import { apiUrl, fileUrl } from '../lib/config';
+import GstField, { type GstRate } from '../components/GstField';
 import { useToast } from '../components/Toast';
 import {
   ConfirmDialog,
@@ -44,11 +50,16 @@ import {
   SearchField,
   StateChip,
   TableFrame,
+  Tile,
   ToneAction,
   YesNo,
   money,
 } from '../components/ui';
 import type { Tone } from '../components/ui';
+import ViewIcon from '@mui/icons-material/VisibilityOutlined';
+import BilledIcon from '@mui/icons-material/ReceiptLongOutlined';
+import PaidIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
+import DuesIcon from '@mui/icons-material/PendingActionsOutlined';
 import type { Paged } from '../lib/api';
 
 type CourseStatus = 'upcoming' | 'ongoing' | 'completed';
@@ -65,8 +76,53 @@ interface Course {
   code: string | null;
   duration: string | null;
   fee: string;
+  /** A row of the GST master list, or null where the course names no rate. */
+  gst_id: number | null;
+  /** A rate typed for this course alone. Set only when `gst_id` is null. */
+  gst_percent: string | null;
   description: string | null;
   is_active: number;
+  /** How many are on it. Counted by the list endpoint. */
+  enrolled?: number;
+  /**
+   * The GST the fee is quoted at, resolved by the API from whichever way it
+   * was given — the master list or a percent typed on the course. Null, along
+   * with the two below, when the course names no rate.
+   */
+  gst_rate?: number | null;
+  gst_amount?: number | null;
+  fee_with_gst?: number | null;
+}
+
+/** One course's students and its money, from `/courses/:id/students`. */
+interface CourseStudents {
+  course: { id: number; name: string; fee: string };
+  students: {
+    id: number;
+    student_id: number;
+    student_name: string | null;
+    registration_no: string | null;
+    mobile: string | null;
+    batch: string | null;
+    start_date: string | null;
+    status: string | null;
+    final_fee: string | null;
+    fee: string | null;
+    fee_paid: string | null;
+    due: number;
+  }[];
+  totals: EnrolmentMoney;
+}
+
+/** Three to a row on a wide screen, one on a phone. */
+const MONEY_CELL = { xs: 12, sm: 4 } as const;
+
+/** Billed, paid and outstanding across every enrolment. */
+interface EnrolmentMoney {
+  enrolments: number;
+  billed: number;
+  paid: number;
+  due: number;
 }
 
 interface Enrolment {
@@ -86,6 +142,9 @@ interface Enrolment {
   /** Why, or `Coupon NEWYEAR25` when a code decided it. */
   discount_reason: string | null;
   final_fee: string;
+  /** The rate as it stood when the enrolment was made, and what it came to. */
+  gst_percent?: string | null;
+  gst_amount?: string | null;
   fee_paid: string;
   status: CourseStatus;
   completed_on: string | null;
@@ -103,6 +162,9 @@ const BLANK_COURSE = {
   code: '',
   duration: '',
   fee: '0',
+  gst_id: '',
+  /** A rate typed for this course alone, when it is not one from the list. */
+  gst_percent: '',
   description: '',
   is_active: true,
 };
@@ -131,11 +193,23 @@ export default function Courses() {
   if (tab === 'enrolments' && status) query.set('status', status);
 
   const catalogue = useFetch<Paged<Course>>(tab === 'catalogue' ? `/courses?${query}` : null);
+  // Only the rates still in use are offered. A retired one stays readable on
+  // the courses that already name it.
+  const gst = useFetch<{ data: GstRate[] }>(tab === 'catalogue' ? '/master/gst?active=1' : null);
+  // The money across every enrolment, totalled by the API. Read on both tabs:
+  // it is the same three figures whichever half of the screen you are on.
+  const money_ = useFetch<{ data: EnrolmentMoney }>('/courses/enrolments/summary');
   const enrolments = useFetch<Paged<Enrolment>>(
     tab === 'enrolments' ? `/courses/enrolments?${query}` : null,
   );
 
   const [form, setForm] = useState<typeof BLANK_COURSE | null>(null);
+  const [viewing, setViewing] = useState<Course | null>(null);
+  // Fetched by id, so the dialog cannot show one course's totals under
+  // another's name.
+  const viewed = useFetch<{ data: CourseStudents }>(
+    viewing ? `/courses/${viewing.id}/students` : null,
+  );
   const [paying, setPaying] = useState<Enrolment | null>(null);
   const [deletingCourse, setDeletingCourse] = useState<Course | null>(null);
   const [deletingEnrolment, setDeletingEnrolment] = useState<Enrolment | null>(null);
@@ -368,6 +442,9 @@ export default function Courses() {
         code: form.code,
         duration: form.duration,
         fee: Number(form.fee) || 0,
+        // One of the two. The API clears whichever was not chosen.
+        gst_id: form.gst_id ? Number(form.gst_id) : null,
+        gst_percent: form.gst_id ? null : form.gst_percent || null,
         description: form.description,
         is_active: form.is_active,
       };
@@ -454,7 +531,9 @@ export default function Courses() {
     }
   };
 
-  const due = (e: Enrolment) => Number(e.final_fee) - Number(e.fee_paid);
+  /** The fee after discount plus its tax: what the student was asked for. */
+  const payable = (e: Enrolment) => Number(e.final_fee) + Number(e.gst_amount ?? 0);
+  const due = (e: Enrolment) => payable(e) - Number(e.fee_paid);
 
   /**
    * Nothing has been paid on a fee that is not zero.
@@ -465,6 +544,7 @@ export default function Courses() {
    */
   const unpaid = (e: Enrolment) => Number(e.final_fee) > 0 && Number(e.fee_paid) <= 0;
   const courses = catalogue.data?.data ?? [];
+  const gstList = gst.data?.data ?? [];
   const rows = enrolments.data?.data ?? [];
 
   /**
@@ -493,8 +573,45 @@ export default function Courses() {
   /** A typed discount already on the enrolment — a coupon's is cancelled on the code. */
   const applied = Boolean(open && Number(open.discount_amount) > 0 && !spent);
 
+  const totals = money_.data?.data;
+  const seen = viewing ? viewed.data?.data : undefined;
+
   return (
     <>
+      {/*
+        The three figures the screen exists to answer for: what was charged,
+        what came in, what is still out. Above the tabs, because they describe
+        both halves — a course is what we teach and an enrolment is somebody
+        paying for it, and the money is the same money either way.
+
+        Dues go amber only while something is owed. A permanent warning colour
+        over a zero is a warning nobody reads.
+      */}
+      {totals && (
+        <Grid container spacing={2} sx={{ mb: 2 }}>
+          <Grid size={MONEY_CELL}>
+            <Tile
+              label="Total amount"
+              value={money(totals.billed)}
+              note={`${totals.enrolments} ${totals.enrolments === 1 ? 'enrolment' : 'enrolments'}`}
+              fill="brand"
+              icon={BilledIcon}
+            />
+          </Grid>
+          <Grid size={MONEY_CELL}>
+            <Tile label="Total paid" value={money(totals.paid)} fill="settled" icon={PaidIcon} />
+          </Grid>
+          <Grid size={MONEY_CELL}>
+            <Tile
+              label="Total due"
+              value={money(totals.due)}
+              fill={totals.due > 0 ? 'waiting' : 'settled'}
+              icon={DuesIcon}
+            />
+          </Grid>
+        </Grid>
+      )}
+
       <Tabs
         value={tab}
         onChange={(_, v) => go({ tab: v, page: 1, status: null })}
@@ -533,6 +650,15 @@ export default function Courses() {
                 onChange={(e) => set('fee', e.target.value)}
                 slotProps={{ htmlInput: { min: 0 } }}
                 helperText="Copied onto an enrolment; changing it here does not re-bill anybody."
+              />
+              {/*
+                The rate the fee is quoted at: pick one from Master › GST, or
+                type one for this course alone. One control for one question.
+              */}
+              <GstField
+                rates={gstList}
+                value={{ gst_id: form.gst_id, gst_percent: form.gst_percent }}
+                onChange={(next) => setForm({ ...form, ...next })}
               />
               <TextField
                 select
@@ -590,6 +716,8 @@ export default function Courses() {
                     <TableCell>Code</TableCell>
                     <TableCell>Duration</TableCell>
                     <TableCell align="right">Fee</TableCell>
+                    <TableCell align="right">With GST</TableCell>
+                    <TableCell align="right">Enrolled</TableCell>
                     <TableCell>Offered</TableCell>
                     <TableCell />
                   </TableRow>
@@ -603,11 +731,42 @@ export default function Courses() {
                       <TableCell align="right" className="tabular">
                         {money(c.fee)}
                       </TableCell>
+                      {/*
+                        The fee with its GST on it, worked out by the API from
+                        whichever rate the course names. The rate is said under
+                        it, because "17,700" without "incl. 18%" is a number
+                        somebody has to go and check.
+                      */}
+                      <TableCell align="right" className="tabular">
+                        {c.fee_with_gst == null ? (
+                          '—'
+                        ) : (
+                          <>
+                            {money(c.fee_with_gst)}
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ display: 'block' }}
+                            >
+                              incl. {Number(c.gst_rate)}%
+                            </Typography>
+                          </>
+                        )}
+                      </TableCell>
+                      {/* Counted by the API against student_courses. */}
+                      <TableCell align="right" className="tabular">
+                        {Number(c.enrolled ?? 0).toLocaleString()}
+                      </TableCell>
                       <TableCell>
                         <YesNo on={c.is_active} />
                       </TableCell>
                       <TableCell>
                         <RowActions>
+                          <IconAction
+                            label="Who is on it, and what it has brought in"
+                            icon={ViewIcon}
+                            onClick={() => setViewing(c)}
+                          />
                           <IconAction
                             label="Edit course"
                             icon={EditIcon}
@@ -618,6 +777,8 @@ export default function Courses() {
                                 code: c.code ?? '',
                                 duration: c.duration ?? '',
                                 fee: String(c.fee),
+                                gst_id: c.gst_id ? String(c.gst_id) : '',
+                                gst_percent: c.gst_percent == null ? '' : String(c.gst_percent),
                                 description: c.description ?? '',
                                 is_active: Boolean(c.is_active),
                               })
@@ -886,7 +1047,18 @@ export default function Courses() {
                       [open.discount_reason ?? 'Discount', `− ${money(open.discount_amount)}`],
                     ] as [string, string][])
                   : []),
-                ['Payable', money(open.final_fee)],
+                /*
+                  The tax, and the figure it was worked out on — shown only
+                  where there is one, so an enrolment quoted without GST reads
+                  exactly as it did rather than carrying an empty line.
+                */
+                ...(Number(open.gst_amount ?? 0) > 0
+                  ? ([
+                      ['Taxable', money(open.final_fee)],
+                      [`GST @ ${Number(open.gst_percent)}%`, money(open.gst_amount ?? 0)],
+                    ] as [string, string][])
+                  : []),
+                ['Payable', money(payable(open))],
                 ['Paid', money(open.fee_paid)],
               ].map(([label, value]) => (
                 <Stack
@@ -1123,6 +1295,98 @@ export default function Courses() {
         confirmIcon={DeleteIcon}
         busy={busy}
       />
+
+      {/*
+        One course: who is on it, and what it has brought in. The totals come
+        from the API with the rows they are the sum of, so the three figures
+        and the list underneath cannot disagree.
+      */}
+      {viewing && (
+        <MuiDialog open onClose={() => setViewing(null)} fullWidth maxWidth="md">
+          <DialogTitle sx={{ fontSize: '1rem', fontWeight: 600 }}>
+            {viewing.name}
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              Fee {money(viewing.fee)}
+              {viewing.code ? ` · ${viewing.code}` : ''}
+            </Typography>
+          </DialogTitle>
+
+          <DialogContent dividers>
+            {seen && (
+              <Grid container spacing={2} sx={{ mb: 2 }}>
+                <Grid size={MONEY_CELL}>
+                  <Tile
+                    label="Total amount"
+                    value={money(seen.totals.billed)}
+                    note={`${seen.totals.enrolments} ${seen.totals.enrolments === 1 ? 'student' : 'students'}`}
+                    fill="brand"
+                    icon={BilledIcon}
+                  />
+                </Grid>
+                <Grid size={MONEY_CELL}>
+                  <Tile label="Paid" value={money(seen.totals.paid)} fill="settled" icon={PaidIcon} />
+                </Grid>
+                <Grid size={MONEY_CELL}>
+                  <Tile
+                    label="Due"
+                    value={money(seen.totals.due)}
+                    fill={seen.totals.due > 0 ? 'waiting' : 'settled'}
+                    icon={DuesIcon}
+                  />
+                </Grid>
+              </Grid>
+            )}
+
+            <TableFrame
+              loading={viewed.loading}
+              error={viewed.error}
+              empty={(seen?.students.length ?? 0) === 0}
+              emptyText="Nobody is enrolled on this course yet."
+            >
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Student</TableCell>
+                    <TableCell>Registration</TableCell>
+                    <TableCell>Batch</TableCell>
+                    <TableCell align="right">Charged</TableCell>
+                    <TableCell align="right">Paid</TableCell>
+                    <TableCell align="right">Due</TableCell>
+                    <TableCell>Status</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {(seen?.students ?? []).map((r) => (
+                    <TableRow key={r.id} hover>
+                      <TableCell sx={{ whiteSpace: 'normal', minWidth: 140 }}>
+                        {r.student_name ?? '—'}
+                      </TableCell>
+                      <TableCell className="mono">{r.registration_no ?? '—'}</TableCell>
+                      <TableCell>{r.batch ?? '—'}</TableCell>
+                      <TableCell align="right" className="tabular">
+                        {money(r.final_fee ?? r.fee ?? 0)}
+                      </TableCell>
+                      <TableCell align="right" className="tabular">
+                        {money(r.fee_paid ?? 0)}
+                      </TableCell>
+                      <TableCell align="right" className="tabular">
+                        {money(r.due)}
+                      </TableCell>
+                      <TableCell>{r.status ?? '—'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableFrame>
+          </DialogContent>
+
+          <DialogActions>
+            <Button variant="contained" onClick={() => setViewing(null)}>
+              Close
+            </Button>
+          </DialogActions>
+        </MuiDialog>
+      )}
     </>
   );
 }

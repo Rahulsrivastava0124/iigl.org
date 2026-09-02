@@ -196,7 +196,7 @@ Every value derives from the `BRAND` object at the top of that file. Change
 | `secondary.main` | `#d58a2b` | **2.8:1** | Accent only — see below |
 | `text.primary` | `#3c4252` | 10.0:1 | Body text |
 | `text.secondary` | `#4a5265` | 7.8:1 | Labels, captions, table headers |
-| `divider` | `#e6e8ee` | — | Borders and rules |
+| `divider` | `#c2cce0` | — | Borders and rules |
 | `background.paper` | `#ffffff` | — | Panels, tables, dialogs |
 | `background.default` | `#f8f9fb` | — | The page behind them |
 
@@ -208,6 +208,25 @@ copy, a primary button, or a filled bar.
 **One theme.** Light only. White is half the brand, so the panel stays white
 whatever the operating system prefers. There is no `prefers-color-scheme`
 handling and none should be added to a component.
+
+### Borders are blue, not grey
+
+Every edge in the panel is navy diluted:
+
+| Token | Value | Use |
+| --- | --- | --- |
+| `BRAND.cardBorder` | `#c2cce0` | Every surface edge: panels, tables, dialogs, fields, drop zones. This is also `theme.divider`. |
+| `BRAND.tableRule` | `#aab8d3` | The line between two table rows — a shade darker, because a card's edge has a shadow helping it and a rule between records does not. |
+
+A grey border belongs to no palette and reads as the browser's own chrome. A
+border mixed from the brand navy puts the panel and the thing it frames in the
+same family, and at this dilution it still sits behind the content rather than
+boxing it in.
+
+**Both come from `theme.ts` and nowhere else.** Write `borderColor: 'divider'`,
+or `1px solid ${BRAND.cardBorder}` where a token is needed literally. A
+component that names its own `#e0e0e0` puts a grey line back into a blue panel
+and is the one way this can drift.
 
 ### Spacing
 
@@ -567,6 +586,15 @@ that never leaves the field.
 
 One `LocalizationProvider` wraps the whole panel in `src/main.tsx`, as the
 Pickers documentation asks. Do not wrap a screen in another one.
+
+**A date input is 180px, not the width of its cell.** `DD-MM-YYYY` plus the
+calendar button is all it holds; stretched across a form column it read as a
+text box somebody had forgotten to fill in, with its own value a hand's width
+from the label. The number lives once, as `DATE_WIDTH` in `ui.tsx`, so the
+dates across the panel cannot end up three different widths. It carries
+`maxWidth: 100%` as well, so a narrow column shrinks it rather than overflowing.
+Pass `sx` to a `DateField` only when one really has to be wider — a caller's
+`sx` is applied last and still wins.
 
 ### Full-page forms (Create / Edit)
 

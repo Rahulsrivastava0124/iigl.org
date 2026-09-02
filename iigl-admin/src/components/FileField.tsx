@@ -333,19 +333,14 @@ export default function FileField({
               </Box>
             )}
 
+            {/*
+              No stored path under the prompt. It is a UUID under a directory
+              nobody types or checks, it wrapped onto three lines in a form
+              column, and the thumbnail beside it already answers the only
+              question the path was answering — which file is attached.
+            */}
             <Box sx={{ minWidth: 0, flex: 1 }}>
               <Typography sx={{ fontSize: 13.5 }}>{prompt}</Typography>
-
-              {value && !busy && (
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  className="mono"
-                  sx={{ display: 'block', wordBreak: 'break-all' }}
-                >
-                  {value}
-                </Typography>
-              )}
             </Box>
 
             {value && !busy && remove}

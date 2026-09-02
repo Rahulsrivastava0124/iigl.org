@@ -5,6 +5,15 @@ import { currentPortal, PORTALS, type Portal } from './portal';
 interface AuthState {
   user: SessionUser | null;
   loading: boolean;
+  /**
+   * The API could not be reached on the last attempt to identify the person.
+   *
+   * Kept apart from `user: null` because the two look identical and mean
+   * opposite things: one is "you are signed out", the other is "we cannot tell
+   * — the server is not answering". Showing the sign-in form for the second
+   * sends somebody to type a password that cannot possibly be checked.
+   */
+  offline: boolean;
   portal: Portal;
   signIn: (mobile: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -15,6 +24,7 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [offline, setOffline] = useState(false);
   const portal = currentPortal();
   const config = PORTALS[portal];
 
@@ -34,12 +44,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Someone who signed in at another door should not be carried into
         // this one by a shared cookie.
         setUser(r.user.roleId !== null && config.admits(r.user.roleId) ? r.user : null);
+        setOffline(false);
       })
-      .catch(() => setUser(null))
+      .catch((e) => {
+        setUser(null);
+        // A 401 is a real answer: there is no session. Anything else on this
+        // call means the API did not answer at all.
+        setOffline(e instanceof ApiError && e.code === 'offline');
+      })
       .finally(() => setLoading(false));
   }, [config]);
 
   const signIn = async (mobile: string, password: string) => {
+    setOffline(false);
     const r = await api.post<{ user: SessionUser }>('/auth/login', { mobile, password });
 
     // A person with no role is not admitted by any door: every door asks for a
@@ -60,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, portal, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, loading, offline, portal, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,6 +1,6 @@
 # IIGL API
 
-163 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
+192 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
 
 The interactive version is at `/docs` when the server is running, and the raw
 document at `/openapi.json`.
@@ -16,7 +16,7 @@ Content-Type: application/json
 
 The response sets an httpOnly cookie named `iigl.sid`. Send it with every
 subsequent request — `credentials: "include"` in the browser, `-b` with curl.
-Sessions last eight hours.
+Sessions last two days by default, and the length is a setting.
 
 Passwords are the existing Laravel bcrypt hashes, so credentials carried over
 from the PHP application unchanged.
@@ -249,8 +249,8 @@ Creating and editing categories, attributes and prices. Administrators only.
 | PATCH | `/api/admin/categories/{id}` | session | — | name, unit, description, short_description, banner, icon | 400, 401, 403, 404 | Update a category |
 | PATCH | `/api/admin/laboratories/{id}/commission` | session | — | **commision** | 400, 401, 403, 404 | Set a laboratory commission rate |
 | GET | `/api/admin/prices` | session | `lab_id`, `category_id` | — | 401, 403 | List price bands |
-| POST | `/api/admin/prices` | session | — | **category_id**, lab_id, **min_wt**, **max_wt**, **smart_price**, **classic_price**, rate | 400, 401, 403, 409 | Add a price band |
-| PATCH | `/api/admin/prices/{id}` | session | — | min_wt, max_wt, smart_price, classic_price, rate | 400, 401, 403, 404 | Update a price band |
+| POST | `/api/admin/prices` | session | — | **category_id**, lab_id, **min_wt**, **max_wt**, **smart_price**, **classic_price**, gst_id, gst_percent, +1 more | 400, 401, 403, 409 | Add a price band |
+| PATCH | `/api/admin/prices/{id}` | session | — | min_wt, max_wt, smart_price, classic_price, gst_id, gst_percent, rate | 400, 401, 403, 404 | Update a price band |
 | DELETE | `/api/admin/prices/{id}` | session | — | — | 401, 403, 404 | Delete a price band |
 | POST | `/api/admin/subcategories` | session | — | **name**, **category_id**, description, banner, icon | 400, 401, 403, 409 | Add a subcategory |
 | PATCH | `/api/admin/subcategories/{id}` | session | — | name, category_id, description, banner, icon | 400, 401, 403, 404 | Update a subcategory |
@@ -333,6 +333,8 @@ The student pipeline: enquiry, registration, course, discount, certificate. New 
 
 | Method | Path | Auth | Query | Body | Fails | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/courses/{id}/students` | session | — | — | 401, 403, 404 | Who is on one course, and what it has brought in |
+| GET | `/api/courses/enrolments/summary` | session | — | — | 401, 403 | Enrolment money, totalled |
 | GET | `/api/student-certificates` | session | `page`, `per_page`, `student_id`, `q` | — | 401, 403 | Course certificates |
 | POST | `/api/student-certificates` | session | — | **student_course_id**, issued_on, grade, remark, file | 400, 401, 403, 404, 409 | Issue a certificate |
 | PATCH | `/api/student-certificates/{id}` | session | — | issued_on, grade, remark, file | 400, 401, 403, 404 | Update a certificate |
@@ -343,7 +345,7 @@ The student pipeline: enquiry, registration, course, discount, certificate. New 
 | GET | `/api/students/{id}` | session | — | — | 401, 403, 404 | One student, with their enrolments and certificates |
 | PATCH | `/api/students/{id}` | session | — | name, father_name, dob, gender, mobile, alt_mobile, email, address, +10 more | 400, 401, 403, 404 | Update a registration |
 | DELETE | `/api/students/{id}` | session | — | — | 401, 403, 404, 409 | Delete a registration |
-| GET | `/api/students/enquiries` | session | `page`, `per_page`, `status`, `q` | — | 401, 403 | Course enquiries |
+| GET | `/api/students/enquiries` | session | `page`, `per_page`, `status`, `lab_id`, `q` | — | 401, 403 | Course enquiries |
 | POST | `/api/students/enquiries` | session | — | **name**, **mobile**, email, course_id, course_interested, enquiry_date, source, status, +2 more | 400, 401, 403 | Record a course enquiry |
 | PATCH | `/api/students/enquiries/{id}` | session | — | name, mobile, email, course_id, course_interested, enquiry_date, source, status, +2 more | 400, 401, 403, 404 | Update a course enquiry |
 | DELETE | `/api/students/enquiries/{id}` | session | — | — | 401, 403, 404 | Delete a course enquiry |
@@ -359,7 +361,7 @@ The course catalogue, the enrolments on it, and the discount that sits on the fe
 | Method | Path | Auth | Query | Body | Fails | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/courses` | session | `page`, `per_page`, `active`, `q` | — | 401, 403 | The course catalogue |
-| POST | `/api/courses` | session | — | **name**, code, duration, fee, description, is_active | 400, 401, 403, 409 | Add a course |
+| POST | `/api/courses` | session | — | **name**, code, duration, fee, gst_id, gst_percent, description, is_active | 400, 401, 403, 409 | Add a course |
 | PATCH | `/api/courses/{id}` | session | — | name, code, duration, fee, description, is_active | 400, 401, 403, 404 | Update a course |
 | DELETE | `/api/courses/{id}` | session | — | — | 401, 403, 404, 409 | Delete a course |
 | GET | `/api/courses/enrolments` | session | `page`, `per_page`, `status`, `student_id`, `discounted`, `q` | — | 401, 403 | List enrolments |
@@ -377,16 +379,53 @@ The general enquiry book: questions, visits, leads and complaints.
 | Method | Path | Auth | Query | Body | Fails | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/enquiries` | session | `page`, `per_page`, `kind`, `status`, `q` | — | 401, 403 | List enquiries |
-| POST | `/api/enquiries` | session | — | kind, **name**, **mobile**, email, subject, message, source, status, +3 more | 400, 401, 403 | Record an enquiry |
+| POST | `/api/enquiries` | session | — | kind, **name**, **mobile**, email, subject, course_id, course_interested, message, +7 more | 400, 401, 403 | Record an enquiry |
 | GET | `/api/enquiries/{id}` | session | — | — | 401, 403, 404 | One enquiry |
-| PATCH | `/api/enquiries/{id}` | session | — | kind, name, mobile, email, subject, message, source, status, +2 more | 400, 401, 403, 404 | Update an enquiry |
+| PATCH | `/api/enquiries/{id}` | session | — | kind, name, mobile, email, subject, course_id, course_interested, message, +6 more | 400, 401, 403, 404 | Update an enquiry |
 | DELETE | `/api/enquiries/{id}` | session | — | — | 401, 403, 404 | Delete an enquiry |
 | GET | `/api/enquiries/{id}/followups` | session | — | — | 401, 403, 404 | The follow-up history of one enquiry |
 | POST | `/api/enquiries/{id}/followups` | session | — | note, outcome, next_follow_up_on, status | 400, 401, 403, 404 | Record a follow-up |
 | GET | `/api/enquiries/summary` | session | — | — | 401, 403 | Counts per kind and per status |
 
+## Master
+
+| Method | Path | Auth | Query | Body | Fails | Purpose |
+| --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/master/countries` | session | `active` | — | 401, 403 | Countrys |
+| POST | `/api/master/countries` | session | — | **name**, code, is_active | 400, 401, 403, 409 | Add a country |
+| PATCH | `/api/master/countries/{id}` | session | — | name, is_active | 400, 401, 403, 404 | Update a country |
+| DELETE | `/api/master/countries/{id}` | session | — | — | 401, 403, 404, 409 | Delete a country |
+| PATCH | `/api/master/countries/{id}/active` | session | — | **is_active** | 401, 403, 404 | Retire or restore a country |
+| GET | `/api/master/districts` | session | `active`, `state_id` | — | 401, 403 | Districts |
+| POST | `/api/master/districts` | session | — | **state_id**, **name**, is_active | 400, 401, 403, 409 | Add a district |
+| PATCH | `/api/master/districts/{id}` | session | — | state_id, name, is_active | 400, 401, 403, 404 | Update a district |
+| DELETE | `/api/master/districts/{id}` | session | — | — | 401, 403, 404, 409 | Delete a district |
+| PATCH | `/api/master/districts/{id}/active` | session | — | **is_active** | 401, 403, 404 | Retire or restore a district |
+| GET | `/api/master/enquiry-types` | session | `active` | — | 401, 403 | Enquiry types |
+| POST | `/api/master/enquiry-types` | session | — | **code**, **label**, sort, is_active | 400, 401, 403, 409 | Add a enquiry type |
+| PATCH | `/api/master/enquiry-types/{id}` | session | — | label, sort, is_active | 400, 401, 403, 404 | Update a enquiry type |
+| DELETE | `/api/master/enquiry-types/{id}` | session | — | — | 401, 403, 404, 409 | Delete a enquiry type |
+| PATCH | `/api/master/enquiry-types/{id}/active` | session | — | **is_active** | 401, 403, 404 | Retire or restore a enquiry type |
+| GET | `/api/master/gst` | session | `active` | — | 401, 403 | GST rates |
+| POST | `/api/master/gst` | session | — | **name**, **percent**, is_active | 400, 401, 403, 409 | Add a gst rate |
+| PATCH | `/api/master/gst/{id}` | session | — | name, percent, is_active | 400, 401, 403, 404 | Update a gst rate |
+| DELETE | `/api/master/gst/{id}` | session | — | — | 401, 403, 404, 409 | Delete a gst rate |
+| PATCH | `/api/master/gst/{id}/active` | session | — | **is_active** | 401, 403, 404 | Retire or restore a gst rate |
+| GET | `/api/master/states` | session | `active`, `country_id` | — | 401, 403 | States |
+| POST | `/api/master/states` | session | — | **country_id**, **name**, code, is_active | 400, 401, 403, 409 | Add a state |
+| PATCH | `/api/master/states/{id}` | session | — | country_id, name, is_active | 400, 401, 403, 404 | Update a state |
+| DELETE | `/api/master/states/{id}` | session | — | — | 401, 403, 404, 409 | Delete a state |
+| PATCH | `/api/master/states/{id}/active` | session | — | **is_active** | 401, 403, 404 | Retire or restore a state |
+
+## Settings
+
+| Method | Path | Auth | Query | Body | Fails | Purpose |
+| --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/settings` | session | — | — | 401, 403 | Every setting |
+| PATCH | `/api/settings` | session | — | company.name, certificate.prefix, session.hours, mail.smtp_url | 400, 401, 403 | Save settings |
+
 ---
 
 Bold body fields are required.
 
-163 endpoints: 16 public, 147 requiring a session.
+192 endpoints: 16 public, 176 requiring a session.

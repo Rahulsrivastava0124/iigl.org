@@ -137,6 +137,8 @@ export interface CouponRedemptions {
 
 export interface Courses {
   added_by: number | null;
+  gst_id: number | null;
+  gst_percent: string | null;
   code: string | null;
   created_at: Date | null;
   description: string | null;
@@ -186,8 +188,11 @@ export interface Enquiries {
   added_by: number | null;
   assigned_to: number | null;
   closed_at: Date | null;
+  course_id: number | null;
+  course_interested: string | null;
   created_at: Date | null;
   email: string | null;
+  enquiry_date: Date | null;
   follow_up_on: Date | null;
   id: Generated<number>;
   kind: Generated<string>;
@@ -314,6 +319,8 @@ export interface PermissionActions {
 }
 
 export interface Prices {
+  gst_id: number | null;
+  gst_percent: string | null;
   category_id: string;
   classic_price: number;
   created_at: Date | null;
@@ -440,6 +447,8 @@ export interface StudentCourses {
   status: Generated<string>;
   student_id: number;
   updated_at: Date | null;
+  gst_amount: Generated<string>;
+  gst_percent: Generated<string>;
 }
 
 export interface StudentEnquiries {
@@ -593,6 +602,62 @@ export interface Websites {
   updated_at: Date | null;
 }
 
+export interface GstRates {
+  created_at: Date | null;
+  id: Generated<number>;
+  is_active: Generated<number>;
+  name: string;
+  percent: Generated<string>;
+  updated_at: Date | null;
+}
+
+export interface EnquiryTypes {
+  code: string;
+  created_at: Date | null;
+  id: Generated<number>;
+  is_active: Generated<number>;
+  label: string;
+  sort: Generated<number>;
+  updated_at: Date | null;
+}
+
+export interface Countries {
+  code: string | null;
+  created_at: Date | null;
+  id: Generated<number>;
+  is_active: Generated<number>;
+  name: string;
+  updated_at: Date | null;
+}
+
+export interface States {
+  code: string | null;
+  country_id: number;
+  created_at: Date | null;
+  id: Generated<number>;
+  is_active: Generated<number>;
+  name: string;
+  updated_at: Date | null;
+}
+
+export interface Districts {
+  created_at: Date | null;
+  id: Generated<number>;
+  is_active: Generated<number>;
+  name: string;
+  state_id: number;
+  updated_at: Date | null;
+}
+
+export interface Settings {
+  created_at: Date | null;
+  id: Generated<number>;
+  key: string;
+  updated_at: Date | null;
+  updated_by: number | null;
+  value: string | null;
+}
+
 export interface DB {
   attendances: Attendances;
   attribute_values: AttributeValues;
@@ -632,4 +697,10 @@ export interface DB {
   user_permissions: UserPermissions;
   users: Users;
   websites: Websites;
+  countries: Countries;
+  districts: Districts;
+  enquiry_types: EnquiryTypes;
+  gst_rates: GstRates;
+  states: States;
+  settings: Settings;
 }

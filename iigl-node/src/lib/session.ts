@@ -34,7 +34,22 @@ export interface SessionUser {
  */
 export const SESSION_COOKIE = 'iigl.sid';
 
-const TTL_MS = 1000 * 60 * 60 * 8;
+/**
+ * How long a sign-in lasts: two days, unless Settings says otherwise.
+ *
+ * Read at issue time rather than at import, so a change applies to the next
+ * sign-in; sessions already handed out keep the length they were signed with,
+ * because the expiry is inside the cookie and cannot be shortened from here.
+ *
+ * **What two days costs.** This cookie is the whole of the authentication —
+ * there is no server-side session table, so nothing can be revoked before it
+ * expires. A cookie taken off a shared or unlocked machine is therefore usable
+ * for two days rather than eight hours. The trade was made deliberately for
+ * people who work across several days without wanting to sign in again;
+ * shorten it on the Settings screen if that is the wrong trade here, and
+ * changing SESSION_SECRET still invalidates every session at once.
+ */
+const DEFAULT_TTL_MS = 1000 * 60 * 60 * 48;
 
 const sign = (body: string) => createHmac('sha256', env.sessionSecret).update(body).digest('base64url');
 
@@ -45,9 +60,9 @@ const cookieOptions = {
   path: '/',
 };
 
-export function issueSession(res: Response, user: SessionUser): void {
-  const body = Buffer.from(JSON.stringify({ ...user, exp: Date.now() + TTL_MS })).toString('base64url');
-  res.cookie(SESSION_COOKIE, `${body}.${sign(body)}`, { ...cookieOptions, maxAge: TTL_MS });
+export function issueSession(res: Response, user: SessionUser, ttlMs = DEFAULT_TTL_MS): void {
+  const body = Buffer.from(JSON.stringify({ ...user, exp: Date.now() + ttlMs })).toString('base64url');
+  res.cookie(SESSION_COOKIE, `${body}.${sign(body)}`, { ...cookieOptions, maxAge: ttlMs });
 }
 
 export function clearSession(res: Response): void {

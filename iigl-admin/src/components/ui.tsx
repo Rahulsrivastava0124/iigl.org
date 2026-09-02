@@ -1,5 +1,6 @@
 import { Children, isValidElement, useEffect, useState } from 'react';
 import type { ComponentType, ReactElement, ReactNode } from 'react';
+import type { SxProps, Theme } from '@mui/material/styles';
 import { Link as RouterLink } from 'react-router-dom';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
@@ -579,6 +580,13 @@ export const today = () => dayjs().format(ISO_DATE);
  * half-typed date reaching the API as a date is worse than one that never
  * leaves the field.
  */
+/**
+ * How wide a date input is: `DD-MM-YYYY` plus the calendar button, and no
+ * more. One number here rather than a `sx` at each of the call sites, so the
+ * dates across the panel cannot end up three different widths.
+ */
+const DATE_WIDTH = 180;
+
 export function DateField({
   label,
   value,
@@ -614,7 +622,20 @@ export function DateField({
       minDate={minDate ? dayjs(minDate, ISO_DATE, true) : undefined}
       maxDate={maxDate ? dayjs(maxDate, ISO_DATE, true) : undefined}
       slotProps={{
-        textField: { required, helperText, sx, fullWidth: true, size: 'small' },
+        textField: {
+          required,
+          helperText,
+          // A date is ten characters and a calendar button. Stretched to the
+          // full grid cell it read as a text box somebody had forgotten to
+          // fill in, and sat a hand's width from its own value. Sized to what
+          // it holds instead — and still `maxWidth: 100%`, so it shrinks
+          // rather than overflowing a narrow column on a phone.
+          //
+          // A caller's own `sx` comes last and can still override the width.
+          sx: { width: DATE_WIDTH, maxWidth: '100%', ...sx },
+          fullWidth: false,
+          size: 'small',
+        },
         // Nothing here is far from today; a picker that opens on the year is
         // two clicks from being useful.
         field: { clearable: !required },
@@ -934,6 +955,7 @@ export function ToneAction({
   disabled,
   size = 'medium',
   hint,
+  sx,
 }: {
   label: string;
   icon: ComponentType<SvgIconProps>;
@@ -942,6 +964,12 @@ export function ToneAction({
   disabled?: boolean;
   /** `small` for one of these sitting in a row of icon actions. */
   size?: 'small' | 'medium';
+  /**
+   * A colour this one action carries instead of its tone's. For the rare
+   * control that is neither accept nor refuse and should not borrow either —
+   * changing the tone itself would repaint every chip and tile that shares it.
+   */
+  sx?: SxProps<Theme>;
   /**
    * Why it is disabled, or what it will do. A worded button explains itself,
    * so this is for the case a word cannot carry — chiefly "you cannot do this
@@ -962,7 +990,7 @@ export function ToneAction({
       startIcon={<Icon fontSize="small" />}
       disabled={disabled}
       onClick={onClick}
-      sx={{ whiteSpace: 'nowrap' }}
+      sx={{ whiteSpace: 'nowrap', ...sx }}
     >
       {label}
     </Button>

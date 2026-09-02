@@ -172,9 +172,27 @@
       </tr>
     <% } %>
 
+    <%
+      /* The tax, and the figure it was worked out on. Shown only where there
+         is one: an enrolment quoted with no GST should not carry an empty tax
+         line on a document somebody hands over. */
+      var gst = Number(enrolment.gst_amount || 0);
+      var rate = Number(enrolment.gst_percent || 0);
+    %>
+    <% if (gst > 0) { %>
+      <tr>
+        <td>Taxable</td>
+        <td class="amount"><%= money(enrolment.final_fee) %></td>
+      </tr>
+      <tr>
+        <td>GST @ <%= rate %>%</td>
+        <td class="amount"><%= money(gst) %></td>
+      </tr>
+    <% } %>
+
     <tr>
       <td>Payable</td>
-      <td class="amount"><%= money(enrolment.final_fee) %></td>
+      <td class="amount"><%= money(payable) %></td>
     </tr>
     <tr>
       <td>Paid</td>

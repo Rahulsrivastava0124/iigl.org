@@ -25,6 +25,8 @@ import { studentCertificateRoutes } from './routes/student-certificate.routes.js
 import { enquiryRoutes } from './routes/enquiry.routes.js';
 import { couponRoutes } from './routes/coupon.routes.js';
 import { fileRoutes } from './routes/file.routes.js';
+import { masterRoutes } from './routes/master.routes.js';
+import { settingsRoutes } from './routes/settings.routes.js';
 import { requireAuth } from './middleware/auth.js';
 import { loginLimiter, resetLimiter, verifyLogLimiter, renderLimiter } from './middleware/limits.js';
 import { openApiDocument } from './docs/openapi.js';
@@ -134,6 +136,8 @@ export function createApp() {
   app.use('/api/courses', courseRoutes);
   app.use('/api/student-certificates', studentCertificateRoutes);
   app.use('/api/enquiries', enquiryRoutes);
+  app.use('/api/master', masterRoutes);
+  app.use('/api/settings', settingsRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

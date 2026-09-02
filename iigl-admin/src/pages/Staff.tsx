@@ -475,6 +475,7 @@ export default function Staff() {
                     bucket="employee"
                     value={form.profile_photo}
                     onChange={(url) => setForm({ ...form, profile_photo: url ?? '' })}
+                    ratio="1 / 1"
                   />
                 </Grid>
                 <Grid size={{ xs: 12, md: 4 }}>

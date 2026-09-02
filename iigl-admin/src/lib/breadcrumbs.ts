@@ -32,6 +32,8 @@ const SECTIONS: Record<string, string> = {
   laboratories: 'Laboratory',
   staff: 'Employee Management',
   profile: 'Your profile',
+  master: 'Master',
+  settings: 'Settings',
   categories: 'Report Master',
   attributes: 'Report Master',
   pricing: 'Price Setup',
@@ -53,6 +55,11 @@ const SECTIONS: Record<string, string> = {
  */
 const VIEWS: Record<string, Record<string, string>> = {
   courses: { 'tab=enrolments': 'Enrolments' },
+  'student-enquiries': { 'tab=laboratory': 'Laboratory' },
+  settings: {
+    'tab=certificate': 'Certificate',
+    'tab=session': 'Session & Mail',
+  },
   enquiries: {
     'kind=ask': 'Ask Me',
     'kind=visit': "Visitor's Diary",
@@ -105,6 +112,12 @@ const DEFAULT_VIEW: Record<string, string> = {
 const LEAVES: Record<string, string> = {
   'reports/new': 'Issue a Certificate',
   'orders/new': 'Collect New',
+  // The master lists, a page each.
+  'master/gst': 'GST',
+  'master/enquiry-types': 'Enquiry Type',
+  'master/countries': 'Country',
+  'master/states': 'State',
+  'master/districts': 'District',
 };
 
 /** Sections with a detail route, and where to read the record's name from. */

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { db } from '../db/index.js';
+import { setting, settingNumber } from '../services/settings.service.js';
 import { wrap } from '../lib/async.js';
 import { badRequest, unauthorized } from '../lib/errors.js';
 import { env } from '../lib/env.js';
@@ -45,7 +46,16 @@ authRoutes.post(
     // lowest, which is how three active staff are currently locked out.
     const candidates = await db
       .selectFrom('users')
-      .select(['id', 'fullname', 'mobile', 'password', 'role_id', 'is_active', 'status'])
+      .select([
+        'id',
+        'fullname',
+        'mobile',
+        'password',
+        'role_id',
+        'is_active',
+        'status',
+        'profile_photo',
+      ])
       .where('mobile', '=', String(mobile))
       .orderBy('id')
       .execute();
@@ -86,8 +96,14 @@ authRoutes.post(
       labId: await resolveLabId(Number(row.id), Number(row.role_id)),
     };
 
-    issueSession(res, user);
-    res.json({ user });
+    // The configured session length, two days unless Settings says otherwise.
+    const hours = await settingNumber('session.hours');
+    issueSession(res, user, 1000 * 60 * 60 * hours);
+    // The photo travels beside the session rather than inside it. A cookie is
+    // signed once and then carried for as long as it lasts, so a path stored
+    // in it would still be the old picture after somebody changed theirs —
+    // and every request would carry a path it never reads.
+    res.json({ user: { ...user, photo: row.profile_photo ?? null } });
   }),
 );
 
@@ -127,7 +143,10 @@ authRoutes.post(
       .values({ email, token: await bcrypt.hash(token, 10), created_at: new Date() })
       .execute();
 
-    const url = `${env.panelUrl}/reset-password?email=${encodeURIComponent(email)}&token=${token}`;
+    // Where the panel is served from, as Settings has it — the address people
+    // actually open, which is not always the one in the environment.
+    const panelUrl = (await setting('mail.panel_url')).replace(/\/+$/, '');
+    const url = `${panelUrl}/reset-password?email=${encodeURIComponent(email)}&token=${token}`;
     await sendPasswordReset(email, url, user.fullname);
 
     res.json(said);
@@ -188,9 +207,26 @@ authRoutes.post('/logout', (_req, res) => {
   res.json({ ok: true });
 });
 
-authRoutes.get('/me', requireAuth, (req, res) => {
-  res.json({ user: req.user });
-});
+/**
+ * Who is signed in.
+ *
+ * The session itself answers all of this except the photograph, which is read
+ * from the row so that changing it takes effect on the next load rather than
+ * on the next sign-in.
+ */
+authRoutes.get(
+  '/me',
+  requireAuth,
+  wrap(async (req, res) => {
+    const row = await db
+      .selectFrom('users')
+      .select('profile_photo')
+      .where('id', '=', req.user.id)
+      .executeTakeFirst();
+
+    res.json({ user: { ...req.user, photo: row?.profile_photo ?? null } });
+  }),
+);
 
 authRoutes.post(
   '/change-password',

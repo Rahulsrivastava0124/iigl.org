@@ -15,6 +15,10 @@ export const round2 = (n: number) => Math.round(n * 100) / 100;
  * The original does `parseInt((total - discount) * 118 / 100)`, so 778.8 is
  * billed as 778 and not 779. Rounding instead would overcharge by a rupee on
  * most orders.
+ *
+ * The rate is not configurable. GST rates are a master list — Master › GST —
+ * recorded against a course fee or a price band; what an order is billed stays
+ * the ported 18% that PARITY.md verified.
  */
 export function gstOf(payable: number): number {
   return Math.trunc(payable * GST_MULTIPLIER);

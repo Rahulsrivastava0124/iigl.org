@@ -41,10 +41,12 @@ import StaffIcon from '@mui/icons-material/BadgeOutlined';
 import ProfileIcon from '@mui/icons-material/PersonOutlineOutlined';
 import CustomerIcon from '@mui/icons-material/GroupsOutlined';
 import CategoriesIcon from '@mui/icons-material/CategoryOutlined';
+import MasterIcon from '@mui/icons-material/ListAltOutlined';
 import PricingIcon from '@mui/icons-material/SellOutlined';
 import ContentIcon from '@mui/icons-material/ArticleOutlined';
 import StudentIcon from '@mui/icons-material/SchoolOutlined';
 import EnquiryIcon from '@mui/icons-material/SupportAgentOutlined';
+import SettingsIcon from '@mui/icons-material/SettingsOutlined';
 import LogoutIcon from '@mui/icons-material/LogoutOutlined';
 import { alpha } from '@mui/material/styles';
 import { BRAND } from '../lib/theme';
@@ -52,6 +54,7 @@ import { useAuth } from '../lib/auth';
 import { useFetch } from '../lib/useFetch';
 import { ROLE, ROLE_NAMES } from '../lib/portal';
 import { api } from '../lib/api';
+import { fileUrl } from '../lib/config';
 import { useBreadcrumbs } from '../lib/breadcrumbs';
 import { usePermissions } from '../lib/permissions';
 import { toneColour } from './ui';
@@ -237,6 +240,34 @@ const ADMIN_GROUPS: Group[] = [
       { to: '/enquiries?kind=visit', label: "Visitor's Diary" },
       { to: '/enquiries?kind=lead', label: 'Lead Followup' },
       { to: '/enquiries?kind=complaint', label: 'Complaints' },
+    ],
+  },
+  {
+    // The short lists every form reads, a page each. Down here with Settings
+    // rather than up among the daily work: these are opened when something
+    // needs adding to a list, which is a few times a month.
+    label: 'Master',
+    icon: MasterIcon,
+    adminOnly: true,
+    items: [
+      { to: '/master/gst', label: 'GST' },
+      { to: '/master/enquiry-types', label: 'Enquiry Type' },
+      { to: '/master/countries', label: 'Country' },
+      { to: '/master/states', label: 'State' },
+      { to: '/master/districts', label: 'District' },
+    ],
+  },
+  {
+    // Last, and on its own: settings are opened rarely and on purpose, and
+    // what they change — billing, numbering, who mail comes from — is not
+    // something to sit a mis-click away from the daily work.
+    label: 'Settings',
+    icon: SettingsIcon,
+    adminOnly: true,
+    items: [
+      { to: '/settings', label: 'Company', end: true },
+      { to: '/settings?tab=certificate', label: 'Certificate' },
+      { to: '/settings?tab=session', label: 'Session & Mail' },
     ],
   },
 ];
@@ -448,8 +479,13 @@ export default function Shell() {
           '& .MuiDrawer-paper': {
             width: open ? WIDTH : RAIL,
             boxSizing: 'border-box',
+            // The menu is a navy panel, so its edge is a darker navy rather
+            // than the page's grey divider — a light rule on a dark ground
+            // reads as a seam.
+            bgcolor: BRAND.navy,
+            color: '#fff',
             borderRight: 1,
-            borderColor: 'divider',
+            borderColor: BRAND.navyDark,
             overflowX: 'hidden',
             transition: 'width .2s',
           },
@@ -462,8 +498,10 @@ export default function Shell() {
             justifyContent: open ? 'flex-start' : 'center',
             minHeight: HEADER_H,
             height: HEADER_H,
-            borderBottom: 1,
-            borderColor: 'divider',
+            // The logo keeps its own white ground: the mark is drawn in navy
+            // and gold, and a navy ground eats half of it. The change of
+            // colour is the boundary, so there is no rule underneath.
+            bgcolor: '#fff',
             gap: 1.25,
           }}
         >
@@ -481,7 +519,7 @@ export default function Shell() {
             <Box component="img" src="/logo.png" alt="IIGL" sx={{ height: 44, flexShrink: 0 }} />
             {open && (
               <Typography
-                sx={{ fontWeight: 700, fontSize: 20, lineHeight: 1.15, color: 'primary.main' }}
+                sx={{ fontWeight: 700, fontSize: 20, lineHeight: 1.15, color: BRAND.navy }}
               >
                 IIGL
               </Typography>
@@ -490,18 +528,22 @@ export default function Shell() {
         </Toolbar>
 
         {/*
-          The scrollbar took its 16px out of the left of the menu, so every row
-          sat off-centre on the rail and short of the right edge when open. A
-          thin bar with a stable gutter on both edges keeps the rows centred
-          whether or not the menu is long enough to scroll.
+          The menu still scrolls; its scrollbar is just not drawn. A bar down
+          the navy panel was a light stripe against the one thing this edge of
+          the screen is for, and the gutter it needed took its width out of
+          every row. Hidden, the rows keep the full width and stay centred on
+          the rail. Wheel, trackpad, touch and keyboard are untouched — only the
+          painted bar goes.
         */}
         <Box
           sx={{
             flex: 1,
             overflowY: 'auto',
             py: 1,
-            scrollbarWidth: 'thin',
-            scrollbarGutter: 'stable both-edges',
+            // Firefox, then old Edge, then everything on Blink and WebKit.
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+            '&::-webkit-scrollbar': { display: 'none' },
           }}
         >
           {groups
@@ -548,19 +590,26 @@ export default function Shell() {
                 py: 1.05,
                 px: open ? 1.5 : 0,
                 justifyContent: open ? 'flex-start' : 'center',
-                color: 'text.primary',
+                // Not pure white: the resting rows sit back so the one white
+                // row reads as the place you are, rather than as one of ten
+                // things all shouting the same brightness.
+                color: alpha('#fff', 0.82),
+                '&:hover': { bgcolor: alpha('#fff', 0.08), color: '#fff' },
+                // The page you are on inverts the panel — white ground, navy
+                // text. On a navy menu that is the strongest mark available
+                // and needs no border or bar to help it.
                 '&.current': {
-                  bgcolor: 'primary.main',
-                  color: 'primary.contrastText',
-                  '& .MuiListItemIcon-root': { color: 'primary.contrastText' },
-                  '&:hover': { bgcolor: 'primary.dark' },
+                  bgcolor: '#fff',
+                  color: BRAND.navy,
+                  '& .MuiListItemIcon-root': { color: BRAND.navy },
+                  '&:hover': { bgcolor: alpha('#fff', 0.9), color: BRAND.navy },
                 },
                 // Expanded, the group heads its own list rather than competing
                 // with the entry inside it that is actually open.
                 '&.expanded': {
-                  bgcolor: 'action.hover',
-                  color: 'text.primary',
-                  '& .MuiListItemIcon-root': { color: 'text.primary' },
+                  bgcolor: alpha('#fff', 0.1),
+                  color: '#fff',
+                  '& .MuiListItemIcon-root': { color: '#fff' },
                 },
               } as const;
 
@@ -647,22 +696,23 @@ export default function Shell() {
                               pr: 1.5,
                               py: 0.6,
                               borderRadius: RADIUS,
-                              color: 'text.secondary',
+                              // A step back from the group above it, so the
+                              // list reads as belonging to its heading.
+                              color: alpha('#fff', 0.7),
                               position: 'relative',
-                              // The entry you are on is in the brand navy, on a
-                              // navy ground, with a bar down its left edge. A
-                              // neutral grey said "hovered", not "here".
+                              // The entry you are on inverts, exactly as the
+                              // group rows do: white ground, navy text.
                               '&.current': {
-                                bgcolor: 'primary.main',
-                                '&:hover': { bgcolor: 'primary.dark' },
+                                bgcolor: '#fff',
+                                '&:hover': { bgcolor: alpha('#fff', 0.9) },
                                 '& .MuiListItemText-primary': {
-                                  color: 'primary.contrastText',
+                                  color: BRAND.navy,
                                   fontWeight: 600,
                                 },
                               },
-                              // Hover is the tint; the filled navy is reserved
+                              // Hover is the tint; the white fill is reserved
                               // for the entry you are actually on.
-                              '&:hover': { bgcolor: alpha(BRAND.navy, 0.06) },
+                              '&:hover': { bgcolor: alpha('#fff', 0.08), color: '#fff' },
                             }}
                           >
                             <ListItemText
@@ -687,11 +737,22 @@ export default function Shell() {
         <AppBar
           position="sticky"
           elevation={0}
+          // One navy band across the top of the page, continuous with the
+          // menu beside it. Everything in it therefore has to be styled for a
+          // dark ground: the theme's text.secondary and contained-primary are
+          // both navy, which on navy is invisible.
           sx={{
-            bgcolor: 'background.paper',
-            color: 'text.primary',
+            bgcolor: BRAND.navy,
+            color: '#fff',
             borderBottom: 1,
-            borderColor: 'divider',
+            borderColor: BRAND.navyDark,
+            // An IconButton with no colour prop is `action.active` — near
+            // black, which on this ground is a button nobody can see. Set once
+            // on the bar so a new one cannot be added and forgotten.
+            '& .MuiIconButton-root': {
+              color: '#fff',
+              '&:hover': { bgcolor: alpha('#fff', 0.12) },
+            },
           }}
         >
           <Toolbar sx={{ gap: 2, minHeight: HEADER_H, height: HEADER_H, px: { xs: 2, md: 3 } }}>
@@ -703,9 +764,7 @@ export default function Shell() {
               <Typography sx={{ fontWeight: 600, fontSize: 15.5, lineHeight: 1.2 }} noWrap>
                 Welcome, {user?.fullname}
               </Typography>
-              <Typography sx={{ fontSize: 12 }} color="text.secondary">
-                {today}
-              </Typography>
+              <Typography sx={{ fontSize: 12, color: alpha('#fff', 0.7) }}>{today}</Typography>
             </Box>
 
             <Box
@@ -731,10 +790,32 @@ export default function Shell() {
                       </InputAdornment>
                     ),
                     // The same corner as everything else; the search field was
-                    // still a pill after the menu stopped being one.
-                    sx: { borderRadius: RADIUS },
+                    // still a pill after the menu stopped being one. White on
+                    // the navy bar, with navy text: a field you type into
+                    // should look like paper whatever it is sitting on.
+                    sx: {
+                      borderRadius: RADIUS,
+                      bgcolor: '#fff',
+                      color: BRAND.navy,
+                      // Lighter than the text it shares the box with, so the
+                      // prompt does not read as something already typed.
+                      '& input::placeholder': { color: alpha(BRAND.navy, 0.55), opacity: 1 },
+                      '& .MuiInputAdornment-root .MuiSvgIcon-root': {
+                        color: alpha(BRAND.navy, 0.55),
+                      },
+                      // The white fill is the edge. An outline as well would
+                      // draw a grey line around a white box on navy.
+                      '& .MuiOutlinedInput-notchedOutline': { borderColor: 'transparent' },
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'transparent' },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                        borderColor: BRAND.gold,
+                        borderWidth: 2,
+                      },
+                    },
                   },
-                  formHelperText: { sx: { position: 'absolute', top: 38, m: 0, fontSize: 11 } },
+                  formHelperText: {
+                    sx: { position: 'absolute', top: 38, m: 0, fontSize: 11, color: '#ffb4ab' },
+                  },
                 }}
               />
             </Box>
@@ -756,7 +837,15 @@ export default function Shell() {
                 variant="contained"
                 startIcon={<AddIcon />}
                 onClick={() => navigate('/orders/new')}
-                sx={{ whiteSpace: 'nowrap', px: 2 }}
+                // Navy on navy is not a button. It inverts here, the same way
+                // the active menu row does.
+                sx={{
+                  whiteSpace: 'nowrap',
+                  px: 2,
+                  bgcolor: '#fff',
+                  color: BRAND.navy,
+                  '&:hover': { bgcolor: alpha('#fff', 0.88) },
+                }}
               >
                 Collect New
               </Button>
@@ -796,17 +885,42 @@ export default function Shell() {
                 cursor: 'pointer',
                 pl: 1,
                 borderLeft: 1,
-                borderColor: 'divider',
+                borderColor: alpha('#fff', 0.2),
               }}
             >
-              <Avatar sx={{ bgcolor: 'primary.main', width: 38, height: 38, fontSize: 14 }}>
+              {/*
+                The photograph when there is one, initials when there is not.
+                Avatar falls back to its children on a missing or broken src by
+                itself, which is what an account whose file was uploaded by the
+                old application and since deleted needs.
+              */}
+              <Avatar
+                src={fileUrl(user?.photo) ?? undefined}
+                alt=""
+                sx={{
+                  bgcolor: '#fff',
+                  color: BRAND.navy,
+                  fontWeight: 600,
+                  width: 38,
+                  height: 38,
+                  fontSize: 14,
+                }}
+              >
                 {initials(user?.fullname ?? '')}
               </Avatar>
+              {/*
+                Two lines about one person, so they sit as one block. The
+                caption's default 1.66 line height put a blank line's worth of
+                air between a name and the role it belongs to.
+              */}
               <Box sx={{ display: { xs: 'none', lg: 'block' }, minWidth: 0 }}>
-                <Typography sx={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.2 }} noWrap>
+                <Typography sx={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.15 }} noWrap>
                   {user?.fullname}
                 </Typography>
-                <Typography variant="caption" color="text.secondary" noWrap>
+                <Typography
+                  sx={{ fontSize: 11.5, lineHeight: 1.25, color: alpha('#fff', 0.7) }}
+                  noWrap
+                >
                   {user?.roleId == null ? 'No role' : (ROLE_NAMES[user.roleId] ?? 'Account')}
                 </Typography>
               </Box>
@@ -841,6 +955,13 @@ export default function Shell() {
           Link per ancestor and a plain Typography for the page you are on —
           which is not a link, because it goes nowhere.
         */}
+        {/*
+          One crumb is not a trail. The dashboard is the root, so its trail is
+          the single word "Dashboard" — a heading pretending to be navigation,
+          taking a band of the page to say what the sidebar already highlights.
+          The bar appears as soon as there is somewhere to go back to.
+        */}
+        {crumbs.length > 1 && (
         <Box sx={{ px: { xs: 2, md: 3 }, pt: 2 }}>
           <Breadcrumbs
             aria-label="breadcrumb"
@@ -879,6 +1000,7 @@ export default function Shell() {
             )}
           </Breadcrumbs>
         </Box>
+        )}
 
         <Box component="main" sx={{ flex: 1, px: { xs: 2, md: 3 }, pt: 2.5, pb: 8, minWidth: 0 }}>
           <Outlet />

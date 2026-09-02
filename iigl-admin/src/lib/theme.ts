@@ -30,18 +30,34 @@ export const BRAND = {
   /** Gold, for accents only — never for a large fill or a primary action. */
   gold: '#d58a2b',
   goldDark: '#bd7724',
+  /**
+   * A true yellow, brighter than the accent gold.
+   *
+   * One control uses it: Follow, on the two enquiry lists. It is filled rather
+   * than accented, which is the exception to the gold rule above, and it takes
+   * navy text — yellow this bright carries nothing legible in white.
+   */
+  yellow: '#f2b705',
+  yellowDark: '#d79f04',
   bodyText: '#3c4252',
   mutedText: '#4a5265',
-  cardBorder: '#e6e8ee',
+  /**
+   * The edge of every surface: panels, tables, dialogs, fields, drop zones.
+   *
+   * Navy diluted, not grey. Grey borders belong to no palette and read as the
+   * browser's own chrome; a border mixed from the brand colour puts the panel
+   * and the thing it frames in the same family, and at this dilution it still
+   * sits behind the content rather than boxing it in.
+   */
+  cardBorder: '#c2cce0',
   /**
    * The line between two table rows.
    *
-   * A shade darker than `cardBorder`: at 1.23:1 against white that border is
-   * right for the edge of a card, where a shadow is doing most of the work,
-   * and too faint between rows, where the line is the only thing saying where
-   * one record ends and the next begins.
+   * A shade darker than `cardBorder`, for the same reason it always was: a
+   * card's edge has a shadow helping it, and a rule between two records is on
+   * its own in saying where one ends and the next begins.
    */
-  tableRule: '#dfe3ea',
+  tableRule: '#aab8d3',
   sectionBg: '#f8f9fb',
   /**
    * The table header row is filled with the brand navy rather than the pale

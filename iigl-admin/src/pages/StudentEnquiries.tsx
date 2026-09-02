@@ -1,15 +1,13 @@
 import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
   Button,
   MenuItem,
-  Tab,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
-  Tabs,
   TextField,
   Typography,
 } from '@mui/material';
@@ -17,12 +15,13 @@ import AddIcon from '@mui/icons-material/AddOutlined';
 import EditIcon from '@mui/icons-material/EditOutlined';
 import ViewIcon from '@mui/icons-material/VisibilityOutlined';
 import FollowIcon from '@mui/icons-material/PhoneInTalkOutlined';
-import ConvertIcon from '@mui/icons-material/HowToRegOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import { useDebounced, useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
+import SourceField from '../components/SourceField';
 import { useToast } from '../components/Toast';
+import { BRAND } from '../lib/theme';
 import { EnquiryViewDialog, FollowupDialog } from '../components/EnquiryFollowups';
 import {
   ConfirmDialog,
@@ -40,6 +39,8 @@ import {
 } from '../components/ui';
 import type { Tone } from '../components/ui';
 import type { Paged } from '../lib/api';
+import { Tab, Tabs } from '@mui/material';
+import Enquiries from './Enquiries';
 
 type Status = 'new' | 'converted' | 'not_interested';
 
@@ -100,16 +101,23 @@ const BLANK = {
 
 export default function StudentEnquiries() {
   const toast = useToast();
-  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const status = (params.get('status') as Status | null) ?? 'all';
+  const lab = params.get('lab') ?? '';
   const page = Number(params.get('page') ?? 1);
+  /**
+   * Who the enquiry is from. Two books, not two filters of one: a candidate
+   * asking about a course and somebody asking about opening a laboratory are
+   * different records in different tables, worked by the same people.
+   */
+  const tab = params.get('tab') === 'laboratory' ? 'laboratory' : 'candidate';
 
   const [search, setSearch] = useState('');
   const term = useDebounced(search);
 
   const query = new URLSearchParams({ page: String(page), per_page: '25' });
   if (status !== 'all') query.set('status', status);
+  if (lab) query.set('lab_id', lab);
   if (term.trim()) query.set('q', term.trim());
 
   const source = useFetch<Paged<Enquiry>>(`/students/enquiries?${query}`);
@@ -118,16 +126,22 @@ export default function StudentEnquiries() {
   const courseList = courses.data?.data ?? [];
 
   const [form, setForm] = useState<typeof BLANK | null>(null);
-  const [converting, setConverting] = useState<Enquiry | null>(null);
   const [following, setFollowing] = useState<Enquiry | null>(null);
   const [viewing, setViewing] = useState<Enquiry | null>(null);
   const [deleting, setDeleting] = useState<Enquiry | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const go = (next: { status?: string; page?: number }) => {
+  const go = (next: { status?: string; lab?: string; page?: number }) => {
     const q: Record<string, string> = {};
+    // The tab survives every other change: picking a status should not drop
+    // somebody back onto the book they were not reading.
+    if (tab === 'laboratory') q.tab = 'laboratory';
     const s = next.status ?? (status === 'all' ? '' : status);
+    const l = next.lab ?? lab;
     if (s) q.status = s;
+    // An empty parameter is noise in a link somebody may send on, so "all"
+    // drops out of the URL rather than writing `?lab=`.
+    if (l) q.lab = l;
     if (next.page && next.page > 1) q.page = String(next.page);
     setParams(q);
   };
@@ -166,25 +180,6 @@ export default function StudentEnquiries() {
     }
   };
 
-  /** Convert: the enquiry becomes a registration, and we land on it. */
-  const convert = async () => {
-    if (!converting) return;
-    setBusy(true);
-    try {
-      const res = await api.post<{ data: { id: number; registration_no: string } }>(
-        `/students/enquiries/${converting.id}/convert`,
-        {},
-      );
-      toast.ok(`${converting.name} registered as ${res.data.registration_no}.`);
-      setConverting(null);
-      navigate('/students');
-    } catch (e) {
-      toast.error(messageOf(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const remove = async () => {
     if (!deleting) return;
     setBusy(true);
@@ -203,18 +198,32 @@ export default function StudentEnquiries() {
   const courseName = (e: Enquiry) =>
     courseList.find((c) => c.id === e.course_id)?.name ?? e.course_interested ?? '—';
 
+  const tabStrip = (
+    <Tabs
+      value={tab}
+      onChange={(_, v) => setParams(v === 'laboratory' ? { tab: 'laboratory' } : {})}
+      sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+    >
+      <Tab value="candidate" label="Candidate" />
+      <Tab value="laboratory" label="Laboratory" />
+    </Tabs>
+  );
+
+  // The laboratory book is the general enquiry table pinned to its kind, so it
+  // is the Enquiries screen embedded rather than a second copy of a list, a
+  // follow-up dialog and a form that would then drift apart from it.
+  if (tab === 'laboratory') {
+    return (
+      <>
+        {tabStrip}
+        <Enquiries fixedKind="laboratory" />
+      </>
+    );
+  }
+
   return (
     <>
-      <Tabs
-        value={status}
-        onChange={(_, v) => go({ status: v === 'all' ? '' : v, page: 1 })}
-        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
-      >
-        {TABS.map((t) => (
-          <Tab key={t.id} value={t.id} label={t.label} />
-        ))}
-      </Tabs>
-
+      {tabStrip}
       {form && (
         <FormPanel
           title={form.id ? `Edit enquiry — ${form.name}` : 'New enquiry'}
@@ -259,11 +268,10 @@ export default function StudentEnquiries() {
             value={form.enquiry_date}
             onChange={(value) => set('enquiry_date', value)}
           />
-          <TextField
+          <SourceField
             label="Enquiry source"
             value={form.source}
-            onChange={(e) => set('source', e.target.value)}
-            helperText="Website, phone, walk-in, referral."
+            onChange={(v) => set('source', v)}
           />
           <TextField
             select
@@ -307,7 +315,36 @@ export default function StudentEnquiries() {
         footer={<Pager meta={source.data?.meta} onPage={(n) => go({ page: n })} />}
         actions={
           <>
+            {/*
+              Status was a tab strip above the panel. As a select it sits with
+              the other filters, reads the same as every other list's header,
+              and leaves room for the laboratory beside it — two tab strips
+              would not have fitted, and one tab strip plus one select would
+              have been two ways of saying "narrow this".
+            */}
+            {/*
+              A fixed width, not a minimum: in a flex header a minimum is a
+              floor to grow from, and a select holding the word "All" was
+              taking a third of the row off the search field. Default size
+              rather than `small`, so it stands the same height as the search
+              box beside it.
+            */}
+            <TextField
+              select
+              label="Status"
+              value={status}
+              onChange={(e) => go({ status: e.target.value === 'all' ? '' : e.target.value, page: 1 })}
+              sx={{ width: 160, flexShrink: 0 }}
+            >
+              {TABS.map((t) => (
+                <MenuItem key={t.id} value={t.id}>
+                  {t.label}
+                </MenuItem>
+              ))}
+            </TextField>
+
             <SearchField
+              width={340}
               placeholder="Name, mobile, course…"
               value={search}
               onChange={(v) => {
@@ -365,33 +402,35 @@ export default function StudentEnquiries() {
                   </TableCell>
                   <TableCell>
                     <RowActions>
-                      <IconAction
-                        label="View enquiry and its history"
-                        icon={ViewIcon}
-                        onClick={() => setViewing(e)}
-                      />
-                      {/* Following up is the work this screen exists for, so it
-                          is the one control that keeps its word. */}
-                      {!e.student_id && (
+                      {/*
+                        Following up is the work this screen exists for, so it
+                        leads the row and is the one control that keeps its
+                        word. The icons follow it.
+
+                        Not on a converted enquiry, though: there is nothing
+                        left to chase, and the two ways of being converted —
+                        a registration behind it, or the status set on its own
+                        — both mean the same thing here.
+                      */}
+                      {!e.student_id && e.status !== 'converted' && (
                         <ToneAction
                           label="Follow"
                           icon={FollowIcon}
                           tone="waiting"
                           size="small"
                           onClick={() => setFollowing(e)}
+                          sx={{
+                            bgcolor: BRAND.yellow,
+                            color: BRAND.navy,
+                            '&:hover': { bgcolor: BRAND.yellowDark },
+                          }}
                         />
                       )}
-                      {!e.student_id && (
-                        <Button
-                          size="small"
-                          variant="contained"
-                          startIcon={<ConvertIcon fontSize="small" />}
-                          onClick={() => setConverting(e)}
-                          sx={{ fontSize: 12, py: 0.5, px: 1, minWidth: 'auto' }}
-                        >
-                          Convert
-                        </Button>
-                      )}
+                      <IconAction
+                        label="View enquiry and its history"
+                        icon={ViewIcon}
+                        onClick={() => setViewing(e)}
+                      />
                       <IconAction
                         label="Edit enquiry"
                         overflow
@@ -462,19 +501,6 @@ export default function StudentEnquiries() {
           onClose={() => setViewing(null)}
         />
       )}
-
-      <ConfirmDialog
-        open={Boolean(converting)}
-        title="Convert to Registration"
-        message={<>Convert <strong>{converting?.name}</strong> to a student registration?</>}
-        warning="This creates a registration, issues a registration number, and marks the enquiry converted."
-        onClose={() => setConverting(null)}
-        onConfirm={convert}
-        confirmLabel="Convert"
-        confirmIcon={ConvertIcon}
-        danger={false}
-        busy={busy}
-      />
 
       <ConfirmDialog
         open={Boolean(deleting)}
