@@ -1,0 +1,41 @@
+-- ---------------------------------------------------------------------------
+-- 028 — address proof is its own answer again
+--
+-- 026 collapsed `id_proof_type` and `address_proof_type` into one list, on the
+-- reasoning that an Aadhaar card is identity proof and address proof and that
+-- two single-choice columns made somebody leave a document unrecorded. The
+-- first half of that holds. The second half was solved by allowing several
+-- answers, not by merging the two questions — and merging them lost something
+-- the paper actually asks:
+--
+--   ID PROOF*       PAN   AADHAR   PASSPORT
+--   ADDRESS PROOF   AADHAR   D.L.NO.   VOTER ID
+--
+-- These are two questions with two different lists. A PAN card is identity
+-- proof and is not address proof; with one column, ticking PAN answered the
+-- top row and left the bottom row blank with no way to fill it, so a printed
+-- form showed a franchise that had produced no proof of address. Which
+-- document proves the address is the franchisee's choice — often the Aadhaar,
+-- sometimes the licence — and nothing but their answer can say.
+--
+-- So the column comes back, wide enough for a list this time. `id_proof_type`
+-- keeps holding the identity row exactly as it does now and is not touched:
+-- every existing row keeps its meaning, and the address row starts empty
+-- rather than being guessed at from it. Guessing would tick boxes on somebody's
+-- KYC page that nobody ticked.
+--
+-- The number and the scan of each document stay where they are, one set per
+-- document. A card produced as both proofs is still one card with one number,
+-- and asking for it twice is how the two boxes end up disagreeing.
+--
+-- Additive. Nothing is dropped and no existing column changes.
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE `users`
+  ADD COLUMN `address_proof_type` VARCHAR(120) NULL DEFAULT NULL AFTER `id_proof_type`;
+
+-- ---------------------------------------------------------------------------
+-- Rollback
+--
+-- ALTER TABLE `users` DROP COLUMN `address_proof_type`;
+-- ---------------------------------------------------------------------------

@@ -1696,7 +1696,12 @@ export const extraPaths: Record<string, unknown> = {
         id_proof_type: {
           type: ['string', 'null'],
           description:
-            'The documents produced as proof, comma separated — "PAN,AADHAR,VOTER ID". One list for both boxes on the printed form: an Aadhaar card is identity proof and address proof, and both rows of ticks read from here.',
+            'The documents produced as proof of identity, comma separated — "PAN,AADHAR". The top row of tick boxes on the printed form; PAN, AADHAR and PASSPORT are what it offers.',
+        },
+        address_proof_type: {
+          type: ['string', 'null'],
+          description:
+            'The documents produced as proof of address, comma separated. The second row on the printed form — AADHAR, D.L.NO. and VOTER ID. Its own answer, not derived from `id_proof_type`: a PAN card proves identity and not an address. A card named in both rows is still one card, with one number column and one scan.',
         },
         documents: {
           type: ['array', 'null'],
@@ -1751,6 +1756,7 @@ export const extraPaths: Record<string, unknown> = {
         role_id: int,
         is_active: bool,
         commision: { type: 'number' },
+        commission_type: { type: 'string', enum: ['percent', 'per_pc'], description: 'How `commision` reads: a percentage of what the laboratory collects, or rupees for each piece it certifies. Decides the arithmetic on every commission figure and the wording on the printed franchisee form.' },
         registration_fee: { type: ['number', 'string', 'null'] },
         empid: str,
         address: str,
@@ -1782,6 +1788,7 @@ export const extraPaths: Record<string, unknown> = {
         voter_id: str,
         voter_photo: str,
         id_proof_type: str,
+        address_proof_type: str,
         documents: {
           type: ['array', 'null'],
           description:
@@ -1805,6 +1812,20 @@ export const extraPaths: Record<string, unknown> = {
         400: err('Nothing to update, or a blank mobile number.'),
         409: err('Another account already uses that mobile number, or employments still point at this empid.'),
         404: err('Account not found.'),
+        ...guarded,
+      },
+    },
+    delete: {
+      tags: ['Users'],
+      summary: 'Delete an account',
+      description:
+        'Administrators only. Refused while anybody’s work still points at the account — students or orders under a laboratory, staff employed under its empid — because this schema has no foreign keys and would leave those rows belonging to nobody. Deactivate instead: `PATCH /api/users/{id}/active` keeps the history readable. Grants in `user_permissions` go with the account.',
+      parameters: [idParam],
+      responses: {
+        200: ok('Deleted.'),
+        400: err('That is your own account.'),
+        404: err('Account not found.'),
+        409: err('Students, orders or staff still point at this account.'),
         ...guarded,
       },
     },

@@ -558,6 +558,7 @@ export interface Users {
   account_no: string | null;
   account_type: string | null;
   address: string | null;
+  address_proof_type: string | null;
   adhar_no: string | null;
   adhar_photo: string | null;
   alt_mobile: string | null;
@@ -565,6 +566,7 @@ export interface Users {
   bank_name: string | null;
   city: string | null;
   commision: number | null;
+  commission_type: Generated<string>;
   company_logo: string | null;
   country: string | null;
   created_at: Date | null;

@@ -1,9 +1,12 @@
 import type { ReactNode } from 'react';
 import { useFetch } from '../lib/useFetch';
-import { Checkbox, Grid, ListItemText, MenuItem, TextField } from '@mui/material';
+import { Autocomplete, Checkbox, Grid, ListItemText, MenuItem, TextField } from '@mui/material';
+import { api } from '../lib/api';
+import { messageOf } from '../lib/auth';
+import { useToast } from './Toast';
 import FileField from './FileField';
 import DocumentAssets, { type LabDocument } from './DocumentAssets';
-import { FRAME_CELL, WIDE_FRAME_CELL, hint } from './ui';
+import { FRAME_CELL, WIDE_FRAME_CELL, hint, hintNode } from './ui';
 
 /**
  * The laboratory's own details, as the printed Franchisee Form asks for them.
@@ -27,15 +30,24 @@ import { FRAME_CELL, WIDE_FRAME_CELL, hint } from './ui';
 export const ACCOUNT_TYPES = ['SAVING', 'CURRENT'] as const;
 
 /**
- * The documents somebody can produce as proof, in the order the paper prints
- * them.
+ * The documents somebody can produce as proof, as the paper asks for them.
  *
- * One list, not two. The form asks for identity proof and address proof in
- * separate boxes, but an Aadhaar card answers both and a franchise hands over
- * two or three documents between them — so the panel asks once, several
- * answers are allowed, and each row of ticks on the printed form reads from
- * the same set.
+ * Two questions, two lists — the franchisee form prints them as two rows:
+ *
+ *     ID PROOF*       PAN   AADHAR   PASSPORT
+ *     ADDRESS PROOF   AADHAR   D.L.NO.   VOTER ID
+ *
+ * Several answers each, because a franchise hands over two or three documents.
+ * The Aadhaar sits on both lists and is the usual answer to both; a PAN card
+ * proves identity and does not prove an address, which is why one merged
+ * question could not fill the second row.
+ *
+ * `PROOFS` is the union, in the order the paper prints them. It orders the
+ * number and scan fields below, each of which is asked **once**: a card named
+ * as both proofs is one card with one number.
  */
+export const ID_PROOFS = ['PAN', 'AADHAR', 'PASSPORT'] as const;
+export const ADDRESS_PROOFS = ['AADHAR', 'D.L.NO.', 'VOTER ID'] as const;
 export const PROOFS = ['PAN', 'AADHAR', 'PASSPORT', 'D.L.NO.', 'VOTER ID'] as const;
 
 /** Where each proof's number and its scan are kept, and how to ask for them. */
@@ -69,6 +81,7 @@ export interface LabForm {
   country: string;
   /** Every document produced as proof. Stored as one comma-separated column. */
   id_proofs: string[];
+  address_proofs: string[];
   pan_no: string;
   pan_photo: string;
   adhar_no: string;
@@ -86,6 +99,7 @@ export interface LabForm {
   bank_name: string;
   bank_branch: string;
   commision: string;
+  commission_type: string;
   registration_fee: string;
   profile_photo: string;
   signature: string;
@@ -108,6 +122,7 @@ export const BLANK_LAB: LabForm = {
   pincode: '',
   country: 'India',
   id_proofs: [],
+  address_proofs: [],
   pan_no: '',
   pan_photo: '',
   adhar_no: '',
@@ -125,6 +140,7 @@ export const BLANK_LAB: LabForm = {
   bank_name: '',
   bank_branch: '',
   commision: '',
+  commission_type: 'percent',
   registration_fee: '',
   profile_photo: '',
   signature: '',
@@ -134,26 +150,35 @@ export const BLANK_LAB: LabForm = {
 /** The record as the API returns it: every field nullable but the id. */
 export type LabRecord = Partial<Record<keyof LabForm, unknown>> & {
   id: number;
-  /** The column behind `id_proofs`: one comma-separated string. */
+  /** The columns behind the two proof lists: one comma-separated string each. */
   id_proof_type?: unknown;
+  address_proof_type?: unknown;
 };
 
 /** An account, mapped onto the form. Absent and null both become empty. */
 export function labFromRecord(d: LabRecord): LabForm {
   const out: LabForm = { ...BLANK_LAB };
   for (const key of Object.keys(BLANK_LAB) as (keyof LabForm)[]) {
-    if (key === 'documents' || key === 'id_proofs') continue;
+    if (key === 'documents' || key === 'id_proofs' || key === 'address_proofs') continue;
     const value = d[key];
     (out as unknown as Record<string, unknown>)[key] =
       value === null || value === undefined ? '' : String(value);
   }
 
-  // One column, several answers: "PAN,AADHAR". Blanks and stray spaces are
-  // dropped rather than becoming a proof nobody produced.
-  out.id_proofs = String(d.id_proof_type ?? '')
-    .split(',')
-    .map((one) => one.trim())
-    .filter((one) => one !== '');
+  // A column each, several answers each: "PAN,AADHAR". Blanks and stray spaces
+  // are dropped rather than becoming a proof nobody produced.
+  const list = (value: unknown) =>
+    String(value ?? '')
+      .split(',')
+      .map((one) => one.trim())
+      .filter((one) => one !== '');
+
+  // Not every account has been given a reading; a blank one is the percentage
+  // everything meant before there was a choice.
+  out.commission_type = out.commission_type === 'per_pc' ? 'per_pc' : 'percent';
+
+  out.id_proofs = list(d.id_proof_type);
+  out.address_proofs = list(d.address_proof_type);
 
   /*
     `documents` is JSON. The driver hands it back parsed, but a column written
@@ -204,6 +229,7 @@ export function labPatch(form: LabForm): Record<string, string | number | null |
     pincode: text(form.pincode),
     country: text(form.country),
     id_proof_type: form.id_proofs.length ? form.id_proofs.join(',') : null,
+    address_proof_type: form.address_proofs.length ? form.address_proofs.join(',') : null,
     pan_no: text(form.pan_no),
     pan_photo: text(form.pan_photo),
     adhar_no: text(form.adhar_no),
@@ -221,6 +247,7 @@ export function labPatch(form: LabForm): Record<string, string | number | null |
     bank_name: text(form.bank_name),
     bank_branch: text(form.bank_branch),
     commision: form.commision === '' ? null : Number(form.commision),
+    commission_type: form.commission_type === 'per_pc' ? 'per_pc' : 'percent',
     registration_fee: form.registration_fee === '' ? null : Number(form.registration_fee),
     profile_photo: text(form.profile_photo),
     signature: text(form.signature),
@@ -251,14 +278,18 @@ const upright = FRAME_CELL;
 const wide = WIDE_FRAME_CELL;
 
 export default function LaboratoryFields({ form, set, extra }: Props) {
+  const toast = useToast();
+
   /*
     Country, state and district come from the master lists.
 
     They were three free-text boxes, which is how one laboratory sits in
     "West Bengal", the next in "west bengal" and a third in "WB" — and why a
     report by state cannot be written. Master owns these lists; this reads
-    them, and head office adds a missing district there rather than inventing
-    it in a laboratory record.
+    them, and a name typed here that the list does not have is offered as an
+    `Add "…"` option, which writes it to Master as well as to this record —
+    the town a laboratory is in is often not on any list yet, and nobody can
+    leave a half-filled form to go and add it.
 
     The three are fetched whole and narrowed here: they are short lists, one
     request each, and filtering in the browser means changing the country
@@ -296,40 +327,173 @@ export default function LaboratoryFields({ form, set, extra }: Props) {
       : names;
   };
 
-  /** A place select: the master list, plus whatever the record already held. */
+  /**
+   * Adds a name to a master list and returns whether it landed.
+   *
+   * A state needs its country and a district needs its state, and neither is
+   * knowable when the box above is still empty — so the name is kept on the
+   * record either way and only the master list goes unwritten. The same is
+   * true of anybody without the Master permission: a laboratory's address is
+   * their business, the shared list is head office's.
+   */
+  const addToMaster = async (
+    path: string,
+    name: string,
+    parent?: { column: string; id?: number },
+  ) => {
+    if (parent && !parent.id) return false;
+    try {
+      await api.post(`/master/${path}`, {
+        name,
+        ...(parent?.id ? { [parent.column]: parent.id } : {}),
+      });
+      return true;
+    } catch (e) {
+      // A duplicate is a success as far as this form is concerned: the name is
+      // on the list, which is all it wanted.
+      const message = messageOf(e);
+      if (/already exists/i.test(message)) return true;
+      toast.error(`Saved on this record, but not added to the list — ${message}`);
+      return false;
+    }
+  };
+
+  /**
+   * A place box: the master list, plus whatever the record already held, plus
+   * whatever somebody types.
+   *
+   * Typing is the point. The old form was three free-text boxes, which is how
+   * one laboratory sits in "West Bengal" and the next in "WB"; a bare select
+   * fixes that and creates a worse problem, because the town this laboratory
+   * is actually in is not on any list until somebody adds it, and the person
+   * filling the form cannot leave it to go and do that. So: pick from the
+   * list, or type a new name and take the `Add "…"` option, which puts it on
+   * the master list for the next form as well as on this record.
+   */
+  const ADD = '\u0000add:';
+
   const placeField = (
     label: string,
     key: 'country' | 'state' | 'city',
     rows: PlaceRow[],
     onPick: (value: string) => void,
-    note?: string,
+    note: string,
+    /** Where a newly typed name goes, and what it hangs off. */
+    master: { path: string; parent?: { column: string; id?: number }; reload: () => void },
+  ) => (
+    <Grid size={cell}>
+      <Autocomplete
+        freeSolo
+        selectOnFocus
+        clearOnBlur
+        handleHomeEndKeys
+        options={options(rows, form[key])}
+        /*
+          The option's own spelling, when the record's differs only in case.
+          With "West Bengal" in the column and "West bengal" on the list, an
+          exact match finds neither and the box renders empty over a state the
+          laboratory has had for years. The column is left alone until somebody
+          actually picks something: quietly rewriting an address on load is not
+          this form's business.
+        */
+        value={rows.find((r) => same(r.name, form[key]))?.name ?? form[key]}
+        onChange={(_, chosen) => {
+          const value = String(chosen ?? '');
+          if (!value.startsWith(ADD)) return onPick(value);
+
+          const name = value.slice(ADD.length);
+          onPick(name);
+          void addToMaster(master.path, name, master.parent).then(
+            (added) => added && master.reload(),
+          );
+        }}
+        /* The typed name is offered as its own option when the list has no
+           such name — otherwise there is nothing to press and Enter is the
+           only way through, which nobody guesses. */
+        filterOptions={(all, params) => {
+          const typed = params.inputValue.trim();
+          const shown = all.filter((o) =>
+            o.toLowerCase().includes(params.inputValue.trim().toLowerCase()),
+          );
+          if (typed && !all.some((o) => same(o, typed))) shown.push(ADD + typed);
+          return shown;
+        }}
+        getOptionLabel={(o) => (o.startsWith(ADD) ? o.slice(ADD.length) : o)}
+        renderOption={({ key: k, ...props }, o) => (
+          <li key={k} {...props}>
+            {o.startsWith(ADD) ? `Add "${o.slice(ADD.length)}"` : o}
+          </li>
+        )}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label={label}
+            slotProps={{
+              ...params.slotProps,
+              input: {
+                ...params.slotProps.input,
+                // The hint sits before the clear and dropdown buttons the
+                // Autocomplete puts there, rather than replacing them.
+                endAdornment: (
+                  <>
+                    {hintNode(note)}
+                    {params.slotProps.input.endAdornment}
+                  </>
+                ),
+              },
+            }}
+          />
+        )}
+      />
+    </Grid>
+  );
+
+  /**
+   * One row of the KYC block: which documents were produced as this kind of
+   * proof. Several answers, because a franchise hands over two or three.
+   */
+  const proofSelect = (
+    label: string,
+    key: 'id_proofs' | 'address_proofs',
+    choices: readonly string[],
+    note: string,
   ) => (
     <Grid size={cell}>
       <TextField
         select
         label={label}
-        /*
-          The option's own spelling, when the record's differs only in case.
-          A Select matches its value exactly: with "West Bengal" in the column
-          and "West bengal" on the list, it finds neither and renders an empty
-          box over a state the laboratory has had for years. Matching loosely
-          and displaying the list's spelling shows the answer; the column is
-          left alone until somebody actually picks something, because quietly
-          rewriting an address on load is not this form's business.
-        */
-        value={rows.find((r) => same(r.name, form[key]))?.name ?? form[key]}
-        onChange={(e) => onPick(e.target.value)}
-        slotProps={note ? hint(note, true) : undefined}
+        value={form[key]}
+        onChange={(e) => {
+          const given = e.target.value as unknown as string[] | string;
+          set(key, typeof given === 'string' ? given.split(',').filter(Boolean) : given);
+        }}
+        slotProps={{
+          select: {
+            multiple: true,
+            // Listed in the order the options are, not the order they were
+            // ticked, so the summary matches the blocks below it.
+            renderValue: (selected) =>
+              choices.filter((o) => (selected as string[]).includes(o)).join(', '),
+          },
+          ...hint(note, true),
+        }}
       >
-        <MenuItem value="">Not recorded</MenuItem>
-        {options(rows, form[key]).map((name) => (
-          <MenuItem key={name} value={name}>
-            {name}
+        {choices.map((o) => (
+          <MenuItem key={o} value={o}>
+            <Checkbox size="small" checked={form[key].includes(o)} sx={{ p: 0.5, mr: 1 }} />
+            <ListItemText primary={o} slotProps={{ primary: { sx: { fontSize: 13.5 } } }} />
           </MenuItem>
         ))}
       </TextField>
     </Grid>
   );
+
+  /* Every document named in either row, once. The Aadhaar is the usual answer
+     to both and has one number and one scan. */
+  const produced = PROOFS.filter(
+    (o) => form.id_proofs.includes(o) || form.address_proofs.includes(o),
+  );
+
   /*
     A chosen proof's number, asked for only once the document is chosen.
 
@@ -419,28 +583,20 @@ export default function LaboratoryFields({ form, set, extra }: Props) {
       </Grid>
       <Grid size={cell}>
         <TextField
-          label="Office Tel No."
-          placeholder="Eg. 0612-2345678"
-          value={form.office_tel}
-          onChange={(e) => set('office_tel', e.target.value)}
-          slotProps={hint('STD code first, then the number — "0612-2345678". The form prints the code in its own box.')}
-        />
-      </Grid>
-      <Grid size={cell}>
-        <TextField
-          label="Alt Mobile"
-          placeholder="Eg. 9875642310"
-          value={form.alt_mobile}
-          onChange={(e) => set('alt_mobile', e.target.value)}
-        />
-      </Grid>
-      <Grid size={cell}>
-        <TextField
           label="Official Email"
           type="email"
           placeholder="Eg. lab@example.com"
           value={form.email}
           onChange={(e) => set('email', e.target.value)}
+          required
+        />
+      </Grid>
+      <Grid size={cell}>
+        <TextField
+          label="GST No"
+          placeholder="Eg. 22XXXXXXXXXXXXXXX"
+          value={form.gst_no}
+          onChange={(e) => set('gst_no', e.target.value)}
           required
         />
       </Grid>
@@ -454,11 +610,19 @@ export default function LaboratoryFields({ form, set, extra }: Props) {
       </Grid>
       <Grid size={cell}>
         <TextField
-          label="GST No"
-          placeholder="Eg. 22XXXXXXXXXXXXXXX"
-          value={form.gst_no}
-          onChange={(e) => set('gst_no', e.target.value)}
-          required
+          label="Office Tel No."
+          placeholder="Eg. 0612-2345678"
+          value={form.office_tel}
+          onChange={(e) => set('office_tel', e.target.value)}
+          slotProps={hint('STD code first, then the number — "0612-2345678". The form prints the code in its own box.')}
+        />
+      </Grid>
+      <Grid size={cell}>
+        <TextField
+          label="Alt Mobile"
+          placeholder="Eg. 9875642310"
+          value={form.alt_mobile}
+          onChange={(e) => set('alt_mobile', e.target.value)}
         />
       </Grid>
       <Grid size={cell}>
@@ -486,7 +650,8 @@ export default function LaboratoryFields({ form, set, extra }: Props) {
           if (form.state) set('state', '');
           if (form.city) set('city', '');
         },
-        'From Master › Country. Add a missing one there and it appears here.',
+        'From Master › Country. Type a country that is not listed and take the Add option to put it on the list.',
+        { path: 'countries', reload: countries.reload },
       )}
       {placeField(
         'State',
@@ -496,14 +661,24 @@ export default function LaboratoryFields({ form, set, extra }: Props) {
           set('state', value);
           if (form.city) set('city', '');
         },
-        'The states of the country chosen above, from Master › State.',
+        'The states of the country chosen above, from Master › State. Type a new one and take the Add option; choose the country first, or it is kept on this record only.',
+        {
+          path: 'states',
+          parent: { column: 'country_id', id: countryRow?.id },
+          reload: states.reload,
+        },
       )}
       {placeField(
         'Town / City',
         'city',
         districtRows,
         (value) => set('city', value),
-        'The districts of the state chosen above, from Master › District.',
+        'The districts of the state chosen above, from Master › District. Most towns are not on it — type the name and take the Add option, which puts it there for the next form too.',
+        {
+          path: 'districts',
+          parent: { column: 'state_id', id: stateRow?.id },
+          reload: districts.reload,
+        },
       )}
       <Grid size={cell}>
         <TextField
@@ -514,42 +689,28 @@ export default function LaboratoryFields({ form, set, extra }: Props) {
         />
       </Grid>
 
-      {/* ------------------------------------------------- kyc documents */}
-      <Grid size={cell}>
-        <TextField
-          select
-          label="ID Proof"
-          value={form.id_proofs}
-          onChange={(e) => {
-            const given = e.target.value as unknown as string[] | string;
-            set('id_proofs', typeof given === 'string' ? given.split(',').filter(Boolean) : given);
-          }}
-          slotProps={{
-            select: {
-              multiple: true,
-              // Listed in the order the options are, not the order they were
-              // ticked, so the summary matches the blocks below it.
-              renderValue: (selected) =>
-                PROOFS.filter((o) => (selected as string[]).includes(o)).join(', '),
-            },
-            ...hint(
-              'Every document produced. Both rows of tick boxes on the printed form read from this one list, so an Aadhaar card ticks as identity proof and as address proof.',
-              true,
-            ),
-          }}
-        >
-          {PROOFS.map((o) => (
-            <MenuItem key={o} value={o}>
-              <Checkbox size="small" checked={form.id_proofs.includes(o)} sx={{ p: 0.5, mr: 1 }} />
-              <ListItemText primary={o} slotProps={{ primary: { sx: { fontSize: 13.5 } } }} />
-            </MenuItem>
-          ))}
-        </TextField>
-      </Grid>
+      {/* -------------------------------------------------- kyc documents
+
+          Two questions, as the paper asks them. Whichever documents are named
+          in either, their numbers are asked for once each below and their
+          scans once each at the foot of the form: an Aadhaar produced as both
+          proofs is one card with one number. */}
+      {proofSelect(
+        'ID Proof',
+        'id_proofs',
+        ID_PROOFS,
+        'The documents produced as proof of identity — the top row of tick boxes on the printed form.',
+      )}
+      {proofSelect(
+        'Address Proof',
+        'address_proofs',
+        ADDRESS_PROOFS,
+        'The documents produced as proof of address — the second row on the printed form. Usually the Aadhaar card, which proves both and is named in both.',
+      )}
       {/* Ordered by the list, not by the order they were ticked, so the form
           reads the same way twice. The scan of each goes with the other
           attachments at the foot of the form. */}
-      {PROOFS.filter((o) => form.id_proofs.includes(o)).map(proofNumber)}
+      {produced.map(proofNumber)}
 
       {/* ---------------------------------------------------- bank details */}
       <Grid size={cell}>
@@ -611,15 +772,43 @@ export default function LaboratoryFields({ form, set, extra }: Props) {
         />
       </Grid>
 
-      {/* ------------------------------------------------------- the terms */}
+      {/* -------------------------------------------------------- the terms
+
+          Two ways a franchise is paid, and one number. A percentage is taken
+          off what the laboratory collects; a per-piece rate is rupees for each
+          piece certified and has nothing to do with what the order was worth.
+          Which one applies decides the arithmetic on every commission screen
+          and the wording printed on the franchisee form, so it is asked here
+          rather than assumed. */}
       <Grid size={cell}>
         <TextField
-          label="Commission (%)"
+          select
+          label="Commission Type"
+          value={form.commission_type}
+          onChange={(e) => set('commission_type', e.target.value)}
+          slotProps={hint(
+            'A percentage of what the laboratory collects, or a flat amount for each piece it certifies. The printed form and every commission figure follow this.',
+            true,
+          )}
+        >
+          <MenuItem value="percent">Percentage</MenuItem>
+          <MenuItem value="per_pc">Per Pc.</MenuItem>
+        </TextField>
+      </Grid>
+      <Grid size={cell}>
+        <TextField
+          label={form.commission_type === 'per_pc' ? 'Commission (₹ per Pc.)' : 'Commission (%)'}
           type="number"
-          placeholder="Eg. 10"
+          placeholder={form.commission_type === 'per_pc' ? 'Eg. 15' : 'Eg. 10'}
           value={form.commision}
           onChange={(e) => set('commision', e.target.value)}
-          slotProps={{ htmlInput: { min: 0, max: 100, step: 0.01 } }}
+          /* A percentage cannot exceed a hundred; rupees per piece can. */
+          slotProps={{
+            htmlInput:
+              form.commission_type === 'per_pc'
+                ? { min: 0, step: 0.01 }
+                : { min: 0, max: 100, step: 0.01 },
+          }}
         />
       </Grid>
       <Grid size={cell}>
@@ -684,7 +873,7 @@ export default function LaboratoryFields({ form, set, extra }: Props) {
               onChange={(v) => set('signature', v ?? '')}
             />
           </Grid>
-          {PROOFS.filter((o) => form.id_proofs.includes(o)).map(proofUpload)}
+          {produced.map(proofUpload)}
         </Grid>
       </Grid>
 

@@ -19,7 +19,16 @@ import CommissionIcon from '@mui/icons-material/PercentOutlined';
 import PaidIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
 import DuesIcon from '@mui/icons-material/PendingActionsOutlined';
 import { useFetch } from '../lib/useFetch';
-import { Notice, Panel, StateChip, StatusChip, TableFrame, Tile, money } from '../components/ui';
+import {
+  Notice,
+  Panel,
+  StateChip,
+  StatusChip,
+  TableFrame,
+  Tile,
+  commissionRate,
+  money,
+} from '../components/ui';
 
 /**
  * One laboratory: what it has earned, and what it has been doing.
@@ -73,6 +82,7 @@ interface Detail {
     mobile: string;
     city: string | null;
     commision: number | null;
+    commission_type: string | null;
     is_active: number;
     commission_accrued: number;
     commission_paid: number;
@@ -138,7 +148,7 @@ export default function LaboratoryView() {
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
           {lab.empid ?? '—'} · {lab.owner_name ?? 'No owner recorded'} · {lab.mobile}
           {lab.city ? ` · ${lab.city}` : ''}
-          {lab.commision == null ? '' : ` · ${lab.commision}% commission`}
+          {lab.commision == null ? '' : ` · ${commissionRate(lab.commision, lab.commission_type)} commission`}
         </Typography>
       )}
 

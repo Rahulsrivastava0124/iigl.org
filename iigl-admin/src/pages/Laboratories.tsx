@@ -27,6 +27,7 @@ import {
   RowActions,
   SearchField,
   TableFrame,
+  commissionRate,
   money,
 } from '../components/ui';
 
@@ -146,7 +147,7 @@ export default function Laboratories() {
                   <TableCell className="mono">{l.mobile}</TableCell>
                   <TableCell>{l.city ?? '—'}</TableCell>
                   <TableCell align="right" className="tabular">
-                    {l.commision == null ? '—' : `${l.commision}%`}
+                    {commissionRate(l.commision, l.commission_type)}
                   </TableCell>
                   {/*
                     What the rate has earned on delivered orders, what has been

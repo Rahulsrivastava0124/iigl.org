@@ -16,7 +16,7 @@ import type { DB } from '../db/types.js';
 type Exec = Kysely<DB>;
 import { wrap } from '../lib/async.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
-import { TRANSACTION_TYPE } from '../services/commission.service.js';
+import { accruedByLab, TRANSACTION_TYPE } from '../services/commission.service.js';
 import {
   franchiseeFormHtml,
   franchiseeFormPdf,
@@ -85,11 +85,13 @@ const PUBLIC_COLUMNS = [
   'dl_photo',
   'voter_id',
   'voter_photo',
-  // The documents produced as proof, comma separated — "PAN,AADHAR". One
-  // list: the printed form asks for identity proof and address proof in two
-  // boxes, but an Aadhaar card answers both, and both rows of ticks read from
-  // here.
+  // The documents produced as proof, comma separated — "PAN,AADHAR". Two
+  // questions with two different lists, as the paper asks them: a PAN card is
+  // identity proof and is not address proof, and which document proves the
+  // address is the franchisee's answer to give. A card named in both is still
+  // one card — its number and its scan are kept once.
   'id_proof_type',
+  'address_proof_type',
   // The attachment list, as JSON. The driver hands it back parsed.
   'documents',
   'fax',
@@ -98,6 +100,7 @@ const PUBLIC_COLUMNS = [
   'company_logo',
   'signature',
   'commision',
+  'commission_type',
   'registration_fee',
   'is_active',
   'status',
@@ -182,8 +185,9 @@ userRoutes.get(
       The same three figures the dashboard reports, per laboratory rather than
       for one account, and read the same way so the two cannot disagree:
 
-        accrued  the rate applied to what each laboratory has actually
-                 collected on delivered orders — not on what was billed
+        accrued  the laboratory's rate against its delivered orders — a
+                 percentage of what it actually collected, or a flat amount per
+                 piece, depending on the terms it is on
         paid     commission rows that have been approved
         due      the difference, floored at zero, because an overpayment is a
                  wallet balance and not a debt
@@ -192,18 +196,8 @@ userRoutes.get(
       screen head office opens first, and a network of forty would otherwise be
       eighty round trips.
     */
-    const [earned, settled] = await Promise.all([
-      db
-        .selectFrom('orders')
-        .innerJoin('users', 'users.id', 'orders.lab_id')
-        .select(({ fn }) => [
-          'orders.lab_id as lab_id',
-          'users.commision as rate',
-          fn.sum<number>('orders.paid_amount').as('collected'),
-        ])
-        .where('orders.status', '=', 'delivered')
-        .groupBy(['orders.lab_id', 'users.commision'])
-        .execute(),
+    const [accruedBy, settled] = await Promise.all([
+      accruedByLab(),
       db
         .selectFrom('transactions')
         .select(({ fn }) => ['send_by', fn.sum<number>('amount').as('total')])
@@ -214,12 +208,6 @@ userRoutes.get(
     ]);
 
     const round2 = (v: number) => Math.round(v * 100) / 100;
-    const accruedBy = new Map(
-      earned.map((r) => [
-        Number(r.lab_id),
-        round2(((Number(r.collected) || 0) * (Number(r.rate) || 0)) / 100),
-      ]),
-    );
     const paidBy = new Map(settled.map((r) => [Number(r.send_by), Number(r.total ?? 0)]));
 
     res.json({
@@ -261,7 +249,20 @@ userRoutes.get(
 
     const lab = await db
       .selectFrom('users')
-      .select(['id', 'fullname', 'owner_name', 'empid', 'mobile', 'city', 'commision', 'is_active'])
+      .select([
+        'id',
+        'fullname',
+        'owner_name',
+        'empid',
+        'mobile',
+        'city',
+        'commision',
+        // The rate alone does not say whether it is a percentage or rupees a
+        // piece, and a list that prints "15%" against a per-piece franchise is
+        // stating terms nobody agreed.
+        'commission_type',
+        'is_active',
+      ])
       .where('id', '=', labId)
       .where('role_id', '=', ROLE.LAB)
       .executeTakeFirst();
@@ -275,13 +276,8 @@ userRoutes.get(
       address there is no row, and a screen that only works when you arrive by
       one route is a screen that breaks the first time somebody reloads it.
     */
-    const [collected, approved] = await Promise.all([
-      db
-        .selectFrom('orders')
-        .select(({ fn }) => fn.sum<number>('paid_amount').as('total'))
-        .where('lab_id', '=', labId)
-        .where('status', '=', 'delivered')
-        .executeTakeFirstOrThrow(),
+    const [earned, approved] = await Promise.all([
+      accruedByLab(labId),
       db
         .selectFrom('transactions')
         .select(({ fn }) => fn.sum<number>('amount').as('total'))
@@ -291,9 +287,7 @@ userRoutes.get(
         .executeTakeFirstOrThrow(),
     ]);
     const round2 = (v: number) => Math.round(v * 100) / 100;
-    const accrued = round2(
-      ((Number(collected.total) || 0) * (Number(lab.commision) || 0)) / 100,
-    );
+    const accrued = earned.get(labId) ?? 0;
     const paid = round2(Number(approved.total ?? 0));
 
     const [payments, staffRows, reportRows, counts] = await Promise.all([
@@ -662,6 +656,7 @@ const SELF_EDITABLE = [
   'voter_id',
   'voter_photo',
   'id_proof_type',
+  'address_proof_type',
 ] as const;
 
 /**
@@ -883,6 +878,15 @@ userRoutes.patch(
     }
     if (req.body?.is_active !== undefined) patch.is_active = req.body.is_active ? 1 : 0;
     if (req.body?.commision !== undefined) patch.commision = Number(req.body.commision);
+    // Which reading applies to that number. Anything but the two known values
+    // would leave the rate meaning whatever the next reader assumes.
+    if (req.body?.commission_type !== undefined) {
+      const given = String(req.body.commission_type);
+      if (given !== 'percent' && given !== 'per_pc') {
+        throw badRequest('Commission type is "percent" or "per_pc".');
+      }
+      patch.commission_type = given;
+    }
     if (req.body?.registration_fee !== undefined) {
       // Money, so blank is "not recorded" rather than zero: a fee of ₹0 and a
       // fee nobody has agreed yet print differently on the form.
@@ -927,6 +931,78 @@ userRoutes.patch(
     if (Object.keys(patch).length === 1) throw badRequest('Nothing to update.');
 
     await db.updateTable('users').set(patch as never).where('id', '=', id).execute();
+    res.json({ ok: true });
+  }),
+);
+
+/**
+ * Delete an account.
+ *
+ * There are no foreign keys in this schema, so nothing but this refuses to
+ * leave a student attached to a laboratory that no longer exists. An account
+ * anybody's work still points at cannot be deleted — deactivate it instead,
+ * which is what `is_active` is for and what keeps the history readable.
+ */
+userRoutes.delete(
+  '/:id',
+  numericId,
+  requireAdmin,
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    if (id === req.user.id) throw badRequest('You cannot delete your own account.');
+
+    const row = await db
+      .selectFrom('users')
+      .select(['id', 'empid', 'fullname'])
+      .where('id', '=', id)
+      .executeTakeFirst();
+    if (!row) throw notFound('Account not found.');
+
+    // Counted rather than merely detected: "14 students" tells somebody what
+    // to do next where "in use" does not.
+    const count = async (q: Promise<{ n: unknown } | undefined>) => Number((await q)?.n ?? 0);
+    const [students, orders, staff] = await Promise.all([
+      count(
+        db
+          .selectFrom('students')
+          .select(({ fn }) => fn.countAll().as('n'))
+          .where('lab_id', '=', id)
+          .executeTakeFirst(),
+      ),
+      count(
+        db
+          .selectFrom('orders')
+          .select(({ fn }) => fn.countAll().as('n'))
+          .where('lab_id', '=', id)
+          .executeTakeFirst(),
+      ),
+      row.empid
+        ? count(
+            db
+              .selectFrom('employements')
+              .select(({ fn }) => fn.countAll().as('n'))
+              .where('parent_id', '=', row.empid)
+              .executeTakeFirst(),
+          )
+        : Promise.resolve(0),
+    ]);
+
+    const held = [
+      students && `${students} student${students === 1 ? '' : 's'}`,
+      orders && `${orders} order${orders === 1 ? '' : 's'}`,
+      staff && `${staff} staff member${staff === 1 ? '' : 's'}`,
+    ].filter(Boolean);
+
+    if (held.length > 0) {
+      throw conflict(
+        `${row.fullname} still has ${held.join(', ')}. Deactivate the account instead — deleting it would leave those records belonging to nobody.`,
+      );
+    }
+
+    await db.deleteFrom('user_permissions').where('user_id', '=', id).execute();
+    await db.deleteFrom('users').where('id', '=', id).execute();
+
+    invalidatePermissions();
     res.json({ ok: true });
   }),
 );

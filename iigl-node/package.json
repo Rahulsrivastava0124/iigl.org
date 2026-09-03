@@ -16,7 +16,8 @@
     "parity": "tsx src/docs/parity.ts",
     "migrate": "tsx src/db/migrate.ts",
     "migrate:status": "tsx src/db/migrate.ts --status",
-    "check:parents": "tsx src/docs/check-parents.ts"
+    "check:parents": "tsx src/docs/check-parents.ts",
+    "check:commission": "tsx src/docs/check-commission.ts"
   },
   "keywords": [],
   "author": "",

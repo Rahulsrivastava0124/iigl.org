@@ -184,6 +184,8 @@ export interface Lab {
   mobile: string;
   city: string | null;
   commision: number | null;
+  /** How that rate reads: `percent` of what was collected, or `per_pc`. */
+  commission_type: string | null;
   is_active: number;
   role_id: number;
   /** People working under it — `employements.parent_id` holding its `empid`. */

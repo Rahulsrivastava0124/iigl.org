@@ -801,6 +801,19 @@ export const WIDE_FRAME_CELL = { xs: 12, sm: 8, md: 4 } as const;
  *     <TextField label="Mobile" slotProps={hint('Ten digits.')} />
  *     <TextField select label="ID Proof" slotProps={hint('Ticked on the form.', true)} />
  */
+/**
+ * A laboratory's commission, in the terms it was agreed on.
+ *
+ * The rate is one number and means two different things — a percentage of what
+ * the laboratory collects, or rupees for each piece it certifies — so it is
+ * never printed bare. "15%" against a per-piece franchise states terms nobody
+ * agreed to.
+ */
+export function commissionRate(rate: number | string | null, type?: string | null) {
+  if (rate === null || rate === undefined || rate === '') return '—';
+  return type === 'per_pc' ? `₹${rate}/pc` : `${rate}%`;
+}
+
 export function hintNode(text: string, forSelect = false) {
   return (
     <InputAdornment position="end" sx={{ mr: forSelect ? 2.5 : 0 }}>

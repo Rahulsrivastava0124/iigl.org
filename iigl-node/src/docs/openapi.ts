@@ -1619,7 +1619,7 @@ const document = {
         tags: ['Transactions'],
         summary: 'Pay commission to the administrator',
         description:
-          'Laboratory accounts only. Supply the collected amount the commission is calculated on; the amount owed is derived from the rate held in users.commision for that laboratory. The Laravel version accepts both the base and the amount from the browser, so a laboratory can post whatever commission it likes.',
+          'Laboratory accounts only. Supply the collected amount the commission is calculated on; the amount owed is derived from the rate held in users.commision for that laboratory, read according to its users.commission_type — a percentage of the base, or a flat amount for each piece, in which case `pieces` is required and the base is recorded as context only. The Laravel version accepts both the base and the amount from the browser, so a laboratory can post whatever commission it likes.',
         requestBody: {
           required: true,
           content: {
@@ -1629,6 +1629,7 @@ const document = {
                 required: ['commission_on'],
                 properties: {
                   commission_on: { type: 'number', minimum: 0.01, examples: [100], description: 'The collected amount the commission is calculated on.' },
+                  pieces: { type: 'integer', minimum: 1, examples: [12], description: 'Pieces certified. Required for a laboratory on per-piece terms and ignored for one on a percentage.' },
                   pay_mode: { type: 'string', default: 'cash' },
                   transaction_no: { type: ['string', 'null'] },
                   remark: { type: ['string', 'null'] },
@@ -1648,14 +1649,15 @@ const document = {
                   properties: {
                     id: { type: 'integer' },
                     commission_on: { type: 'number', examples: [100] },
-                    rate_percent: { type: 'number', examples: [10] },
+                    rate: { type: 'number', examples: [10] },
+                    commission_type: { type: 'string', examples: ['percent'] },
                     amount: { type: 'number', examples: [10] },
                   },
                 }),
               },
             },
           },
-          400: errorResponse('Not a laboratory account, no rate configured, or the base is not above zero.'),
+          400: errorResponse('Not a laboratory account, no rate configured, the base is not above zero, or a per-piece laboratory sent no piece count.'),
           ...guarded,
         },
       },

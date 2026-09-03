@@ -27,10 +27,10 @@ const boxes = (value, count) => {
   their bank account. Compared loosely, so "saving" and "SAVING" agree and
   "D.L.NO." matches however the punctuation was typed.
 
-  `held` may be a list. The proofs are recorded as one comma-separated set —
-  an Aadhaar card is identity proof and address proof — so both rows of tick
-  boxes on the paper read from it and a document ticks in every box it
-  answers.
+  `held` may be a list: each row of proofs is recorded as one comma-separated
+  set, because a franchise hands over two or three documents. The two rows read
+  from their own columns — a PAN card proves identity and not an address, and
+  which document proves the address is the franchisee's own answer.
 */
 const ticked = (held, option) => {
   const flat = (x) => v(x).toUpperCase().replace(/[^A-Z]/g, '');
@@ -39,6 +39,29 @@ const ticked = (held, option) => {
     .split(',')
     .some((one) => flat(one) !== '' && flat(one) === wanted);
 };
+/*
+  The number on each document produced, under the row that ticked it.
+
+  A ticked box says a PAN card was handed over and not which one; the number is
+  the half of the record that identifies it, and it is already held — one
+  column per document. So the rows print themselves: whatever was ticked, in
+  the order the row offers it, each with its own number.
+
+  A ticked document with no number recorded still prints its row, blank, the
+  way every other empty field on this form does — the paper is filled by hand
+  where the record could not fill it.
+*/
+const PROOF_COLUMN = {
+  PAN: 'pan_no',
+  AADHAR: 'adhar_no',
+  PASSPORT: 'passport_no',
+  'D.L.NO.': 'dl_no',
+  'VOTER ID': 'voter_id',
+};
+const numbersFor = (row, held, options) =>
+  options
+    .filter((o) => ticked(held, o))
+    .map((o) => ({ name: o, value: v(row[PROOF_COLUMN[o]]) }));
 /*
   An office number arrives as one string; the paper form has two boxes for it.
   Split on the separator: "0612-2345678" prints the STD code and the number
@@ -245,13 +268,12 @@ const words = (amount) => {
 
       <div class="field">
         <div class="label req">NAME OF OWNER</div>
-        <div class="note">Mr. / Ms. / M/s</div>
         <div class="line"><%= v(lab.owner_name) %></div>
       </div>
 
       <div class="field">
-        <div class="label">FAX NUMBER</div>
-        <div class="line"><%= v(lab.fax) %></div>
+        <div class="label req">MOBILE NO</div>
+        <div class="grid"><% boxes(lab.mobile, 10).forEach((c) => { %><i><%= c %></i><% }) %></div>
       </div>
 
       <div class="field">
@@ -286,18 +308,22 @@ const words = (amount) => {
       </div>
 
       <div class="field">
-        <div class="label req">MOBILE NO</div>
-        <div class="grid"><% boxes(lab.mobile, 10).forEach((c) => { %><i><%= c %></i><% }) %></div>
+        <div class="label">FAX NUMBER</div>
+        <div class="line"><%= v(lab.fax) %></div>
       </div>
 
-      <div class="inline field">
-        <div class="field" style="width:74px">
-          <div class="label">OFFICE TEL NO.</div>
-          <div class="line"<% if (!stdOf(lab.office_tel)) { %> style="font-size:8px; color:#888"<% } %>><%= stdOf(lab.office_tel) || 'STD CODE' %></div>
-        </div>
-        <div class="field" style="flex:1">
-          <div class="label">&nbsp;</div>
-          <div class="line"><%= telOf(lab.office_tel) %></div>
+      <%# One label over both boxes. Sitting inside the 74px STD-code box it
+           wrapped onto two lines, and the blank label beside it existed only to
+           push the second box back down level with it. %>
+      <div class="field">
+        <div class="label">OFFICE TEL NO.</div>
+        <div class="inline">
+          <div class="field" style="width:74px">
+            <div class="line"<% if (!stdOf(lab.office_tel)) { %> style="font-size:8px; color:#888"<% } %>><%= stdOf(lab.office_tel) || 'STD CODE' %></div>
+          </div>
+          <div class="field" style="flex:1">
+            <div class="line"><%= telOf(lab.office_tel) %></div>
+          </div>
         </div>
       </div>
     </div>
@@ -314,14 +340,26 @@ const words = (amount) => {
                 <span class="tick"><b><%= ticked(lab.id_proof_type, o) ? '\u2713' : '' %></b><%= o %></span>
               <% }) %>
             </div>
+            <% numbersFor(lab, lab.id_proof_type, ['PAN', 'AADHAR', 'PASSPORT']).forEach((p) => { %>
+              <div class="field" style="margin-top:4px; margin-bottom:0">
+                <div class="label"><%= p.name %></div>
+                <div class="line"><%= p.value %></div>
+              </div>
+            <% }) %>
           </div>
           <div class="field">
             <div class="label">ADDRESS PROOF</div>
             <div>
               <% ['AADHAR', 'D.L.NO.', 'VOTER ID'].forEach((o) => { %>
-                <span class="tick"><b><%= ticked(lab.id_proof_type, o) ? '\u2713' : '' %></b><%= o %></span>
+                <span class="tick"><b><%= ticked(lab.address_proof_type, o) ? '\u2713' : '' %></b><%= o %></span>
               <% }) %>
             </div>
+            <% numbersFor(lab, lab.address_proof_type, ['AADHAR', 'D.L.NO.', 'VOTER ID']).forEach((p) => { %>
+              <div class="field" style="margin-top:4px; margin-bottom:0">
+                <div class="label"><%= p.name %></div>
+                <div class="line"><%= p.value %></div>
+              </div>
+            <% }) %>
           </div>
         </div>
         <div style="width:118px">
@@ -383,13 +421,25 @@ const words = (amount) => {
 
   <div class="cols">
     <div class="col">
+      <%
+        /*
+          One number, two agreements. A percentage is taken off what the
+          laboratory collects; a per-piece rate is rupees for every piece it
+          certifies. The heading, the figure and the words all follow the terms
+          on the account rather than assuming the commoner of the two — a form
+          headed "IN PERCENT" over a per-piece rate is a document stating terms
+          nobody agreed to.
+        */
+        const perPiece = lab.commission_type === 'per_pc';
+        const rate = lab.commision == null ? null : Number(lab.commision);
+      %>
       <div class="field">
-        <div class="label">COMMISSION IN PERCENT</div>
-        <div class="line"><%= lab.commision == null ? '' : lab.commision + ' %' %></div>
+        <div class="label"><%= perPiece ? 'COMMISSION PER PC.' : 'COMMISSION IN PERCENT' %></div>
+        <div class="line"><%= rate == null ? '' : perPiece ? '\u20B9 ' + rate.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : rate + ' %' %></div>
       </div>
       <div class="inline">
         <div class="label" style="width:66px">IN WORDS</div>
-        <div class="line" style="flex:1"><%= lab.commision == null ? '' : under100(Math.round(lab.commision)) + ' Percent' %></div>
+        <div class="line" style="flex:1"><%= rate == null ? '' : perPiece ? words(rate).replace(/ Only$/, '') + ' Per Piece' : under100(Math.round(rate)) + ' Percent' %></div>
       </div>
     </div>
     <div class="col">

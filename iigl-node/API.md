@@ -1,6 +1,6 @@
 # IIGL API
 
-195 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
+196 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
 
 The interactive version is at `/docs` when the server is running, and the raw
 document at `/openapi.json`.
@@ -173,7 +173,7 @@ Remittances, approvals, dues collection and wallet balance.
 | GET | `/api/transactions` | session | `page`, `per_page`, `direction`, `status` | — | 401, 403 | List transactions |
 | POST | `/api/transactions` | session | — | **amount**, **pay_mode**, transaction_no, transaction_type, remark, attachment | 400, 401, 403 | Send a remittance |
 | POST | `/api/transactions/{id}/status` | session | — | **status** | 400, 401, 403, 404 | Approve or decline a remittance |
-| POST | `/api/transactions/commission` | session | — | **commission_on**, pay_mode, transaction_no, remark, attachment | 400, 401, 403 | Pay commission to the administrator |
+| POST | `/api/transactions/commission` | session | — | **commission_on**, pieces, pay_mode, transaction_no, remark, attachment | 400, 401, 403 | Pay commission to the administrator |
 | POST | `/api/transactions/dues/{orderId}` | session | — | **amount**, pay_mode, transaction_no, remark | 400, 401, 403, 404 | Collect dues against an order |
 | GET | `/api/transactions/ledger` | session | `user_id` | — | 401, 403 | Running account |
 | GET | `/api/transactions/wallet` | session | — | — | 401, 403 | Your balance |
@@ -186,7 +186,8 @@ Laboratories, staff and account administration.
 | --- | --- | --- | --- | --- | --- | --- |
 | POST | `/api/users` | session | — | **fullname**, **mobile**, **password**, **role_id**, email, empid, lab_id, joining_date, +2 more | 400, 401, 403, 409 | Create an account |
 | GET | `/api/users/{id}` | session | — | — | 401, 403, 404 | Read one account |
-| PATCH | `/api/users/{id}` | session | — | fullname, mobile, email, role_id, is_active, commision, registration_fee, empid, +31 more | 400, 401, 403, 404, 409 | Update any account |
+| PATCH | `/api/users/{id}` | session | — | fullname, mobile, email, role_id, is_active, commision, commission_type, registration_fee, +33 more | 400, 401, 403, 404, 409 | Update any account |
+| DELETE | `/api/users/{id}` | session | — | — | 400, 401, 403, 404, 409 | Delete an account |
 | PATCH | `/api/users/{id}/active` | session | — | is_active | 401, 403, 404 | Activate or deactivate an account |
 | POST | `/api/users/{id}/employment` | session | — | **lab_id**, joining_date, salary, remark | 400, 401, 403, 404, 409 | Attach a person to an employer |
 | PATCH | `/api/users/{id}/employment` | session | — | salary, joining_date, remark | 400, 401, 403, 404 | Change the terms of a posting |
@@ -196,7 +197,7 @@ Laboratories, staff and account administration.
 | GET | `/api/users/laboratories/{id}/detail` | session | — | — | 401, 403, 404 | One laboratory, with its payments, staff and certificates |
 | GET | `/api/users/laboratories/{id}/registration` | session | `format`, `blank` | — | 401, 403, 404 | The Franchisee Form, filled from the laboratory |
 | GET | `/api/users/me` | session | — | — | 401, 403 | Your account record |
-| PATCH | `/api/users/me` | session | — | fullname, owner_name, alt_mobile, office_tel, email, address, city, state, +23 more | 400, 401, 403, 409 | Update your own profile |
+| PATCH | `/api/users/me` | session | — | fullname, owner_name, alt_mobile, office_tel, email, address, city, state, +24 more | 400, 401, 403, 409 | Update your own profile |
 | GET | `/api/users/staff` | session | `page`, `per_page`, `lab_id` | — | 401, 403 | List staff |
 
 ## Dashboard
@@ -431,4 +432,4 @@ The general enquiry book: questions, visits, leads and complaints.
 
 Bold body fields are required.
 
-195 endpoints: 16 public, 179 requiring a session.
+196 endpoints: 16 public, 180 requiring a session.

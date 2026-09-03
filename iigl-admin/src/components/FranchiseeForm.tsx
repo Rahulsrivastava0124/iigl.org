@@ -63,7 +63,7 @@ export default function FranchiseeFormActions({ labId, compact }: Props) {
         startIcon={<PrintIcon />}
         onClick={() => openFranchiseeForm(labId, { blank })}
       >
-        {blank ? 'Print blank form' : 'Open & print'}
+        {blank ? 'Blank Registration Form' : 'Registration Form'}
       </Button>
       {!compact && (
         <Button color="inherit" onClick={() => openFranchiseeForm(labId, { blank, html: true })}>
