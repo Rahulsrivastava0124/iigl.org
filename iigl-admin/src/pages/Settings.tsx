@@ -1,12 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Box, Button, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
+import {
+  Box,
+  Button,
+  InputAdornment,
+  Stack,
+  Tab,
+  Tabs,
+  TextField,
+  Typography,
+} from '@mui/material';
 import SaveIcon from '@mui/icons-material/SaveOutlined';
 import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Notice, Panel } from '../components/ui';
+import { Notice, Panel, StateChip } from '../components/ui';
 
 /**
  * Settings.
@@ -34,6 +43,8 @@ interface Setting {
   /** Whether anybody has set it, as opposed to it reading as its default. */
   set: boolean;
   fallback: string;
+  /** A stored secret with its password replaced by dots. Empty otherwise. */
+  preview: string;
 }
 
 /** What each group is called, and in what order. */
@@ -71,6 +82,35 @@ export default function Settings() {
   /** What is in the boxes. Seeded from the API and edited from there. */
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  /**
+   * What the mail server said last time the connection was tried.
+   *
+   * Cleared the moment the URL is edited: a red mark left over from the string
+   * before the correction is worse than no mark, because it says the fix did
+   * not work when nothing has been tried yet.
+   */
+  const [smtp, setSmtp] = useState<{ ok: boolean; message: string } | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  /** Opens the connection. Nothing is sent and nothing is stored. */
+  const testSmtp = async (url: string) => {
+    setTesting(true);
+    try {
+      const r = await api.post<{ data: { ok: boolean; message: string } }>(
+        '/settings/test-smtp',
+        // Empty means "test what is stored", which is what the button does on a
+        // field left untouched.
+        { url },
+      );
+      setSmtp(r.data);
+      return r.data.ok;
+    } catch (e) {
+      setSmtp({ ok: false, message: messageOf(e) });
+      return false;
+    } finally {
+      setTesting(false);
+    }
+  };
 
   useEffect(() => {
     if (settings.length) {
@@ -85,6 +125,19 @@ export default function Settings() {
 
   const save = async () => {
     if (changed.length === 0) return;
+
+    /*
+      A new mail connection is tried before it is written. Saving one that does
+      not work stores a setting that looks configured and fails on the day
+      somebody needs a password reset — which is the one day nobody is watching
+      the panel.
+    */
+    const smtpChange = changed.find((s) => s.key === 'mail.smtp_url');
+    if (smtpChange && (draft[smtpChange.key] ?? '').trim()) {
+      const ok = await testSmtp(draft[smtpChange.key]);
+      if (!ok) return;
+    }
+
     setBusy(true);
     try {
       await api.patch(
@@ -121,22 +174,72 @@ export default function Settings() {
               display: 'grid',
               gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' },
               gap: 2,
+              alignItems: 'start',
+              // The cell decides the width, as it does in FormPanel.
+              '& > *': { width: '100%' },
             }}
           >
             {shown.map((s) => (
               <TextField
                 key={s.key}
                 label={s.label}
+                /*
+                  A stored secret comes back empty — the API never sends one to
+                  the browser — and an empty box after saving reads as a save
+                  that did not happen. The badge says otherwise, in the field
+                  itself rather than in helper text under it.
+                */
+                slotProps={
+                  s.key === 'mail.smtp_url'
+                    ? {
+                        input: {
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              {/*
+                                Testing is offered before saving, and on the
+                                stored one afterwards: an empty box with the
+                                button still live is how somebody checks a
+                                connection that was working last month.
+                              */}
+                              <Button
+                                size="small"
+                                onClick={() => void testSmtp(draft[s.key] ?? '')}
+                                disabled={testing || busy}
+                              >
+                                {testing ? 'Testing…' : 'Test'}
+                              </Button>
+                              {s.set && <StateChip tone="settled" label="Stored" />}
+                            </InputAdornment>
+                          ),
+                        },
+                      }
+                    : undefined
+                }
                 type={s.kind === 'number' ? 'number' : s.kind === 'email' ? 'email' : 'text'}
                 value={draft[s.key] ?? ''}
-                onChange={(e) => setDraft((d) => ({ ...d, [s.key]: e.target.value }))}
+                onChange={(e) => {
+                  setDraft((d) => ({ ...d, [s.key]: e.target.value }));
+                  if (s.key === 'mail.smtp_url') setSmtp(null);
+                }}
+                // The red mark the mail server earned, on the field that
+                // caused it rather than in a toast that is gone by the time
+                // somebody looks back at the box.
+                error={s.key === 'mail.smtp_url' && smtp?.ok === false}
                 multiline={s.kind === 'multiline'}
                 minRows={s.kind === 'multiline' ? 2 : undefined}
                 sx={s.kind === 'multiline' ? { gridColumn: '1 / -1' } : undefined}
                 helperText={
-                  s.secret
+                  // What the mail server said wins the space: it is the thing
+                  // that has to be acted on, and the standing description is
+                  // still true underneath it.
+                  s.key === 'mail.smtp_url' && smtp
+                    ? smtp.message
+                    : s.secret
                     ? s.set
-                      ? 'Stored. Type a new one to replace it; leave blank to keep it.'
+                      ? // What is stored, minus the password. The box stays
+                        // empty because the password itself never leaves the
+                        // server; this says which server and account it names.
+                        `Stored: ${s.preview} — type a new one to replace it, or leave blank to keep this.`
                       : (s.help ?? 'Not set.')
                     : (s.help ?? undefined)
                 }

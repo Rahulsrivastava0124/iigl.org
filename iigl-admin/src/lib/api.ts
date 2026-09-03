@@ -179,6 +179,8 @@ export interface Lab {
   /** The code employments name this laboratory by — `employements.parent_id`. */
   empid: string | null;
   fullname: string;
+  /** The person behind the laboratory, where the account records one. */
+  owner_name: string | null;
   mobile: string;
   city: string | null;
   commision: number | null;
@@ -186,6 +188,14 @@ export interface Lab {
   role_id: number;
   /** People working under it — `employements.parent_id` holding its `empid`. */
   staff: number;
+  /**
+   * What the rate has earned on what this laboratory has actually collected,
+   * what has been approved against it, and the difference. Summed by the list
+   * endpoint the same way the dashboard sums them, so the two agree.
+   */
+  commission_accrued: number;
+  commission_paid: number;
+  commission_due: number;
 }
 
 export interface Category {

@@ -1,9 +1,11 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDropzone, type FileRejection } from 'react-dropzone';
-import { Box, CircularProgress, LinearProgress, Stack, Typography } from '@mui/material';
+import { Box, CircularProgress, LinearProgress, Stack, Tooltip, Typography } from '@mui/material';
 import UploadIcon from '@mui/icons-material/CloudUploadOutlined';
 import ClearIcon from '@mui/icons-material/CloseOutlined';
 import PdfIcon from '@mui/icons-material/PictureAsPdfOutlined';
+import MissingIcon from '@mui/icons-material/BrokenImageOutlined';
+import HintIcon from '@mui/icons-material/InfoOutlined';
 import { apiUrl, fileUrl } from '../lib/config';
 import FilePreview, { isPdf } from './FilePreview';
 import { messageOf } from '../lib/auth';
@@ -51,6 +53,7 @@ export default function FileField({
   accept = 'image/*',
   helperText,
   ratio,
+  fill,
 }: {
   label: string;
   bucket: Bucket;
@@ -65,17 +68,34 @@ export default function FileField({
    * fills it, and the preview is framed to match.
    */
   ratio?: string;
+  /**
+   * Let the frame fill the width it is given instead of being capped at its
+   * natural size. For a caller that has already sized the column — a row of
+   * attachments in a grid — where the cap would leave a gap beside every
+   * frame.
+   */
+  fill?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
 
-  // Sized in pixels rather than left to `aspect-ratio` with an automatic
-  // width: the zone sits in a form column, where an automatic width is a
-  // stretchable one and the frame stops being the shape it is meant to show.
+  /*
+    The frame keeps its shape and stays inside its column.
+
+    `FRAME_HEIGHT` is the height it would like and the width follows from the
+    ratio — but a wide shape, a 3:1 signature, wants 600px, which is far more
+    than a form column has. So the width is capped at the cell and
+    `aspectRatio` takes over: the frame shrinks and its height comes down with
+    it, instead of overflowing into the field beside it.
+  */
   const [rw, rh] = (ratio ?? '').split('/').map((n) => Number(n.trim()));
   const shaped = Boolean(ratio) && rw > 0 && rh > 0;
-  const frame = { width: Math.round(FRAME_HEIGHT * (rw / rh)), height: FRAME_HEIGHT };
+  const frame = {
+    width: '100%',
+    maxWidth: fill ? '100%' : Math.round(FRAME_HEIGHT * (rw / rh)),
+    aspectRatio: shaped ? `${rw} / ${rh}` : undefined,
+  };
 
   const send = useCallback(
     async (file: File) => {
@@ -182,11 +202,46 @@ export default function FileField({
 
   const image = value && !isPdf(value) ? fileUrl(value) : null;
 
+  /*
+    A file whose bytes are gone.
+
+    Every image path in the database was written by the Laravel application and
+    some of those files no longer exist, so `<img>` fails and leaves an empty
+    box that reads as "nothing attached" — when in fact something is attached
+    and cannot be shown. Caught here so the field can say which it is.
+  */
+  const [broken, setBroken] = useState(false);
+  useEffect(() => setBroken(false), [value]);
+
   return (
     <Box>
-      <Typography variant="overline" color="text.secondary" sx={{ display: 'block' }}>
-        {label}
-      </Typography>
+      {/*
+        The label, with its note as the mark beside it.
+
+        A field with no box to put the mark in still gets one: it goes next to
+        the label, so a note here reads the same way as a note on a text field
+        instead of adding a line under the frame.
+      */}
+      <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+        <Typography variant="overline" color="text.secondary">
+          {label}
+        </Typography>
+        {helperText && !error && (
+          <Tooltip title={helperText} enterTouchDelay={0}>
+            <HintIcon
+              tabIndex={0}
+              aria-label={helperText}
+              sx={{
+                fontSize: 15,
+                color: 'text.disabled',
+                cursor: 'help',
+                outline: 'none',
+                '&:hover, &:focus-visible': { color: 'primary.main' },
+              }}
+            />
+          </Tooltip>
+        )}
+      </Stack>
 
       {shaped ? (
         <Box
@@ -209,11 +264,12 @@ export default function FileField({
             it, which is the point of giving the frame the picture's own shape:
             what is on screen is what the record will show.
           */}
-          {image && !busy && (
+          {image && !broken && !busy && (
             <Box
               component="img"
               src={image}
               alt=""
+              onError={() => setBroken(true)}
               onClick={(e: React.MouseEvent) => {
                 e.stopPropagation();
                 setPreviewing(true);
@@ -229,8 +285,17 @@ export default function FileField({
             />
           )}
 
-          {value && isPdf(value) && !busy && (
-            <PdfIcon sx={{ fontSize: 40, color: 'text.disabled' }} />
+          {value && !busy && (isPdf(value) || broken) && (
+            <Stack spacing={0.5} sx={{ alignItems: 'center', px: 2, textAlign: 'center' }}>
+              {isPdf(value) ? (
+                <PdfIcon sx={{ fontSize: 40, color: 'text.disabled' }} />
+              ) : (
+                <MissingIcon sx={{ fontSize: 40, color: 'text.disabled' }} />
+              )}
+              <Typography variant="caption" color="text.secondary">
+                {isPdf(value) ? 'PDF attached' : 'File missing'}
+              </Typography>
+            </Stack>
           )}
 
           {busy && <CircularProgress size={24} />}
@@ -262,7 +327,13 @@ export default function FileField({
             </Box>
           )}
 
-          {value && !busy && (
+          {/*
+            Only over a picture. The strip is dark so white text reads on a
+            photograph; with nothing behind it — a PDF, or a file whose bytes
+            are gone — it is a grey slab across an empty frame, and the icon in
+            the middle has already said what the field holds.
+          */}
+          {image && !broken && !busy && (
             <Typography
               sx={{
                 position: 'absolute',
@@ -319,16 +390,21 @@ export default function FileField({
                   cursor: 'zoom-in',
                 }}
               >
-                {image ? (
+                {image && !broken ? (
                   <Box
                     component="img"
                     src={image}
                     alt=""
+                    onError={() => setBroken(true)}
                     onClick={() => setPreviewing(true)}
                     sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
                   />
-                ) : (
+                ) : isPdf(value ?? '') ? (
                   <PdfIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                ) : (
+                  // Not an empty square: something is attached and cannot be
+                  // shown, which is a different thing from nothing attached.
+                  <MissingIcon fontSize="small" sx={{ color: 'text.disabled' }} />
                 )}
               </Box>
             )}
@@ -356,12 +432,6 @@ export default function FileField({
           sx={{ display: 'block', mt: 0.5, color: `${toneColour('refused')}.main` }}
         >
           {error}
-        </Typography>
-      )}
-
-      {helperText && !error && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-          {helperText}
         </Typography>
       )}
 

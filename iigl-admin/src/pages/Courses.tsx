@@ -39,22 +39,7 @@ import { messageOf } from '../lib/auth';
 import { apiUrl, fileUrl } from '../lib/config';
 import GstField, { type GstRate } from '../components/GstField';
 import { useToast } from '../components/Toast';
-import {
-  ConfirmDialog,
-  Dialog,
-  FormPanel,
-  IconAction,
-  Pager,
-  Panel,
-  RowActions,
-  SearchField,
-  StateChip,
-  TableFrame,
-  Tile,
-  ToneAction,
-  YesNo,
-  money,
-} from '../components/ui';
+import { hint, money, ConfirmDialog, Dialog, FormPanel, IconAction, Pager, Panel, RowActions, SearchField, StateChip, TableFrame, Tile, ToneAction, YesNo } from '../components/ui';
 import type { Tone } from '../components/ui';
 import ViewIcon from '@mui/icons-material/VisibilityOutlined';
 import BilledIcon from '@mui/icons-material/ReceiptLongOutlined';
@@ -641,15 +626,17 @@ export default function Courses() {
                 label="Duration"
                 value={form.duration}
                 onChange={(e) => set('duration', e.target.value)}
-                helperText='As the prospectus states it — "6 months".'
+                slotProps={hint('As the prospectus states it — "6 months".')}
               />
               <TextField
                 label="Course fee"
                 type="number"
                 value={form.fee}
                 onChange={(e) => set('fee', e.target.value)}
-                slotProps={{ htmlInput: { min: 0 } }}
-                helperText="Copied onto an enrolment; changing it here does not re-bill anybody."
+                slotProps={{
+                  htmlInput: { min: 0 },
+                  ...hint('Copied onto an enrolment; changing it here does not re-bill anybody.'),
+                }}
               />
               {/*
                 The rate the fee is quoted at: pick one from Master › GST, or
@@ -1192,7 +1179,9 @@ export default function Courses() {
                 onChange={(e) => setCut((f) => ({ ...f, reason: e.target.value }))}
                 onKeyDown={applyOnEnter}
                 disabled={Boolean(spent)}
-                helperText="Why this student, so the concession can be explained later. Press Enter to apply."
+                slotProps={hint(
+                  'Why this student, so the concession can be explained later. Press Enter to apply.',
+                )}
                 fullWidth
                 sx={{ mt: 1.5 }}
               />

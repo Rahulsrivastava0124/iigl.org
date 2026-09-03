@@ -38,6 +38,7 @@ import StudentEnquiries from './pages/StudentEnquiries';
 import Courses from './pages/Courses';
 import StudentCertificates from './pages/StudentCertificates';
 import Enquiries from './pages/Enquiries';
+import LaboratoryView from './pages/LaboratoryView';
 import Master from './pages/Master';
 import Settings from './pages/Settings';
 
@@ -124,6 +125,14 @@ function Routed() {
         <Route path="/customers" element={<Customers />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/laboratories" element={<Laboratories />} />
+        <Route
+          path="/laboratories/:id"
+          element={
+            <AdminOnly>
+              <LaboratoryView />
+            </AdminOnly>
+          }
+        />
         <Route
           path="/laboratories/create"
           element={

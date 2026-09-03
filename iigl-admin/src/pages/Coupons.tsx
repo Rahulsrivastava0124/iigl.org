@@ -22,19 +22,7 @@ import { useDebounced, useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
 import { useToast } from '../components/Toast';
-import {
-  DateField,
-  Dialog,
-  FormPanel,
-  IconAction,
-  Pager,
-  Panel,
-  RowActions,
-  SearchField,
-  StateChip,
-  TableFrame,
-  money,
-} from '../components/ui';
+import { hint, money, DateField, Dialog, FormPanel, IconAction, Pager, Panel, RowActions, SearchField, StateChip, TableFrame } from '../components/ui';
 import type { Paged } from '../lib/api';
 
 interface Coupon {
@@ -253,7 +241,7 @@ export default function Coupons() {
             value={form.code}
             onChange={(e) => set('code', e.target.value.toUpperCase())}
             placeholder="NEWYEAR25"
-            helperText="What somebody types at the counter."
+            slotProps={hint('What somebody types at the counter.')}
           />
           <TextField
             label="Title"
@@ -266,7 +254,7 @@ export default function Coupons() {
             label="Course"
             value={form.course_id}
             onChange={(e) => set('course_id', e.target.value)}
-            helperText="Any course unless one is chosen."
+            slotProps={hint('Any course unless one is chosen.', true)}
           >
             <MenuItem value="">Any course</MenuItem>
             {(courses.data?.data ?? []).map((c) => (
@@ -298,9 +286,9 @@ export default function Coupons() {
             value={form.max_discount}
             onChange={(e) => set('max_discount', e.target.value)}
             disabled={form.discount_type === 'fixed'}
-            helperText={
-              form.discount_type === 'fixed' ? 'A fixed coupon caps itself.' : 'Blank is no cap.'
-            }
+            slotProps={hint(
+              form.discount_type === 'fixed' ? 'A fixed coupon caps itself.' : 'Blank is no cap.',
+            )}
           />
 
           <TextField
@@ -308,7 +296,7 @@ export default function Coupons() {
             type="number"
             value={form.min_amount}
             onChange={(e) => set('min_amount', e.target.value)}
-            helperText="Blank is any fee."
+            slotProps={hint('Blank is any fee.')}
           />
           <DateField
             label="First day"
@@ -326,14 +314,14 @@ export default function Coupons() {
             type="number"
             value={form.usage_limit}
             onChange={(e) => set('usage_limit', e.target.value)}
-            helperText="Blank is unlimited."
+            slotProps={hint('Blank is unlimited.')}
           />
           <TextField
             label="Uses per student"
             type="number"
             value={form.per_student_limit}
             onChange={(e) => set('per_student_limit', e.target.value)}
-            helperText="Blank is unlimited."
+            slotProps={hint('Blank is unlimited.')}
           />
           <TextField
             label="Description"

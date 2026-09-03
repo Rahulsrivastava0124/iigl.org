@@ -21,7 +21,7 @@ import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Dialog, Notice, OrderChip, Panel, Tile, money, toneColour } from '../components/ui';
+import { hint, money, toneColour, Dialog, Notice, OrderChip, Panel, Tile } from '../components/ui';
 import { apiUrl } from '../lib/config';
 import PrintIcon from '@mui/icons-material/PrintOutlined';
 
@@ -280,8 +280,10 @@ export default function OrderDetail() {
               value={paid}
               placeholder={String(q.amount_with_gst)}
               onChange={(e) => setPaid(e.target.value)}
-              slotProps={{ htmlInput: { min: 0 } }}
-              helperText="Leave blank to record the full amount."
+              slotProps={{
+                htmlInput: { min: 0 },
+                ...hint('Leave blank to record the full amount.'),
+              }}
             />
             <TextField
               select

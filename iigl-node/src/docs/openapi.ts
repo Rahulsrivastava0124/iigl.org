@@ -731,11 +731,17 @@ const document = {
         tags: ['Auth'],
         summary: 'Ask for a password reset link',
         description:
-          'Public. Answers identically whether or not the address is on an account, so it ' +
-          'cannot be used to test addresses. Sends a link valid for one hour, storing the ' +
-          'token hashed in `password_resets`. Refuses when the address is on more than one ' +
-          'active account, silently — the reply does not change. Rate limited to 5 an hour ' +
-          'per address.',
+          'Public. Takes `identifier`: a **mobile number or an email address**, since people ' +
+          'sign in with their mobile and that is the identifier they are sure of. `email` is ' +
+          'still accepted as the field name. ' +
+          '**Says whether the account exists**, by decision: a 400 for no match, for an ' +
+          'account with no email address, and for one identifier on two active accounts. ' +
+          'That makes the page usable by somebody who mistyped their own number, at the ' +
+          'cost of letting it be used to test which numbers are registered — the rate ' +
+          'limit of 5 an hour is what stands in the way of that. On success the reply names ' +
+          'the destination masked, `rah•••@gmail.com`, so somebody with two mailboxes knows ' +
+          'which to open. The link is valid for one hour and its token is stored hashed in ' +
+          '`password_resets`.',
         security: [],
         requestBody: {
           required: true,
@@ -743,8 +749,13 @@ const document = {
             'application/json': {
               schema: {
                 type: 'object',
-                required: ['email'],
-                properties: { email: { type: 'string', format: 'email' } },
+                properties: {
+                  identifier: {
+                    type: 'string',
+                    description: 'A mobile number or an email address.',
+                  },
+                  email: { type: 'string', description: 'The older name for `identifier`.' },
+                },
               },
             },
           },

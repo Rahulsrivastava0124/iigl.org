@@ -305,6 +305,7 @@ export interface PasswordResets {
   created_at: Date | null;
   email: string;
   token: string;
+  user_id: number | null;
 }
 
 export interface PermissionActions {
@@ -553,11 +554,14 @@ export interface UserPermissions {
 }
 
 export interface Users {
+  account_holder: string | null;
   account_no: string | null;
+  account_type: string | null;
   address: string | null;
   adhar_no: string | null;
   adhar_photo: string | null;
   alt_mobile: string | null;
+  bank_branch: string | null;
   bank_name: string | null;
   city: string | null;
   commision: number | null;
@@ -565,28 +569,40 @@ export interface Users {
   country: string | null;
   created_at: Date | null;
   documentation: string | null;
+  // JSON. Read back parsed by the driver, written as a string, so the two
+  // directions are different types and the column says so.
+  documents: ColumnType<unknown, string | null, string | null> | null;
+  dl_no: string | null;
+  dl_photo: string | null;
   email: string | null;
   empid: string | null;
   fax: string | null;
   fullname: string;
   gst_no: string | null;
   id: Generated<number>;
+  id_proof_type: string | null;
   ifsc_code: string | null;
   is_active: number;
   mobile: string;
+  office_tel: string | null;
   owner_name: string | null;
   pan_no: string | null;
   pan_photo: string | null;
+  passport_no: string | null;
+  passport_photo: string | null;
   parent_id: string | null;
   password: string;
   pincode: string | null;
   profile_photo: string | null;
+  registration_fee: string | null;
   remember_token: string | null;
   role_id: number | null;
   signature: string | null;
   state: string | null;
   status: number;
   updated_at: Date | null;
+  voter_id: string | null;
+  voter_photo: string | null;
 }
 
 export interface Websites {

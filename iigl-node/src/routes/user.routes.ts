@@ -16,6 +16,14 @@ import type { DB } from '../db/types.js';
 type Exec = Kysely<DB>;
 import { wrap } from '../lib/async.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
+import { TRANSACTION_TYPE } from '../services/commission.service.js';
+import {
+  franchiseeFormHtml,
+  franchiseeFormPdf,
+} from '../services/document.service.js';
+
+/** Approved is 1; a pending row has not moved any money. */
+const TX_STATUS = { PENDING: 0, APPROVED: 1 } as const;
 import { paged, readPage, readSearch } from '../lib/paginate.js';
 import { requireAdmin, requireLabScope, ROLE } from '../middleware/auth.js';
 import { empidTaken, nextEmpid, prefixFor } from '../lib/empid.js';
@@ -46,6 +54,9 @@ const PUBLIC_COLUMNS = [
   'owner_name',
   'mobile',
   'alt_mobile',
+  // The office landline, with its STD code. Not the alternate mobile: the
+  // printed franchisee form asks for both, in two different boxes.
+  'office_tel',
   'email',
   'address',
   'city',
@@ -58,19 +69,36 @@ const PUBLIC_COLUMNS = [
   // field empty on the next load. Reading back what you just saved is the
   // least a form owes anybody.
   'bank_name',
+  'account_holder',
+  'bank_branch',
   'ifsc_code',
   'account_no',
+  'account_type',
   // Laravel's spelling, kept: `adhar_*` and `pan_*` are the live column names.
   'adhar_no',
   'adhar_photo',
   'pan_no',
   'pan_photo',
+  'passport_no',
+  'passport_photo',
+  'dl_no',
+  'dl_photo',
+  'voter_id',
+  'voter_photo',
+  // The documents produced as proof, comma separated — "PAN,AADHAR". One
+  // list: the printed form asks for identity proof and address proof in two
+  // boxes, but an Aadhaar card answers both, and both rows of ticks read from
+  // here.
+  'id_proof_type',
+  // The attachment list, as JSON. The driver hands it back parsed.
+  'documents',
   'fax',
   'documentation',
   'profile_photo',
   'company_logo',
   'signature',
   'commision',
+  'registration_fee',
   'is_active',
   'status',
   'role_id',
@@ -148,7 +176,261 @@ userRoutes.get(
       .execute();
     const staff = new Map(counts.map((c) => [String(c.parent_id), Number(c.n)]));
 
-    res.json({ data: rows.map((r) => ({ ...r, staff: (r.empid && staff.get(r.empid)) || 0 })) });
+    /*
+      What each laboratory has earned and what has been settled.
+
+      The same three figures the dashboard reports, per laboratory rather than
+      for one account, and read the same way so the two cannot disagree:
+
+        accrued  the rate applied to what each laboratory has actually
+                 collected on delivered orders — not on what was billed
+        paid     commission rows that have been approved
+        due      the difference, floored at zero, because an overpayment is a
+                 wallet balance and not a debt
+
+      Two grouped queries rather than a query per laboratory: this list is the
+      screen head office opens first, and a network of forty would otherwise be
+      eighty round trips.
+    */
+    const [earned, settled] = await Promise.all([
+      db
+        .selectFrom('orders')
+        .innerJoin('users', 'users.id', 'orders.lab_id')
+        .select(({ fn }) => [
+          'orders.lab_id as lab_id',
+          'users.commision as rate',
+          fn.sum<number>('orders.paid_amount').as('collected'),
+        ])
+        .where('orders.status', '=', 'delivered')
+        .groupBy(['orders.lab_id', 'users.commision'])
+        .execute(),
+      db
+        .selectFrom('transactions')
+        .select(({ fn }) => ['send_by', fn.sum<number>('amount').as('total')])
+        .where('transaction_type', '=', TRANSACTION_TYPE.COMMISSION)
+        .where('status', '=', TX_STATUS.APPROVED)
+        .groupBy('send_by')
+        .execute(),
+    ]);
+
+    const round2 = (v: number) => Math.round(v * 100) / 100;
+    const accruedBy = new Map(
+      earned.map((r) => [
+        Number(r.lab_id),
+        round2(((Number(r.collected) || 0) * (Number(r.rate) || 0)) / 100),
+      ]),
+    );
+    const paidBy = new Map(settled.map((r) => [Number(r.send_by), Number(r.total ?? 0)]));
+
+    res.json({
+      data: rows.map((r) => {
+        const accrued = accruedBy.get(Number(r.id)) ?? 0;
+        const paid = round2(paidBy.get(Number(r.id)) ?? 0);
+        return {
+          ...r,
+          staff: (r.empid && staff.get(r.empid)) || 0,
+          commission_accrued: accrued,
+          commission_paid: paid,
+          commission_due: Math.max(0, round2(accrued - paid)),
+        };
+      }),
+    });
+  }),
+);
+
+/**
+ * One laboratory, with what the screen behind its View button needs: its
+ * payment history, its staff, and its certificates.
+ *
+ * Three lists in one reply rather than three endpoints, because the screen
+ * opens all three tabs at once and the alternative is three round trips to
+ * fill a dialog somebody may close immediately.
+ *
+ * Each list is capped rather than paged. This is a laboratory's recent
+ * activity at a glance; the full history has screens of its own — Account for
+ * transactions, Employee Management for staff, Certificates for reports — and
+ * a dialog that pages is a screen pretending to be a dialog.
+ */
+userRoutes.get(
+  '/laboratories/:id/detail',
+  numericId,
+  requireAdmin,
+  wrap(async (req, res) => {
+    const labId = Number(req.params.id);
+    const RECENT = 50;
+
+    const lab = await db
+      .selectFrom('users')
+      .select(['id', 'fullname', 'owner_name', 'empid', 'mobile', 'city', 'commision', 'is_active'])
+      .where('id', '=', labId)
+      .where('role_id', '=', ROLE.LAB)
+      .executeTakeFirst();
+    if (!lab) throw notFound('Laboratory not found.');
+
+    /*
+      The same three figures the list carries, computed the same way.
+
+      Repeated here rather than passed in from the row somebody clicked,
+      because this is a page of its own: opened from a bookmark or a typed
+      address there is no row, and a screen that only works when you arrive by
+      one route is a screen that breaks the first time somebody reloads it.
+    */
+    const [collected, approved] = await Promise.all([
+      db
+        .selectFrom('orders')
+        .select(({ fn }) => fn.sum<number>('paid_amount').as('total'))
+        .where('lab_id', '=', labId)
+        .where('status', '=', 'delivered')
+        .executeTakeFirstOrThrow(),
+      db
+        .selectFrom('transactions')
+        .select(({ fn }) => fn.sum<number>('amount').as('total'))
+        .where('send_by', '=', labId)
+        .where('transaction_type', '=', TRANSACTION_TYPE.COMMISSION)
+        .where('status', '=', TX_STATUS.APPROVED)
+        .executeTakeFirstOrThrow(),
+    ]);
+    const round2 = (v: number) => Math.round(v * 100) / 100;
+    const accrued = round2(
+      ((Number(collected.total) || 0) * (Number(lab.commision) || 0)) / 100,
+    );
+    const paid = round2(Number(approved.total ?? 0));
+
+    const [payments, staffRows, reportRows, counts] = await Promise.all([
+      // Commission this laboratory has sent, newest first. Both sides of the
+      // wallet would be a ledger; this tab is about what has been settled.
+      db
+        .selectFrom('transactions')
+        .select([
+          'id',
+          'amount',
+          'status',
+          'pay_mode',
+          'transaction_no',
+          'transaction_type',
+          'remark',
+          'created_at',
+        ])
+        .where('send_by', '=', labId)
+        .orderBy('id', 'desc')
+        .limit(RECENT)
+        .execute(),
+
+      // Who works there. `employements.parent_id` holds the employer's empid,
+      // not their id, which is why this joins on the code rather than the key.
+      lab.empid
+        ? db
+            .selectFrom('employements')
+            .innerJoin('users', 'users.id', 'employements.user_id')
+            .select([
+              'users.id',
+              'users.fullname',
+              'users.mobile',
+              'users.empid',
+              'users.is_active',
+              'employements.joining_date',
+              'employements.salary',
+            ])
+            .where('employements.parent_id', '=', lab.empid)
+            .where('employements.is_working', '=', '1')
+            .orderBy('users.fullname')
+            .execute()
+        : Promise.resolve([]),
+
+      db
+        .selectFrom('reports')
+        .select(['id', 'report_no', 'carat_weight', 'gross_weight', 'created_at'])
+        .where('lab_id', '=', labId)
+        .orderBy('id', 'desc')
+        .limit(RECENT)
+        .execute(),
+
+      // The totals, which are not the length of the capped lists above.
+      Promise.all([
+        db
+          .selectFrom('transactions')
+          .select(({ fn }) => fn.countAll<number>().as('n'))
+          .where('send_by', '=', labId)
+          .executeTakeFirstOrThrow(),
+        db
+          .selectFrom('reports')
+          .select(({ fn }) => fn.countAll<number>().as('n'))
+          .where('lab_id', '=', labId)
+          .executeTakeFirstOrThrow(),
+      ]),
+    ]);
+
+    res.json({
+      data: {
+        laboratory: {
+          ...lab,
+          commission_accrued: accrued,
+          commission_paid: paid,
+          commission_due: Math.max(0, round2(accrued - paid)),
+        },
+        payments,
+        staff: staffRows,
+        reports: reportRows,
+        counts: {
+          payments: Number(counts[0].n),
+          staff: staffRows.length,
+          reports: Number(counts[1].n),
+        },
+        /** How many of each the lists above actually hold. */
+        shown: RECENT,
+      },
+    });
+  }),
+);
+
+/**
+ * The Franchisee Form for one laboratory, filled from its record.
+ *
+ * The paper form head office hands a new franchisee, typeset and pre-filled:
+ * name, owner, contact, address, GST, commission and bank details come from
+ * the account, and everything decided at the counter — the KYC ticks, the
+ * branch, the fee, the sponsor and the whole acknowledgement stub — is left
+ * blank to be written in.
+ *
+ * `?format=html` returns the markup the PDF is rendered from, which is how the
+ * layout is worked on without a render round trip, and is what the panel opens
+ * in a tab so somebody can print it with the browser they already have.
+ *
+ * `?blank=1` prints the empty form — every label and box, no values. It is the
+ * same template, so the sheet handed over at a counter and the sheet printed
+ * back from the account cannot drift apart.
+ */
+userRoutes.get(
+  '/laboratories/:id/registration',
+  numericId,
+  requireAdmin,
+  wrap(async (req, res) => {
+    const labId = Number(req.params.id);
+
+    const lab = await db
+      .selectFrom('users')
+      .select(['id', 'empid'])
+      .where('id', '=', labId)
+      .where('role_id', '=', ROLE.LAB)
+      .executeTakeFirst();
+    if (!lab) throw notFound('Laboratory not found.');
+
+    const blank = req.query.blank === '1' || req.query.blank === 'true';
+
+    if (req.query.format === 'html') {
+      res.type('html').send(await franchiseeFormHtml(labId, { blank }));
+      return;
+    }
+
+    const pdf = await franchiseeFormPdf(labId, { blank });
+    res.type('application/pdf');
+    // Inline: this is opened to be read and printed, not filed. A download
+    // disposition would put it in a folder somebody then has to find.
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="franchisee-form-${blank ? 'blank' : (lab.empid ?? labId)}.pdf"`,
+    );
+    res.send(pdf);
   }),
 );
 
@@ -350,6 +632,7 @@ const SELF_EDITABLE = [
   'fullname',
   'owner_name',
   'alt_mobile',
+  'office_tel',
   'email',
   'address',
   'city',
@@ -358,8 +641,11 @@ const SELF_EDITABLE = [
   'pincode',
   'gst_no',
   'bank_name',
+  'account_holder',
+  'bank_branch',
   'ifsc_code',
   'account_no',
+  'account_type',
   'profile_photo',
   'company_logo',
   'signature',
@@ -369,12 +655,79 @@ const SELF_EDITABLE = [
   'adhar_photo',
   'pan_no',
   'pan_photo',
+  'passport_no',
+  'passport_photo',
+  'dl_no',
+  'dl_photo',
+  'voter_id',
+  'voter_photo',
+  'id_proof_type',
 ] as const;
 
 /**
- * Update your own profile. Deliberately excludes mobile, role, active flag and
- * commission: the first is the sign-in identifier, and the rest decide what the
- * account may do.
+ * The attachment list, checked before it is stored.
+ *
+ * `documents` is JSON, so this is the only column where the request decides the
+ * shape of what is written rather than just its value. Everything is bounded:
+ * how many entries, how long a title, and — the one that matters — where a
+ * path may point. A path is a key inside the uploads area and nothing else, so
+ * a request cannot name `/etc/passwd`, a URL on somebody else's host, or a
+ * traversal out of the bucket, and have the panel render it back as a link.
+ *
+ * Returns the JSON to write, `null` to clear the column, or `undefined` when
+ * the request did not mention documents at all.
+ */
+function documentsPatch(given: unknown): string | null | undefined {
+  if (given === undefined) return undefined;
+  if (given === null || given === '') return null;
+  if (!Array.isArray(given)) throw badRequest('Documents must be a list.');
+  if (given.length > 25) throw badRequest('A laboratory can hold at most 25 documents.');
+
+  const cleaned = given.map((entry, i) => {
+    const at = `Document ${i + 1}`;
+    if (!entry || typeof entry !== 'object') throw badRequest(`${at} is not a document.`);
+    const row = entry as Record<string, unknown>;
+    const path = String(row.path ?? '').trim();
+    const title = String(row.title ?? '').trim();
+
+    if (!path) throw badRequest(`${at} has no file.`);
+    if (path.length > 255) throw badRequest(`${at} has an impossible path.`);
+    if (!/^(public\/)?uploads\/[A-Za-z0-9._/-]+$/.test(path) || path.includes('..')) {
+      throw badRequest(`${at} does not point at an uploaded file.`);
+    }
+    if (title.length > 191) throw badRequest(`${at} has a title longer than 191 characters.`);
+
+    return {
+      title: title || 'Untitled',
+      path,
+      // Kept from the client when it is already a valid date — a document
+      // added last week and re-saved today should not claim to be new — and
+      // stamped here otherwise.
+      added_at: Number.isFinite(Date.parse(String(row.added_at)))
+        ? new Date(String(row.added_at)).toISOString()
+        : new Date().toISOString(),
+    };
+  });
+
+  return JSON.stringify(cleaned);
+}
+
+/**
+ * Update your own profile.
+ *
+ * Role, active flag and commission stay out of reach: they decide what the
+ * account may do, and nobody grants themselves anything here.
+ *
+ * The **mobile number** is editable by head office only. It is the sign-in
+ * identifier, so for everybody else changing it is an administrator's act —
+ * but the administrator is somebody too, and telling the one person who *is*
+ * head office to "ask an administrator" is telling them to ask themselves.
+ *
+ * Both the number and the address are checked against other accounts before
+ * they are written. Sign-in matches on the number and resolves a collision
+ * with the password; a reset has no password to resolve it with. Two accounts
+ * on one number or one address is therefore a mess that shows up months later
+ * as somebody unable to reset — cheaper to refuse at the moment it is typed.
  */
 userRoutes.patch(
   '/me',
@@ -383,9 +736,54 @@ userRoutes.patch(
     const patch: Record<string, unknown> = { updated_at: new Date() };
     for (const key of SELF_EDITABLE) {
       if (req.body?.[key] !== undefined) {
-        patch[key] = req.body[key] === '' ? null : String(req.body[key]);
+        // `String(null)` is the four-character word "null", which is how rows
+        // ended up holding it as a value. Empty and absent both mean "no
+        // value" and both become a real NULL.
+        const given = req.body[key];
+        patch[key] = given === '' || given === null || given === undefined ? null : String(given);
       }
     }
+
+    // JSON, so it goes through its own door rather than the string loop above.
+    const documents = documentsPatch(req.body?.documents);
+    if (documents !== undefined) patch.documents = documents;
+
+    if (req.body?.mobile !== undefined) {
+      if (req.user.roleId !== ROLE.SUPER) {
+        throw badRequest('Only head office can change the mobile number on an account.');
+      }
+      const mobile = String(req.body.mobile).trim();
+      if (!mobile) throw badRequest('Mobile number cannot be blank.');
+
+      const taken = await db
+        .selectFrom('users')
+        .select('id')
+        .where('mobile', '=', mobile)
+        .where('id', '!=', req.user.id)
+        .where('is_active', '=', 1)
+        .executeTakeFirst();
+      if (taken) {
+        throw conflict('Another active account already signs in with that mobile number.');
+      }
+      patch.mobile = mobile;
+    }
+
+    if (patch.email) {
+      const taken = await db
+        .selectFrom('users')
+        .select(['id', 'fullname'])
+        .where('email', '=', String(patch.email))
+        .where('id', '!=', req.user.id)
+        .where('is_active', '=', 1)
+        .executeTakeFirst();
+      if (taken) {
+        throw conflict(
+          `That email address is already on ${taken.fullname}'s account. A password reset ` +
+            'cannot tell two accounts apart by address, so each needs its own.',
+        );
+      }
+    }
+
     if (Object.keys(patch).length === 1) throw badRequest('Nothing to update.');
     if (patch.fullname !== undefined && !patch.fullname) {
       throw badRequest('Name cannot be blank.');
@@ -450,9 +848,17 @@ userRoutes.patch(
     const patch: Record<string, unknown> = { updated_at: new Date() };
     for (const key of SELF_EDITABLE) {
       if (req.body?.[key] !== undefined) {
-        patch[key] = req.body[key] === '' ? null : String(req.body[key]);
+        // `String(null)` is the four-character word "null", which is how rows
+        // ended up holding it as a value. Empty and absent both mean "no
+        // value" and both become a real NULL.
+        const given = req.body[key];
+        patch[key] = given === '' || given === null || given === undefined ? null : String(given);
       }
     }
+
+    // JSON, so it goes through its own door rather than the string loop above.
+    const documents = documentsPatch(req.body?.documents);
+    if (documents !== undefined) patch.documents = documents;
 
     if (req.body?.mobile !== undefined) {
       const mobile = String(req.body.mobile).trim();
@@ -477,6 +883,13 @@ userRoutes.patch(
     }
     if (req.body?.is_active !== undefined) patch.is_active = req.body.is_active ? 1 : 0;
     if (req.body?.commision !== undefined) patch.commision = Number(req.body.commision);
+    if (req.body?.registration_fee !== undefined) {
+      // Money, so blank is "not recorded" rather than zero: a fee of ₹0 and a
+      // fee nobody has agreed yet print differently on the form.
+      const fee = req.body.registration_fee;
+      patch.registration_fee =
+        fee === '' || fee === null || fee === undefined ? null : String(Number(fee));
+    }
     if (req.body?.empid !== undefined) {
       // Blanking is refused rather than accepted as "no employee ID": an
       // account without one cannot employ anybody, and the staff list joins

@@ -7,6 +7,7 @@ import { db } from '../db/index.js';
 import { notFound } from '../lib/errors.js';
 import { env } from '../lib/env.js';
 import { asDataUri } from './card.service.js';
+import { setting } from './settings.service.js';
 import { quoteOrder } from './pricing.service.js';
 
 /**
@@ -133,6 +134,123 @@ export async function orderDocumentPdf(orderId: number, kind: DocumentKind): Pro
   return renderHtmlToPdf(html, { format: 'A4' });
 }
 
+/* --------------------------------------------------------- franchisee form */
+
+const FRANCHISEE_TEMPLATE = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../templates/franchisee-form.ejs',
+);
+
+/**
+ * The Franchisee Form for one laboratory, as the printed one is laid out.
+ *
+ * Filled from the laboratory's record where the record has the answer, and
+ * left blank where it does not — the KYC ticks, the bank branch, the sponsor
+ * and the whole acknowledgement stub are filled in by hand at the counter, and
+ * a form that invented them would be worse than one that leaves the line.
+ *
+ * The company block comes from Settings rather than the template, so an
+ * address change is one edit and not a redeploy.
+ */
+/**
+ * Options for the printed form.
+ *
+ * `blank` prints the same form with nothing filled in: the letterhead, the
+ * labels, the boxes and the acknowledgement stub, and empty lines everywhere a
+ * value would go. Head office hands these out at counters and at trade fairs,
+ * and the alternative — printing somebody else's laboratory and asking people
+ * to ignore the details — puts one applicant's bank account in front of the
+ * next one.
+ */
+export interface FranchiseeFormOptions {
+  blank?: boolean;
+}
+
+export async function franchiseeFormHtml(
+  labId: number,
+  options: FranchiseeFormOptions = {},
+): Promise<string> {
+  const lab = await db
+    .selectFrom('users')
+    .selectAll()
+    .where('id', '=', labId)
+    .executeTakeFirst();
+  if (!lab) throw notFound('Laboratory not found.');
+
+  const [company, photo, signature] = await Promise.all([
+    Promise.all(
+      ['name', 'address', 'city', 'state', 'pincode', 'phone', 'email', 'website'].map((k) =>
+        setting(`company.${k}`),
+      ),
+    ).then(([name, address, city, state, pincode, phone, email, website]) => ({
+      name,
+      address,
+      city,
+      state,
+      pincode,
+      phone,
+      email,
+      website,
+    })),
+    /*
+      The picture for the photo panel.
+
+      A laboratory's own photograph first, its logo second: a franchise is as
+      likely to have put up a shopfront logo as a portrait, and a form printed
+      with an empty box when the account holds a perfectly good image is a
+      form somebody has to explain. Neither, and the box prints as the paper
+      one does — empty, to have a photograph stapled into it.
+    */
+    options.blank ? Promise.resolve(null) : asDataUri(lab.profile_photo).then((p) => p ?? asDataUri(lab.company_logo)),
+    options.blank ? Promise.resolve(null) : asDataUri(lab.signature),
+  ]);
+
+  /*
+    A blank form is the same template with an empty record, not a second
+    template. One layout, printed twice: nothing can drift between the form
+    somebody fills in by hand and the form that comes back filled from the
+    account, because there is only one of them.
+
+    The laboratory is still looked up — an id that names nobody is still a
+    404 — and its name still titles the document, so the tab and the file are
+    identifiable even when the sheet itself is empty.
+  */
+  const printed = options.blank ? ({ id: lab.id } as typeof lab) : lab;
+
+  return ejs.renderFile(
+    FRANCHISEE_TEMPLATE,
+    {
+      lab: printed,
+      title: lab.fullname ?? '',
+      company,
+      photo,
+      signature,
+      // The round mark, not `brandLogo()`.
+      //
+      // That helper prefers the legacy `card-logo.png`, which is the wide
+      // banner lockup used on certificates — printed in this letterhead it
+      // renders the company's name twice, once as the banner and once as the
+      // typeset lockup beside it. The letterhead wants the mark alone.
+      logo: await brandMark(),
+      issuedOn: new Date().toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      }),
+    },
+    { async: true },
+  );
+}
+
+export async function franchiseeFormPdf(
+  labId: number,
+  options: FranchiseeFormOptions = {},
+): Promise<Buffer> {
+  const html = await franchiseeFormHtml(labId, options);
+  const { renderHtmlToPdf } = await import('./pdf.service.js');
+  return renderHtmlToPdf(html, { format: 'A4' });
+}
+
 /* ------------------------------------------------------------ fee statement */
 
 const FEE_TEMPLATE = path.resolve(
@@ -153,6 +271,19 @@ const rupees = (v: number | string | null | undefined) =>
  * back to a copy that ships beside the templates: paperwork that goes to a
  * student should not depend on a directory outside this repository.
  */
+/**
+ * The round IIGL mark on its own, for a letterhead that sets the company name
+ * in type beside it. `brandLogo` below is the certificate's banner lockup and
+ * is a different image for a different job.
+ */
+async function brandMark(): Promise<string> {
+  const file = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../templates/iigl-logo.png',
+  );
+  return `data:image/png;base64,${(await readFile(file)).toString('base64')}`;
+}
+
 async function brandLogo(): Promise<string> {
   const legacy = await asDataUri('public/card-logo.png');
   if (legacy) return legacy;

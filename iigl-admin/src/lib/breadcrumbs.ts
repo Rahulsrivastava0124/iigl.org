@@ -122,6 +122,7 @@ const LEAVES: Record<string, string> = {
 
 /** Sections with a detail route, and where to read the record's name from. */
 const RECORD_PATH: Record<string, (id: string) => string> = {
+  laboratories: (id) => `/users/${id}`,
   orders: (id) => `/orders/${id}`,
   reports: (id) => `/reports/${id}`,
   staff: (id) => `/users/${id}`,

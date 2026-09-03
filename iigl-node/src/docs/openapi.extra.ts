@@ -263,12 +263,27 @@ export const extraPaths: Record<string, unknown> = {
     },
   },
 
+  '/api/settings/test-smtp': {
+    post: {
+      tags: ['Settings'],
+      summary: 'Test the mail connection',
+      description:
+        'Connects, starts TLS and authenticates — everything except sending a message — and reports what happened. Nothing is stored and no mail is sent, so it is safe to run against a URL before saving it. Send `url` to test what somebody has just typed; omit it to test the stored one, which is how the button works on a field that is empty because its secret is held back. A refusal comes back as `{ ok: false, message }` with a 200, because the request succeeded even when the mail server said no.',
+      requestBody: body({ url: str }),
+      responses: {
+        200: ok('Whether it connected, and what the server said if it did not.'),
+        400: err('No URL given and none stored.'),
+        ...guarded,
+      },
+    },
+  },
+
   '/api/settings': {
     get: {
       tags: ['Settings'],
       summary: 'Every setting',
       description:
-        'Each setting with its value, its built-in default, and whether anybody has set it. Nothing is seeded: an unset setting reads as the constant or environment variable the code used before the table existed, so an empty table behaves exactly as the hardcoded version did. A secret comes back empty with `set` saying whether one is stored.',
+        'Each setting with its value, its built-in default, and whether anybody has set it. Nothing is seeded: an unset setting reads as the constant or environment variable the code used before the table existed, so an empty table behaves exactly as the hardcoded version did. A secret comes back empty, with `set` saying whether one is stored and `preview` showing it with the password replaced by dots — enough to check the server, account and port without the secret leaving the server.',
       responses: { 200: ok('Every setting, grouped by the part of its key before the dot.'), ...guarded },
     },
     patch: {
@@ -1606,6 +1621,45 @@ export const extraPaths: Record<string, unknown> = {
   },
 
   // -------------------------------------------------------------- accounts
+  '/api/users/laboratories/{id}/registration': {
+    get: {
+      tags: ['Users'],
+      summary: 'The Franchisee Form, filled from the laboratory',
+      description:
+        'The paper registration form head office hands a new franchisee, typeset and pre-filled: name, owner, contact, address, GST, KYC, commission, registration fee and bank details come from the account. What is decided at the counter — the sponsor and the acknowledgement stub — is deliberately left blank to be written in. Returns a PDF inline, so a browser opens it to read and print rather than filing it in a downloads folder. `?format=html` returns the markup it is rendered from, for working on the layout. `?blank=1` prints the same form with nothing filled in, for handing out at a counter — one template, so the sheet given away and the sheet printed back from the account cannot drift apart. Administrators only.',
+      parameters: [
+        idParam,
+        { name: 'format', in: 'query', schema: { type: 'string', enum: ['html'] } },
+        {
+          name: 'blank',
+          in: 'query',
+          description: 'Print the empty form: every label and box, no values.',
+          schema: { type: 'string', enum: ['1', 'true'] },
+        },
+      ],
+      responses: {
+        200: { description: 'The form, as a PDF or as HTML.' },
+        404: err('Laboratory not found.'),
+        ...guarded,
+      },
+    },
+  },
+
+  '/api/users/laboratories/{id}/detail': {
+    get: {
+      tags: ['Users'],
+      summary: 'One laboratory, with its payments, staff and certificates',
+      description:
+        'The laboratory page: the laboratory with its commission accrued, paid and due, the payments it has sent, who works there, and the certificates it has issued — three lists in one reply, because the page opens all three tabs at once. The money is computed here rather than carried from the list row, so the page stands on its own when opened from a bookmark or a reload. Each list is capped at the 50 most recent and `counts` carries the real totals, which are not the length of the lists. The full history lives on the screens that own it: Account for transactions, Employee Management for staff, Certificates for reports. Administrators only.',
+      parameters: [idParam],
+      responses: {
+        200: ok('The laboratory, its recent payments, its staff and its certificates.'),
+        404: err('Laboratory not found.'),
+        ...guarded,
+      },
+    },
+  },
+
   '/api/users/me': {
     patch: {
       tags: ['Users'],
@@ -1616,6 +1670,7 @@ export const extraPaths: Record<string, unknown> = {
         fullname: { type: 'string' },
         owner_name: str,
         alt_mobile: str,
+        office_tel: str,
         email: str,
         address: str,
         city: str,
@@ -1623,17 +1678,50 @@ export const extraPaths: Record<string, unknown> = {
         pincode: str,
         gst_no: str,
         bank_name: str,
+        account_holder: str,
+        bank_branch: str,
         ifsc_code: str,
         account_no: str,
+        account_type: str,
         adhar_no: str,
         adhar_photo: str,
         pan_no: str,
         pan_photo: str,
+        passport_no: str,
+        passport_photo: str,
+        dl_no: str,
+        dl_photo: str,
+        voter_id: str,
+        voter_photo: str,
+        id_proof_type: {
+          type: ['string', 'null'],
+          description:
+            'The documents produced as proof, comma separated — "PAN,AADHAR,VOTER ID". One list for both boxes on the printed form: an Aadhaar card is identity proof and address proof, and both rows of ticks read from here.',
+        },
+        documents: {
+          type: ['array', 'null'],
+          description:
+            'The attachment list. At most 25 entries; each has a `title` and a `path`, and the path must be a key inside the uploads area — anything else is refused rather than stored and rendered back as a link. `added_at` is kept when it is a valid date and stamped by the server otherwise. Sending null clears the list.',
+          items: {
+            type: 'object',
+            required: ['path'],
+            properties: {
+              title: { type: 'string', maxLength: 191 },
+              path: { type: 'string', examples: ['public/uploads/documentation/x.pdf'] },
+              added_at: { type: 'string' },
+            },
+          },
+        },
         profile_photo: str,
         company_logo: str,
         signature: str,
       }),
-      responses: { 200: ok('The updated record.'), 400: err('Nothing to update, or the name is blank.'), ...guarded },
+      responses: {
+        200: ok('The updated record.'),
+        400: err('Nothing to update, the name is blank, or a mobile change was attempted by somebody other than head office.'),
+        409: err('That mobile number or email address is on another active account.'),
+        ...guarded,
+      },
     },
   },
 
@@ -1663,10 +1751,54 @@ export const extraPaths: Record<string, unknown> = {
         role_id: int,
         is_active: bool,
         commision: { type: 'number' },
+        registration_fee: { type: ['number', 'string', 'null'] },
         empid: str,
         address: str,
         city: str,
         state: str,
+        // The rest of the franchisee form: everything on SELF_EDITABLE is
+        // writable here too, these being the ones the laboratory screens send.
+        owner_name: str,
+        alt_mobile: str,
+        office_tel: str,
+        pincode: str,
+        country: str,
+        gst_no: str,
+        fax: str,
+        bank_name: str,
+        account_holder: str,
+        bank_branch: str,
+        ifsc_code: str,
+        account_no: str,
+        account_type: str,
+        adhar_no: str,
+        adhar_photo: str,
+        pan_no: str,
+        pan_photo: str,
+        passport_no: str,
+        passport_photo: str,
+        dl_no: str,
+        dl_photo: str,
+        voter_id: str,
+        voter_photo: str,
+        id_proof_type: str,
+        documents: {
+          type: ['array', 'null'],
+          description:
+            'The attachment list. At most 25 entries; each has a `title` and a `path`, and the path must be a key inside the uploads area — anything else is refused rather than stored and rendered back as a link. `added_at` is kept when it is a valid date and stamped by the server otherwise. Sending null clears the list.',
+          items: {
+            type: 'object',
+            required: ['path'],
+            properties: {
+              title: { type: 'string', maxLength: 191 },
+              path: { type: 'string', examples: ['public/uploads/documentation/x.pdf'] },
+              added_at: { type: 'string' },
+            },
+          },
+        },
+        profile_photo: str,
+        signature: str,
+        documentation: str,
       }),
       responses: {
         200: ok('Updated.'),

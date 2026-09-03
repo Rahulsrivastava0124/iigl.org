@@ -19,7 +19,7 @@ import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Notice, Panel, StateChip, TableFrame, remainingState } from '../components/ui';
+import { hint, remainingState, Notice, Panel, StateChip, TableFrame } from '../components/ui';
 import FileField from '../components/FileField';
 import type { Attribute, Order, Paged, Subcategory } from '../lib/api';
 
@@ -265,7 +265,10 @@ export default function NewReport() {
                   setValues({});
                   setNotes({});
                 }}
-                helperText="What the stone is. This decides which fields the certificate carries."
+                slotProps={hint(
+                  'What the stone is. This decides which fields the certificate carries.',
+                  true,
+                )}
                 required
                 sx={{ maxWidth: 340 }}
               >
@@ -299,7 +302,7 @@ export default function NewReport() {
                   label="Stone weight"
                   value={form.carat_weight}
                   onChange={(e) => setForm({ ...form, carat_weight: e.target.value })}
-                  helperText="Priced from this."
+                  slotProps={hint('Priced from this.', true)}
                 />
                 <TextField
                   select
@@ -326,7 +329,7 @@ export default function NewReport() {
                   label="Comments"
                   value={form.comments}
                   onChange={(e) => setForm({ ...form, comments: e.target.value })}
-                  helperText="Printed on the card."
+                  slotProps={hint('Printed on the card.')}
                 />
               </Stack>
 

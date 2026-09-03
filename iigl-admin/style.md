@@ -587,14 +587,96 @@ that never leaves the field.
 One `LocalizationProvider` wraps the whole panel in `src/main.tsx`, as the
 Pickers documentation asks. Do not wrap a screen in another one.
 
-**A date input is 180px, not the width of its cell.** `DD-MM-YYYY` plus the
-calendar button is all it holds; stretched across a form column it read as a
-text box somebody had forgotten to fill in, with its own value a hand's width
-from the label. The number lives once, as `DATE_WIDTH` in `ui.tsx`, so the
-dates across the panel cannot end up three different widths. It carries
-`maxWidth: 100%` as well, so a narrow column shrinks it rather than overflowing.
-Pass `sx` to a `DateField` only when one really has to be wider — a caller's
-`sx` is applied last and still wins.
+**A date input fills its cell, like every other field.** See *Fields fill their
+column* under Full-page forms: the grid decides the width, not the field. A
+`DateField` takes a caller's `sx` last, so one that genuinely has to be narrower
+can be, but the default is the column.
+
+### The required marker
+
+**A required field's asterisk is red, at the label's own size.** Set once, on
+`MuiFormLabel` in `theme.ts`, so it covers every label in the panel — text
+fields, selects, date pickers, radio and checkbox groups all descend from it:
+
+```ts
+MuiFormLabel: { styleOverrides: { asterisk: { color: TONE.refused.main } } }
+```
+
+MUI leaves the asterisk the label's own colour, which on a form of twelve
+fields is a mark you have to hunt for. Colour is the whole of the fix: size and
+weight stay the label's, because an asterisk larger or bolder than the field
+name competes with it.
+
+Mark a field `required` when the **API** refuses it without a value. An
+asterisk on a field the server accepts empty is a lie the form tells, and a
+missing one is a save that fails after somebody has typed everything else.
+
+### A field's note is a mark in the field, not a line under it
+
+**Static guidance goes in an `ⓘ` inside the input, as a tooltip. Only
+feedback is written underneath.** `hint()` in `components/ui.tsx` returns the
+adornment, ready to spread into `slotProps`:
+
+```tsx
+<TextField label="Mobile" slotProps={hint('Ten digits.')} />
+
+// A select: the mark shifts left of the dropdown arrow, which owns the corner.
+<TextField select label="ID Proof" slotProps={hint('Ticked on the form.', true)} />
+
+// Alongside other slot props, spread last.
+<TextField
+  label="Registration Fee"
+  slotProps={{ htmlInput: { min: 0 }, ...hint('Printed in figures and in words.') }}
+/>
+```
+
+Helper text costs a line of height on every field that carries one, and in a
+three-column grid that line is charged to the whole row: twelve noted fields
+pushed a form a screen longer for advice most people read once. The note has
+not gone anywhere — it opens on hover **and on focus**, so it is reachable from
+the keyboard, and it is the field's accessible description rather than
+decoration.
+
+**The line under the field is for what has to be seen without being asked
+for**: a validation error, a result from the server, a figure that changes with
+the record. "These do not match", what the mail server replied, `Fee ₹1,200,
+copied onto the enrolment` — those stay where they are. The test is whether
+somebody has to act on it: advice is a mark, consequences are a line.
+
+The wrappers do it themselves, so a caller keeps writing `helperText`:
+
+- **`PasswordField`** puts the mark beside the eye, and drops back to a line
+  when `error` is set.
+- **`DateField`** puts it at the head of the box — the tail belongs to the
+  calendar button, and two icons in one corner is a guess about which one opens
+  the picker.
+- **`FileField`** has no box, so the mark sits next to its label.
+- **`GstField` / `SourceField`** slip it in ahead of the Autocomplete's own
+  clear and open buttons rather than replacing them.
+
+A blank string is a caller holding the line open, not a note; it gets no mark.
+
+### Fields fill their column
+
+**The cell decides a field's width, never the field.** `FormPanel` stretches
+every direct child to its grid column, and the Settings screen's own grid does
+the same:
+
+```tsx
+sx={{ display: 'grid', gridTemplateColumns: …, gap: 2, alignItems: 'start',
+      '& > *': { width: '100%' } }}
+```
+
+Without it a row of three comes out three widths, because the components size
+themselves differently and none of them is wrong on its own: a `DatePicker`
+sizes to `DD-MM-YYYY`, an `Autocomplete` to its longest option, a `TextField`
+stretches. One rule on the container beats an `sx` at every call site, and a
+field added tomorrow lines up without being told to.
+
+A field that needs the **whole** row asks for it — `sx={{ gridColumn: '1 / -1' }}`
+— which is how every multiline box does it. A field that genuinely has to be
+narrower passes its own `sx`, which is applied last and wins; that should be
+rare enough to be worth a comment saying why.
 
 ### Full-page forms (Create / Edit)
 

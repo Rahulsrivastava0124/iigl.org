@@ -4,9 +4,9 @@ import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import { Panel, PasswordField } from '../components/ui';
+import { hint, Panel, PasswordField } from '../components/ui';
 import FileField from '../components/FileField';
-import { isLab, ROLE_NAMES } from '../lib/portal';
+import { isLab, isSuper, ROLE_NAMES } from '../lib/portal';
 
 interface Account {
   id: number;
@@ -61,6 +61,9 @@ export default function Profile() {
   const account = useFetch<{ data: Account }>('/users/me');
 
   const [form, setForm] = useState<Record<string, string>>({});
+  // Only head office may move its own sign-in number; for everyone else that
+  // is an administrator's act, and they are shown the number rather than a box.
+  const headOffice = isSuper(user);
   const [photo, setPhoto] = useState<string | null>(null);
   const [logo, setLogo] = useState<string | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
@@ -153,6 +156,30 @@ export default function Profile() {
         }
       >
         <Grid container spacing={2} sx={{ p: 2 }}>
+          {/*
+            The number you sign in with, in the form rather than only in the
+            line above it: it is the first thing anybody looks for on their own
+            profile.
+
+            Head office may change it; everybody else is shown it and told who
+            can. Telling the one person who *is* head office to ask an
+            administrator is telling them to ask themselves.
+          */}
+          <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+            <TextField
+              label="Mobile number"
+              value={form.mobile ?? a?.mobile ?? ''}
+              onChange={(e) => setForm({ ...form, mobile: e.target.value })}
+              disabled={!headOffice}
+              required={headOffice}
+              slotProps={hint(
+                headOffice
+                  ? 'How you sign in. Changing it changes how you get in.'
+                  : 'How you sign in. Ask an administrator to change it.',
+              )}
+            />
+          </Grid>
+
           {TEXT_FIELDS.map(([key, label]) => (
             <Grid key={key} size={{ xs: 12, sm: 6, md: 4 }}>
               <TextField
@@ -184,6 +211,7 @@ export default function Profile() {
                 <FileField
                   label="Signature"
                   bucket="signature"
+                  ratio="3 / 1"
                   value={signature}
                   onChange={setSignature}
                   helperText="Printed on every certificate this laboratory issues."
@@ -203,7 +231,7 @@ export default function Profile() {
                 label="Salary"
                 value={a.employment.salary ? `₹${Number(a.employment.salary).toLocaleString('en-IN')}` : '—'}
                 disabled
-                helperText="Set by your employer."
+                slotProps={hint('Set by your employer.')}
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 4 }}>
@@ -220,7 +248,7 @@ export default function Profile() {
         )}
 
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', px: 2, pb: 2 }}>
-          Your mobile number is how you sign in and cannot be changed here. Ask an administrator.
+          Your mobile number is above, and how you sign in; an administrator changes it.
           {lab && a?.commision != null && ` Your commission rate is ${a.commision}%.`}
         </Typography>
       </Panel>

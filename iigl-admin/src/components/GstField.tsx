@@ -1,4 +1,5 @@
 import { Autocomplete, TextField } from '@mui/material';
+import { hintNode } from './ui';
 
 /** A GST rate, as Master › GST maintains it. */
 export interface GstRate {
@@ -80,13 +81,29 @@ export default function GstField({
           {...params}
           label={label}
           placeholder={rates.length ? 'Pick one, or type a rate' : 'Type a rate'}
-          helperText={
-            value.gst_percent !== ''
-              ? `${value.gst_percent || '0'}% for this record only.`
-              : rates.length === 0
-                ? 'No rates yet — add one under Master › GST, or type one.'
-                : 'Pick a rate from Master › GST, or type one for this record.'
-          }
+          /*
+            The note is the mark in the box, as it is on every other field —
+            slipped in ahead of the Autocomplete's own clear and open buttons
+            rather than replacing them.
+          */
+          slotProps={{
+            ...params.slotProps,
+            input: {
+              ...params.slotProps.input,
+              endAdornment: (
+                <>
+                  {hintNode(
+                    value.gst_percent !== ''
+                      ? `${value.gst_percent || '0'}% for this record only.`
+                      : rates.length === 0
+                        ? 'No rates yet — add one under Master › GST, or type one.'
+                        : 'Pick a rate from Master › GST, or type one for this record.',
+                  )}
+                  {params.slotProps.input.endAdornment}
+                </>
+              ),
+            },
+          }}
         />
       )}
     />

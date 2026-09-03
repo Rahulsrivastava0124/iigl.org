@@ -1,6 +1,6 @@
 # IIGL API
 
-192 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
+195 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
 
 The interactive version is at `/docs` when the server is running, and the raw
 document at `/openapi.json`.
@@ -96,7 +96,7 @@ Sign in, sign out, and the current session.
 | Method | Path | Auth | Query | Body | Fails | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
 | POST | `/api/auth/change-password` | session | — | current_password, **new_password** | 400, 401 | Change your own password |
-| POST | `/api/auth/forgot-password` | public | — | **email** | 400, 429 | Ask for a password reset link |
+| POST | `/api/auth/forgot-password` | public | — | identifier, email | 400, 429 | Ask for a password reset link |
 | POST | `/api/auth/login` | public | — | **mobile**, **password** | 400, 401 | Sign in |
 | POST | `/api/auth/logout` | public | — | — | — | Sign out |
 | GET | `/api/auth/me` | session | — | — | 401 | Current session |
@@ -186,15 +186,17 @@ Laboratories, staff and account administration.
 | --- | --- | --- | --- | --- | --- | --- |
 | POST | `/api/users` | session | — | **fullname**, **mobile**, **password**, **role_id**, email, empid, lab_id, joining_date, +2 more | 400, 401, 403, 409 | Create an account |
 | GET | `/api/users/{id}` | session | — | — | 401, 403, 404 | Read one account |
-| PATCH | `/api/users/{id}` | session | — | fullname, mobile, email, role_id, is_active, commision, empid, address, +2 more | 400, 401, 403, 404, 409 | Update any account |
+| PATCH | `/api/users/{id}` | session | — | fullname, mobile, email, role_id, is_active, commision, registration_fee, empid, +31 more | 400, 401, 403, 404, 409 | Update any account |
 | PATCH | `/api/users/{id}/active` | session | — | is_active | 401, 403, 404 | Activate or deactivate an account |
 | POST | `/api/users/{id}/employment` | session | — | **lab_id**, joining_date, salary, remark | 400, 401, 403, 404, 409 | Attach a person to an employer |
 | PATCH | `/api/users/{id}/employment` | session | — | salary, joining_date, remark | 400, 401, 403, 404 | Change the terms of a posting |
 | POST | `/api/users/{id}/employment/end` | session | — | leave_date, remark | 401, 403, 404 | End an employment |
 | POST | `/api/users/{id}/password` | session | — | **password** | 400, 401, 403, 404 | Reset someone's password |
 | GET | `/api/users/laboratories` | session | — | — | 401, 403 | List laboratories |
+| GET | `/api/users/laboratories/{id}/detail` | session | — | — | 401, 403, 404 | One laboratory, with its payments, staff and certificates |
+| GET | `/api/users/laboratories/{id}/registration` | session | `format`, `blank` | — | 401, 403, 404 | The Franchisee Form, filled from the laboratory |
 | GET | `/api/users/me` | session | — | — | 401, 403 | Your account record |
-| PATCH | `/api/users/me` | session | — | fullname, owner_name, alt_mobile, email, address, city, state, pincode, +11 more | 400, 401, 403 | Update your own profile |
+| PATCH | `/api/users/me` | session | — | fullname, owner_name, alt_mobile, office_tel, email, address, city, state, +23 more | 400, 401, 403, 409 | Update your own profile |
 | GET | `/api/users/staff` | session | `page`, `per_page`, `lab_id` | — | 401, 403 | List staff |
 
 ## Dashboard
@@ -423,9 +425,10 @@ The general enquiry book: questions, visits, leads and complaints.
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/settings` | session | — | — | 401, 403 | Every setting |
 | PATCH | `/api/settings` | session | — | company.name, certificate.prefix, session.hours, mail.smtp_url | 400, 401, 403 | Save settings |
+| POST | `/api/settings/test-smtp` | session | — | url | 400, 401, 403 | Test the mail connection |
 
 ---
 
 Bold body fields are required.
 
-192 endpoints: 16 public, 176 requiring a session.
+195 endpoints: 16 public, 179 requiring a session.

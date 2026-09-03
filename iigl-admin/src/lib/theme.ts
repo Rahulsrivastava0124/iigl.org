@@ -99,6 +99,21 @@ export const TONE = {
 
 export type ToneName = keyof typeof TONE;
 
+/**
+ * A surface that floats over the page: menus, select and autocomplete lists,
+ * popovers.
+ *
+ * A real background, a border in the panel's own blue, and a shadow deep
+ * enough to lift it off whatever it is covering. The shadow is navy rather
+ * than black — a grey shadow over a blue-bordered panel reads as dirt.
+ */
+const floating = {
+  backgroundColor: '#ffffff',
+  border: `1px solid ${BRAND.cardBorder}`,
+  borderRadius: 8,
+  boxShadow: `0 8px 28px ${BRAND.navy}22, 0 2px 6px ${BRAND.navy}14`,
+};
+
 export const theme = createTheme({
   cssVariables: true,
 
@@ -145,6 +160,30 @@ export const theme = createTheme({
   },
 
   components: {
+    /**
+     * The required marker.
+     *
+     * MUI puts an asterisk after the label and leaves it the label's own
+     * colour, which on a form of twelve fields is a mark you have to hunt for.
+     * Red says "not optional" at a glance.
+     *
+     * Colour, and nothing else. The size and weight stay the label's own:
+     * enlarging or emboldening the asterisk had it competing with the field
+     * name it belongs to, and a red mark is found without being heavier than
+     * the words it sits beside.
+     *
+     * `MuiFormLabel` rather than `MuiInputLabel`: every label in the panel
+     * descends from it — text fields, selects, date pickers, radio and
+     * checkbox groups — so this is the one place that covers all of them.
+     */
+    MuiFormLabel: {
+      styleOverrides: {
+        asterisk: {
+          color: TONE.refused.main,
+          marginLeft: 1,
+        },
+      },
+    },
     MuiCssBaseline: {
       styleOverrides: {
         // Digits line up in columns throughout, so this is set globally rather
@@ -176,6 +215,23 @@ export const theme = createTheme({
         outlined: { borderColor: BRAND.cardBorder },
       },
     },
+
+    /*
+      Anything that floats over the page needs an edge and a shadow.
+
+      `MuiPaper` above is flat by design: a panel sits *in* the page and is
+      told apart by its border, and a drop shadow on every card makes a screen
+      of eight of them look quilted. A dropdown is the opposite case — it
+      covers content that is still visible around it, and with elevation 0 it
+      arrived as white text-on-white with nothing to say where the list ended.
+      The rows underneath showed through it.
+
+      Set on the three components that float rather than by putting elevation
+      back on Paper, so the panels stay flat.
+    */
+    MuiAutocomplete: { styleOverrides: { paper: floating } },
+    MuiMenu: { styleOverrides: { paper: floating } },
+    MuiPopover: { styleOverrides: { paper: floating } },
     MuiTableCell: {
       styleOverrides: {
         root: { paddingTop: 9, paddingBottom: 9, whiteSpace: 'nowrap' },

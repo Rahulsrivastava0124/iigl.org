@@ -37,6 +37,7 @@ import ClearIcon from '@mui/icons-material/CloseOutlined';
 import MoreIcon from '@mui/icons-material/MoreVertOutlined';
 import ShowIcon from '@mui/icons-material/VisibilityOutlined';
 import HideIcon from '@mui/icons-material/VisibilityOffOutlined';
+import HintIcon from '@mui/icons-material/InfoOutlined';
 import type { TextFieldProps } from '@mui/material';
 import type { PageMeta } from '../lib/api';
 import { BRAND, TONE } from '../lib/theme';
@@ -447,6 +448,14 @@ export function FormPanel({
 
             Each direct child takes one cell. A field that needs the full width
             — anything multiline — asks for it with `gridColumn: '1 / -1'`.
+
+            **The cell decides the width, not the field.** Every direct child is
+            stretched to its column here rather than each one carrying a width
+            of its own: a date that sized itself to `DD-MM-YYYY`, an
+            Autocomplete that sized itself to its longest option and a text box
+            that stretched all made the same row of three fields come out three
+            different widths. One rule here beats a `sx` at every call site,
+            and a field added tomorrow lines up without being told to.
           */}
           <Box
             sx={{
@@ -458,6 +467,7 @@ export function FormPanel({
               },
               gap: 2,
               alignItems: 'start',
+              '& > *': { width: '100%' },
             }}
           >
             {children}
@@ -580,13 +590,6 @@ export const today = () => dayjs().format(ISO_DATE);
  * half-typed date reaching the API as a date is worse than one that never
  * leaves the field.
  */
-/**
- * How wide a date input is: `DD-MM-YYYY` plus the calendar button, and no
- * more. One number here rather than a `sx` at each of the call sites, so the
- * dates across the panel cannot end up three different widths.
- */
-const DATE_WIDTH = 180;
-
 export function DateField({
   label,
   value,
@@ -624,16 +627,22 @@ export function DateField({
       slotProps={{
         textField: {
           required,
-          helperText,
-          // A date is ten characters and a calendar button. Stretched to the
-          // full grid cell it read as a text box somebody had forgotten to
-          // fill in, and sat a hand's width from its own value. Sized to what
-          // it holds instead — and still `maxWidth: 100%`, so it shrinks
-          // rather than overflowing a narrow column on a phone.
-          //
-          // A caller's own `sx` comes last and can still override the width.
-          sx: { width: DATE_WIDTH, maxWidth: '100%', ...sx },
-          fullWidth: false,
+          /*
+            The note is the mark, as it is on every other field. It sits at the
+            head of the box rather than the tail: the tail already belongs to
+            the calendar button, and two icons in one corner is a guess about
+            which one opens the picker.
+          */
+          slotProps:
+            helperText && helperText.trim() !== ''
+              ? { input: { startAdornment: hintNode(helperText) } }
+              : undefined,
+          // Full width, like every other field: the form grid is what decides
+          // how wide a column is, and a date that sized itself to its own ten
+          // characters left a ragged gap in a row of three. A caller's `sx`
+          // comes last and can still narrow one that genuinely needs it.
+          sx,
+          fullWidth: true,
           size: 'small',
         },
         // Nothing here is far from today; a picker that opens on the year is
@@ -707,6 +716,12 @@ export function SearchField({
  * label, `autoComplete` and validation.
  */
 export function PasswordField({ value, ...props }: TextFieldProps) {
+  /*
+    A static note becomes the mark in the box; an error stays underneath it.
+    "Eight characters or more" is advice somebody reads once, and it cost a
+    line of height on every form that gave it. "These do not match" is not
+    advice — it has to be on screen without being asked for.
+  */
   const [shown, setShown] = useState(false);
   const empty = !value;
 
@@ -717,6 +732,7 @@ export function PasswordField({ value, ...props }: TextFieldProps) {
   return (
     <TextField
       {...props}
+      helperText={props.error ? props.helperText : undefined}
       value={value}
       type={shown ? 'text' : 'password'}
       slotProps={{
@@ -725,6 +741,14 @@ export function PasswordField({ value, ...props }: TextFieldProps) {
           ...(props.slotProps?.input as object),
           endAdornment: (
             <InputAdornment position="end">
+              {/* The note, if there is one, then the toggle. */}
+              {/* A blank string is a caller holding the line open, not a
+                  note: it gets no mark. */}
+              {typeof props.helperText === 'string' &&
+              props.helperText.trim() !== '' &&
+              !props.error
+                ? hintNode(props.helperText)
+                : null}
               <IconButton
                 size="small"
                 edge="end"
@@ -743,6 +767,62 @@ export function PasswordField({ value, ...props }: TextFieldProps) {
       }}
     />
   );
+}
+
+/**
+ * The columns an attachment frame sits in.
+ *
+ * Narrower than a form field, because that is what an upright frame is: at a
+ * third of the page a 3:4 frame stands 150px wide in a 380px column and the
+ * rest of the column is nothing. `WIDE_FRAME_CELL` is double, for a signature
+ * strip — so a photograph, a signature and three proof copies fill one line
+ * exactly, and the documents below them line up on the same grid.
+ */
+export const FRAME_CELL = { xs: 6, sm: 4, md: 2 } as const;
+export const WIDE_FRAME_CELL = { xs: 12, sm: 8, md: 4 } as const;
+
+/**
+ * A note about a field, on the field.
+ *
+ * Helper text under an input costs a line of height on every field that has
+ * one, and in a three-column form that line is charged to the whole row —
+ * twelve fields carrying a note push the form a screen longer for advice most
+ * people need once. So the note becomes a small mark inside the field and
+ * appears when somebody asks for it.
+ *
+ * It is a tooltip, not a title attribute: it opens on focus as well as hover,
+ * so it is reachable from the keyboard, and it is the field's description for
+ * a screen reader rather than decoration.
+ *
+ * Spread into `slotProps`. On a `select` the mark sits left of the dropdown
+ * arrow — the arrow is positioned against the right edge and would otherwise
+ * be drawn on top of it.
+ *
+ *     <TextField label="Mobile" slotProps={hint('Ten digits.')} />
+ *     <TextField select label="ID Proof" slotProps={hint('Ticked on the form.', true)} />
+ */
+export function hintNode(text: string, forSelect = false) {
+  return (
+    <InputAdornment position="end" sx={{ mr: forSelect ? 2.5 : 0 }}>
+      <Tooltip title={text} enterTouchDelay={0}>
+        <HintIcon
+          tabIndex={0}
+          aria-label={text}
+          sx={{
+            fontSize: 17,
+            color: 'text.disabled',
+            cursor: 'help',
+            outline: 'none',
+            '&:hover, &:focus-visible': { color: 'primary.main' },
+          }}
+        />
+      </Tooltip>
+    </InputAdornment>
+  );
+}
+
+export function hint(text: string, forSelect = false) {
+  return { input: { endAdornment: hintNode(text, forSelect) } };
 }
 
 /**

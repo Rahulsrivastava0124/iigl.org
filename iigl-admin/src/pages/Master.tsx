@@ -3,7 +3,9 @@ import { useParams } from 'react-router-dom';
 import {
   Button,
   IconButton,
+  InputAdornment,
   MenuItem,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -21,15 +23,7 @@ import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import {
-  ConfirmDialog,
-  FormPanel,
-  IconAction,
-  Panel,
-  RowActions,
-  StateChip,
-  TableFrame,
-} from '../components/ui';
+import { hint, ConfirmDialog, FormPanel, IconAction, Panel, RowActions, StateChip, TableFrame } from '../components/ui';
 
 /**
  * The master lists.
@@ -156,6 +150,51 @@ export default function Master() {
   const [deleting, setDeleting] = useState<Row | null>(null);
   const [busy, setBusy] = useState(false);
 
+  /*
+    Adding one row, from the header.
+
+    Countries, states and districts are a name and nothing else, and they are
+    entered in runs — thirty-six states, then every district of one of them.
+    Opening a form, typing a word, saving and closing it is four actions for
+    one word, so the header carries a box: type, press Enter, it is in the
+    list, the box is empty and the cursor is still in it.
+
+    Only for a list that a name is enough for. A GST rate needs its percent and
+    an enquiry type needs its code, and a quick box that silently writes zero
+    or an empty code is worse than the form it saved somebody from.
+  */
+  const required = list.fields.filter((f) => f.kind !== 'parent' && f.required);
+  const quickField = required.length === 1 && required[0].kind === 'text' ? required[0] : null;
+
+  const [quickText, setQuickText] = useState('');
+  const [quickParent, setQuickParent] = useState('');
+
+  const quickAdd = async () => {
+    if (!quickField) return;
+    const value = quickText.trim();
+    if (!value) return;
+    if (list.parent && !quickParent) {
+      toast.error(`Choose a ${list.parent.label.toLowerCase()} first.`);
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await api.post(`/master/${list.id}`, {
+        [quickField.name]: value,
+        ...(list.parent ? { [list.parent.column]: Number(quickParent) } : {}),
+      });
+      toast.ok(`${list.noun} added.`);
+      // The parent stays chosen: the next district belongs to the same state.
+      setQuickText('');
+      rows.reload();
+    } catch (e) {
+      toast.error(messageOf(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const blank = () =>
     Object.fromEntries(list.fields.map((f) => [f.name, f.kind === 'number' ? '0' : '']));
 
@@ -183,11 +222,25 @@ export default function Master() {
       if (form.id) {
         await api.patch(`/master/${list.id}/${form.id}`, body);
         toast.ok(`${list.noun} updated.`);
+        // An edit is finished when it is saved.
+        setForm(null);
       } else {
         await api.post(`/master/${list.id}`, body);
         toast.ok(`${list.noun} added.`);
+        /*
+          Adding is not. These lists are filled in runs — every state of one
+          country, every district of one state — so the form stays open with
+          the parent still chosen and only the row's own fields emptied.
+          Closing it meant reopening and repicking the country for each of
+          thirty-six states.
+        */
+        setForm({
+          ...blank(),
+          ...Object.fromEntries(
+            list.fields.filter((f) => f.kind === 'parent').map((f) => [f.name, form[f.name] ?? '']),
+          ),
+        });
       }
-      setForm(null);
       rows.reload();
     } catch (e) {
       toast.error(messageOf(e));
@@ -239,7 +292,7 @@ export default function Master() {
                 value={form[f.name] ?? ''}
                 onChange={(e) => set(f.name, e.target.value)}
                 required={f.required}
-                helperText={f.helperText}
+                slotProps={f.helperText ? hint(f.helperText, true) : undefined}
               >
                 {parents.data?.data.map((p) => (
                   <MenuItem key={p.id} value={String(p.id)}>
@@ -257,7 +310,7 @@ export default function Master() {
                 required={f.required}
                 // Set once: the code is on every record filed under it.
                 disabled={Boolean(f.createOnly && form.id)}
-                helperText={f.helperText}
+                slotProps={f.helperText ? hint(f.helperText) : undefined}
               />
             ),
           )}
@@ -268,15 +321,74 @@ export default function Master() {
         title={`${list.label} list`}
         count={rows.data ? `${rows.data.data.length.toLocaleString()} rows` : 'Loading…'}
         actions={
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setForm(blank())}
-            // Nothing to hang a state or a district off yet.
-            disabled={Boolean(list.parent) && (parents.data?.data.length ?? 0) === 0}
-          >
-            New {list.noun.toLowerCase()}
-          </Button>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }} useFlexGap>
+            {quickField && (
+              <>
+                {list.parent && (
+                  <TextField
+                    select
+                    size="small"
+                    label={list.parent.label}
+                    value={quickParent}
+                    onChange={(e) => setQuickParent(e.target.value)}
+                    sx={{ minWidth: 150 }}
+                  >
+                    {parents.data?.data.map((p) => (
+                      <MenuItem key={p.id} value={String(p.id)}>
+                        {String(p.name)}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                )}
+                <TextField
+                  size="small"
+                  placeholder={`Add ${list.noun.toLowerCase()} — press Enter`}
+                  value={quickText}
+                  onChange={(e) => setQuickText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return;
+                    // The panel is not a form, but Enter in a box that adds
+                    // things should add the thing.
+                    e.preventDefault();
+                    void quickAdd();
+                  }}
+                  disabled={busy || (Boolean(list.parent) && (parents.data?.data.length ?? 0) === 0)}
+                  sx={{ minWidth: 240 }}
+                  slotProps={{
+                    input: {
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <Tooltip title={`Add ${list.noun.toLowerCase()}`}>
+                            {/* A span, so the tooltip still shows while the
+                                button is disabled with the box empty. */}
+                            <span>
+                              <IconButton
+                                size="small"
+                                edge="end"
+                                onClick={() => void quickAdd()}
+                                disabled={busy || quickText.trim() === ''}
+                              >
+                                <AddIcon fontSize="small" />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
+                />
+              </>
+            )}
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setForm(blank())}
+              // Nothing to hang a state or a district off yet.
+              disabled={Boolean(list.parent) && (parents.data?.data.length ?? 0) === 0}
+            >
+              New {list.noun.toLowerCase()}
+            </Button>
+          </Stack>
         }
       >
         <TableFrame

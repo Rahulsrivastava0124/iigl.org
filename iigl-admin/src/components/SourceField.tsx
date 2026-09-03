@@ -1,19 +1,29 @@
 import { Autocomplete, TextField } from '@mui/material';
+import { hintNode } from './ui';
+import { useFetch } from '../lib/useFetch';
 
 /**
  * Where an enquiry came from.
  *
- * The four the business actually counts, offered as a list rather than left as
- * a helper line under an empty box — a free-text source is a column nobody can
- * total, and "web", "Web" and "website" all arrive in it within a month.
+ * The options are the **Enquiry type** master list — Master › Enquiry Type —
+ * so head office maintains them without a deploy, rather than four words
+ * hardcoded here. Only the active rows are offered; a retired one stays
+ * readable on the enquiries that already name it.
  *
- * `freeSolo`, though, not a plain select. Two reasons, and both are about the
- * data that already exists: a select renders nothing for a value that is not
- * on its list, so rows holding `web` would show as blank and be silently
- * rewritten by the next save; and a source nobody anticipated — an exhibition,
- * a particular partner — should be recordable without a deploy.
+ * `freeSolo`, not a plain select, for two reasons and both are about data that
+ * already exists: a select renders nothing for a value that is not on its list,
+ * so the rows holding `web` and `test` would show blank and be silently
+ * rewritten by the next save; and a source nobody anticipated should be
+ * recordable without opening a master screen first.
+ *
+ * The **label** is stored, not the code. This column is read by people, on a
+ * statement and in a list, and `ask` says less than `Ask me`.
  */
-const SOURCES = ['Website', 'Phone', 'Walk-in', 'Referral'];
+interface EnquiryType {
+  id: number;
+  code: string;
+  label: string;
+}
 
 export default function SourceField({
   value,
@@ -26,10 +36,13 @@ export default function SourceField({
   label?: string;
   sx?: object;
 }) {
+  const types = useFetch<{ data: EnquiryType[] }>('/master/enquiry-types?active=1');
+  const options = (types.data?.data ?? []).map((t) => t.label);
+
   return (
     <Autocomplete<string, false, false, true>
       freeSolo
-      options={SOURCES}
+      options={options}
       // Held as text, not as a chosen option: the stored value is a string and
       // may be one nobody offered.
       inputValue={value}
@@ -45,8 +58,25 @@ export default function SourceField({
         <TextField
           {...params}
           label={label}
-          placeholder="Pick one, or type where it came from"
-          helperText="Website, phone, walk-in, referral — or anything else."
+          placeholder={
+            options.length ? 'Pick one, or type where it came from' : 'Where it came from'
+          }
+          slotProps={{
+            ...params.slotProps,
+            input: {
+              ...params.slotProps.input,
+              endAdornment: (
+                <>
+                  {hintNode(
+                    options.length
+                      ? 'From Master › Enquiry Type — or type anything else.'
+                      : 'No enquiry types yet. Add them under Master › Enquiry Type, or type one.',
+                  )}
+                  {params.slotProps.input.endAdornment}
+                </>
+              ),
+            },
+          }}
         />
       )}
     />

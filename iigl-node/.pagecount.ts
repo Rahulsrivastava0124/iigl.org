@@ -1,0 +1,10 @@
+import { franchiseeFormPdf, franchiseeFormHtml } from './src/services/document.service.js';
+import { db } from './src/db/index.js';
+import { writeFile } from 'node:fs/promises';
+const dir = 'C:/Users/rahul/AppData/Local/Temp/claude/C--Users-rahul-Documents-GitHub-iigl-org/dd531c7f-d0c2-4814-b16d-787937670f6d/scratchpad/';
+await writeFile(dir + 'franchisee-form.html', await franchiseeFormHtml(102), 'utf8');
+const pdf = await franchiseeFormPdf(102);
+await writeFile(dir + 'franchisee-form.pdf', pdf);
+const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
+console.log('pdf bytes:', pdf.length, '| pages:', pages);
+await db.destroy();

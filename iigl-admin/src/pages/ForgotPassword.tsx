@@ -3,7 +3,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import { Box, Button, Link, Stack, TextField } from '@mui/material';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Notice } from '../components/ui';
+import { hint, Notice } from '../components/ui';
 import { useToast } from '../components/Toast';
 import AuthCard from '../components/AuthCard';
 
@@ -20,7 +20,9 @@ import AuthCard from '../components/AuthCard';
  */
 export default function ForgotPassword() {
   const toast = useToast();
-  const [email, setEmail] = useState('');
+  // A mobile number or an email address. People sign in with the number, so
+  // that is what they are sure of at the one moment they are locked out.
+  const [identifier, setIdentifier] = useState('');
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
 
@@ -29,7 +31,7 @@ export default function ForgotPassword() {
     setBusy(true);
     try {
       const { message } = await api.post<{ message: string }>('/auth/forgot-password', {
-        email: email.trim(),
+        identifier: identifier.trim(),
       });
       setSaid(message);
     } catch (err) {
@@ -59,27 +61,29 @@ export default function ForgotPassword() {
   return (
     <AuthCard
       title="Forgotten your password?"
-      subtitle="Enter the email address on your account and we will send a link to choose a new one."
+      subtitle="Enter your mobile number or the email on your account, and we will send a link to choose a new one."
       onSubmit={submit}
       footer="No email on your account? Ask an administrator to set a new password for you."
     >
       <Stack spacing={2.5} sx={{ textAlign: 'left' }}>
         <TextField
-          label="Email address"
-          name="email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          autoComplete="email"
+          label="Mobile number or email"
+          name="identifier"
+          // Not `type="email"`: the browser would refuse a mobile number as
+          // malformed before it ever reached the server.
+          value={identifier}
+          onChange={(e) => setIdentifier(e.target.value)}
+          autoComplete="username"
           size="medium"
           autoFocus
           required
+          slotProps={hint('The link goes to the email address on the account.')}
         />
         <Button
           type="submit"
           variant="contained"
           size="large"
-          disabled={busy || !email.trim()}
+          disabled={busy || !identifier.trim()}
           sx={{ py: 1.4 }}
         >
           {busy ? 'Sending…' : 'Send reset link'}

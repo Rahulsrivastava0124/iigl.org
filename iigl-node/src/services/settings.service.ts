@@ -134,6 +134,33 @@ export const SETTINGS: SettingSpec[] = [
 
 const SPEC = new Map(SETTINGS.map((s) => [s.key, s]));
 
+/**
+ * A stored secret, with the secret part taken out.
+ *
+ * The whole value never leaves the server — that is what stops a mail password
+ * reaching a screenshot, a shared screen or the browser's memory. But "is it
+ * the right server, the right account, the right port" is a fair question, and
+ * everything needed to answer it is safe to show. So the password is replaced
+ * with dots and the rest is sent as written.
+ *
+ * A value that is not a URL has its middle removed instead, which still shows
+ * enough to tell one string from another without handing it over.
+ */
+function redact(value: string): string {
+  try {
+    const u = new URL(value);
+    if (!u.password) return value;
+    const shown = new URL(value);
+    shown.password = '';
+    // `URL` drops an empty password, so the dots go back in by hand rather
+    // than by rebuilding the string and hoping the parts line up.
+    return shown.toString().replace(`${u.username}@`, `${u.username}:••••••••@`);
+  } catch {
+    if (value.length <= 8) return '••••••••';
+    return `${value.slice(0, 4)}…${value.slice(-4)}`;
+  }
+}
+
 let cache: { at: number; values: Map<string, string> } | null = null;
 const TTL = 60_000;
 
@@ -178,6 +205,12 @@ export async function allSettings() {
     value: s.secret ? '' : (values.get(s.key) ?? s.fallback()),
     secret: Boolean(s.secret),
     set: values.has(s.key),
+    /**
+     * What a stored secret looks like with its password removed, so the screen
+     * can show which server and account are configured without the secret
+     * itself ever leaving here. Empty for everything else.
+     */
+    preview: s.secret && values.has(s.key) ? redact(values.get(s.key) as string) : '',
     /** What it falls back to, so the screen can say what "empty" means. */
     fallback: s.secret ? '' : s.fallback(),
   }));

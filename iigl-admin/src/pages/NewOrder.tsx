@@ -22,7 +22,7 @@ import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Panel } from '../components/ui';
+import { hint, Panel } from '../components/ui';
 import type { Category } from '../lib/api';
 
 interface Item {
@@ -132,7 +132,7 @@ export default function NewOrder() {
               onBlur={lookup}
               required
               fullWidth
-              helperText="If they have ordered before, the rest fills itself in."
+              slotProps={hint('If they have ordered before, the rest fills itself in.')}
             />
             <TextField
               label="Name"
@@ -162,7 +162,7 @@ export default function NewOrder() {
               value={customer.gst}
               onChange={(e) => set('gst', e.target.value)}
               fullWidth
-              helperText="A GST number is what makes this a registered customer."
+              slotProps={hint('A GST number is what makes this a registered customer.')}
             />
             <TextField
               label="Address"

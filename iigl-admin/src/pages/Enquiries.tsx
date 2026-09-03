@@ -27,21 +27,7 @@ import SourceField from '../components/SourceField';
 import { useToast } from '../components/Toast';
 import { BRAND } from '../lib/theme';
 import { EnquiryViewDialog, FollowupDialog } from '../components/EnquiryFollowups';
-import {
-  ConfirmDialog,
-  DateField,
-  FormPanel,
-  IconAction,
-  Pager,
-  Panel,
-  RowActions,
-  SearchField,
-  StateChip,
-  TableFrame,
-  Tile,
-  ToneAction,
-  today,
-} from '../components/ui';
+import { hint, today, ConfirmDialog, DateField, FormPanel, IconAction, Pager, Panel, RowActions, SearchField, StateChip, TableFrame, Tile, ToneAction } from '../components/ui';
 import type { Paged } from '../lib/api';
 import type { Tone } from '../components/ui';
 
@@ -387,7 +373,7 @@ export default function Enquiries({ fixedKind }: { fixedKind?: Kind } = {}) {
               label="Course interested"
               value={form.course_id}
               onChange={(e) => set('course_id', e.target.value)}
-              helperText="Leave blank and type it below if we do not run it yet."
+              slotProps={hint('Leave blank and type it below if we do not run it yet.', true)}
             >
               <MenuItem value="">Not on the list</MenuItem>
               {courseList.map((c) => (

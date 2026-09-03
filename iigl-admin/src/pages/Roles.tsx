@@ -17,14 +17,7 @@ import { isSuper, ROLE } from '../lib/portal';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import {
-  FormPanel,
-  IconAction,
-  Panel,
-  RowActions,
-  SearchField,
-  TableFrame,
-} from '../components/ui';
+import { hint, FormPanel, IconAction, Panel, RowActions, SearchField, TableFrame } from '../components/ui';
 
 /** True when the row's text contains the term. Case-insensitive; blank matches all. */
 const hits = (term: string, ...fields: (string | number | null | undefined)[]) => {
@@ -169,11 +162,11 @@ export default function Roles() {
             label="What it is for"
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
-            helperText={
+            slotProps={hint(
               isSuper(user)
                 ? 'A head office role: every laboratory can put somebody in it.'
-                : 'Your laboratory\'s own role. No other laboratory sees it.'
-            }
+                : "Your laboratory's own role. No other laboratory sees it.",
+            )}
           />
         </FormPanel>
       )}

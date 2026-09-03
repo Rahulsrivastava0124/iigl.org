@@ -27,6 +27,7 @@ import {
   RowActions,
   SearchField,
   TableFrame,
+  money,
 } from '../components/ui';
 
 /** True when the row's text contains the term. Case-insensitive; blank matches all. */
@@ -42,6 +43,7 @@ import ActiveIcon from '@mui/icons-material/ToggleOnOutlined';
 import InactiveIcon from '@mui/icons-material/ToggleOffOutlined';
 import AddIcon from '@mui/icons-material/AddOutlined';
 import EditIcon from '@mui/icons-material/EditOutlined';
+import ViewIcon from '@mui/icons-material/VisibilityOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 
 export default function Laboratories() {
@@ -114,30 +116,55 @@ export default function Laboratories() {
           <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>
-                <TableCell>Id</TableCell>
-                <TableCell>Emp ID</TableCell>
-                <TableCell>Name</TableCell>
+                {/*
+                  The laboratory's own code is its identifier here, not the
+                  row's primary key: LAB0001 is what people write on paper and
+                  what `employements.parent_id` points at, and #102 is a number
+                  only the database uses.
+                */}
+                <TableCell>Lab ID</TableCell>
+                <TableCell>Lab Name</TableCell>
+                <TableCell>Owner Name</TableCell>
                 <TableCell>Mobile</TableCell>
                 <TableCell>City</TableCell>
-                <TableCell align="right">Staff</TableCell>
+                <TableCell align="right">Rate</TableCell>
                 <TableCell align="right">Commission</TableCell>
+                <TableCell align="right">Paid</TableCell>
+                <TableCell align="right">Due</TableCell>
                 <TableCell>Active</TableCell>
-                {(mayEdit || mayDelete) && <TableCell />}
+                <TableCell />
               </TableRow>
             </TableHead>
             <TableBody>
               {rows.map((l) => (
                 <TableRow key={l.id} hover>
-                  <TableCell className="mono">#{l.id}</TableCell>
-                  <TableCell className="mono">{l.empid ?? '—'}</TableCell>
-                  <TableCell>{l.fullname}</TableCell>
+                  <TableCell className="mono">{l.empid ?? `#${l.id}`}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'normal', minWidth: 140 }}>{l.fullname}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'normal', minWidth: 140 }}>
+                    {l.owner_name ?? '—'}
+                  </TableCell>
                   <TableCell className="mono">{l.mobile}</TableCell>
                   <TableCell>{l.city ?? '—'}</TableCell>
                   <TableCell align="right" className="tabular">
-                    {l.staff || '—'}
+                    {l.commision == null ? '—' : `${l.commision}%`}
+                  </TableCell>
+                  {/*
+                    What the rate has earned on delivered orders, what has been
+                    approved against it, and the difference. The staff count
+                    that used to sit here is on the View dialog with the names.
+                  */}
+                  <TableCell align="right" className="tabular">
+                    {money(l.commission_accrued ?? 0)}
                   </TableCell>
                   <TableCell align="right" className="tabular">
-                    {l.commision == null ? '—' : `${l.commision}%`}
+                    {money(l.commission_paid ?? 0)}
+                  </TableCell>
+                  <TableCell
+                    align="right"
+                    className="tabular"
+                    sx={{ color: (l.commission_due ?? 0) > 0 ? 'warning.main' : undefined }}
+                  >
+                    {money(l.commission_due ?? 0)}
                   </TableCell>
                   <TableCell>
                     <Chip
@@ -151,9 +178,13 @@ export default function Laboratories() {
                       }}
                     />
                   </TableCell>
-                  {(mayEdit || mayDelete) && (
-                    <TableCell>
+                  <TableCell>
                       <RowActions>
+                        <IconAction
+                          label="Payments, staff and certificates"
+                          icon={ViewIcon}
+                          onClick={() => navigate(`/laboratories/${l.id}`)}
+                        />
                         {mayEdit && (
                           <IconAction
                             label="Edit laboratory"
@@ -187,8 +218,7 @@ export default function Laboratories() {
                           />
                         )}
                       </RowActions>
-                    </TableCell>
-                  )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

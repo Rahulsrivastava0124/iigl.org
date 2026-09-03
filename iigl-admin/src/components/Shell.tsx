@@ -49,7 +49,7 @@ import EnquiryIcon from '@mui/icons-material/SupportAgentOutlined';
 import SettingsIcon from '@mui/icons-material/SettingsOutlined';
 import LogoutIcon from '@mui/icons-material/LogoutOutlined';
 import { alpha } from '@mui/material/styles';
-import { BRAND } from '../lib/theme';
+import { BRAND, TONE } from '../lib/theme';
 import { useAuth } from '../lib/auth';
 import { useFetch } from '../lib/useFetch';
 import { ROLE, ROLE_NAMES } from '../lib/portal';
@@ -565,8 +565,8 @@ export default function Shell() {
               );
               if (items.length === 0) return null;
 
-              /** Whether the current location is this entry. */
-              const isHere = (item: Item) =>
+              /** Whether this entry could be the page you are on. */
+              const matches = (item: Item) =>
                 item.end
                   ? here === item.to
                   : here === item.to ||
@@ -574,7 +574,21 @@ export default function Shell() {
                       !item.to.includes('?') &&
                       !items.some((o) => o !== item && o.to.includes('?') && here === o.to));
 
-              const activeItem = items.find(isHere);
+              /*
+                One entry is current, never two.
+
+                A prefix match makes `/reports` claim `/reports/new` as well as
+                its own page, so on the certificate form both rows in the group
+                lit up white and the sidebar said you were in two places at
+                once. The longest match wins: `/reports/new` is the more
+                specific answer to where you are, and `/reports` goes back to
+                being the list it names.
+              */
+              const activeItem = items
+                .filter(matches)
+                .sort((a, b) => b.to.length - a.to.length)[0];
+
+              const isHere = (item: Item) => item === activeItem;
               // A group with one entry is that entry: a chevron that opens
               // nothing would promise more than is there.
               const single = items.length === 1;
@@ -939,7 +953,28 @@ export default function Shell() {
                 Your profile
               </MenuItem>
               <Divider />
-              <MenuItem onClick={signOut}>
+              {/*
+                Sign out is filled rather than listed. It is the one item in
+                this menu that ends the session, and a row of identical text
+                makes leaving as easy to hit by accident as opening a profile.
+                Red for the same reason a delete is red — the colour is the
+                warning, and it is the panel's own refused tone rather than a
+                new one.
+              */}
+              <MenuItem
+                onClick={signOut}
+                sx={{
+                  mx: 1,
+                  my: 0.5,
+                  borderRadius: 1,
+                  color: 'common.white',
+                  background: `linear-gradient(180deg, ${TONE.refused.main} 0%, #7d2134 100%)`,
+                  '& .MuiListItemIcon-root': { color: 'common.white' },
+                  '&:hover': {
+                    background: `linear-gradient(180deg, #7d2134 0%, ${TONE.refused.main} 100%)`,
+                  },
+                }}
+              >
                 <ListItemIcon>
                   <LogoutIcon fontSize="small" />
                 </ListItemIcon>

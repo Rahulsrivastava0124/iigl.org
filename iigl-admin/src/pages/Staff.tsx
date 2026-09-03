@@ -17,17 +17,7 @@ import { useFetch, useDebounced } from '../lib/useFetch';
 import { usePermissions } from '../lib/permissions';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import {
-  DateField,
-  IconAction,
-  Pager,
-  Panel,
-  PasswordField,
-  RowActions,
-  SearchField,
-  TableFrame,
-  YesNo,
-} from '../components/ui';
+import { hint, DateField, IconAction, Pager, Panel, PasswordField, RowActions, SearchField, TableFrame, YesNo } from '../components/ui';
 import FileField from '../components/FileField';
 import type { Paged } from '../lib/api';
 import { isSuper, ROLE } from '../lib/portal';
@@ -447,7 +437,7 @@ export default function Staff() {
                     placeholder="Eg. 18000"
                     value={form.salary}
                     onChange={(e) => setForm({ ...form, salary: e.target.value })}
-                    helperText="Monthly. Shown on their own profile."
+                    slotProps={hint('Monthly. Shown on their own profile.')}
                   />
                 </Grid>
                 <Grid size={{ xs: 12, md: 4 }}>
