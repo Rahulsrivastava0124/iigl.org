@@ -287,15 +287,55 @@ export default function FileField({
             />
           )}
 
-          {value && !busy && (isPdf(value) || broken) && (
-            <Stack spacing={0.5} sx={{ alignItems: 'center', px: 2, textAlign: 'center' }}>
-              {isPdf(value) ? (
+          {/*
+            A PDF shows its first page, the way a photograph shows itself. The
+            browser has a viewer of its own and needs no library to do it; the
+            chrome is turned off so the frame holds a page rather than a
+            scrollbar and a toolbar.
+
+            It does not take the pointer: the click belongs to the frame, which
+            is how a file is replaced, and the transparent target over it opens
+            the full preview exactly as clicking a photograph does. The icon
+            stays behind it as the fallback for a browser that will not render
+            one inline.
+          */}
+          {value && !busy && isPdf(value) && (
+            <>
+              <Stack spacing={0.5} sx={{ alignItems: 'center', px: 2, textAlign: 'center' }}>
                 <PdfIcon sx={{ fontSize: 40, color: 'text.disabled' }} />
-              ) : (
-                <MissingIcon sx={{ fontSize: 40, color: 'text.disabled' }} />
-              )}
+                <Typography variant="caption" color="text.secondary">
+                  PDF attached
+                </Typography>
+              </Stack>
+              <Box
+                component="iframe"
+                src={`${fileUrl(value)}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+                title="PDF preview"
+                sx={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  border: 0,
+                  pointerEvents: 'none',
+                  bgcolor: 'common.white',
+                }}
+              />
+              <Box
+                onClick={(e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  setPreviewing(true);
+                }}
+                sx={{ position: 'absolute', inset: 0, cursor: 'zoom-in' }}
+              />
+            </>
+          )}
+
+          {value && !busy && broken && !isPdf(value) && (
+            <Stack spacing={0.5} sx={{ alignItems: 'center', px: 2, textAlign: 'center' }}>
+              <MissingIcon sx={{ fontSize: 40, color: 'text.disabled' }} />
               <Typography variant="caption" color="text.secondary">
-                {isPdf(value) ? 'PDF attached' : 'File missing'}
+                File missing
               </Typography>
             </Stack>
           )}

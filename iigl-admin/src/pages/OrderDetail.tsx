@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, Link as RouterLink } from 'react-router-dom';
+import { useParams, useSearchParams, Link as RouterLink } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -18,7 +18,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useToast } from '../components/Toast';
-import { useFetch } from '../lib/useFetch';
+import { useDebounced, useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
 import { hint, money, toneColour, Dialog, Notice, OrderChip, Panel, Tile } from '../components/ui';
@@ -40,18 +40,47 @@ interface Quote {
   discount: number;
   payable_amount: number;
   amount_with_gst: number;
+  paid_amount: number;
+  balance_due: number;
   unpriced_count: number;
   certificates: QuoteLine[];
+}
+
+/** One collection against the order — `transactions`, newest first. */
+interface Payment {
+  id: number;
+  amount: string | number;
+  pay_mode: string | null;
+  transaction_no: string | null;
+  created_at: string | null;
+  received_by_name: string | null;
 }
 
 export default function OrderDetail() {
   const toast = useToast();
   const { id } = useParams();
   const order = useFetch<{ data: any }>(`/orders/${id}`);
-  const [discount, setDiscount] = useState(0);
-  const quote = useFetch<{ data: Quote }>(`/orders/${id}/quote?discount=${discount}`);
+  /*
+    Held as the text in the box, not as a number.
 
-  const [settling, setSettling] = useState(false);
+    `Number('') || 0` is zero, so a numeric state refilled the field with "0"
+    the instant it was cleared — you could never type a fresh figure, only
+    append to the nought already there, which is what made this read as broken.
+    Empty is a real state and means "no discount typed": the query then leaves
+    the parameter off, and the API answers with the discount the order already
+    carries.
+  */
+  const [discount, setDiscount] = useState('');
+  const settled = useDebounced(discount);
+  const quote = useFetch<{ data: Quote }>(
+    `/orders/${id}/quote${settled.trim() === '' ? '' : `?discount=${Number(settled) || 0}`}`,
+  );
+
+  /* `?settle=1` — the Deliver button on the list, which sends whoever pressed
+     it straight to the dialog rather than to a page they then have to read for
+     the control they already asked for. */
+  const [params] = useSearchParams();
+  const [settling, setSettling] = useState(params.get('settle') === '1');
   const [paid, setPaid] = useState('');
   const [payMode, setPayMode] = useState('cash');
   const [busy, setBusy] = useState(false);
@@ -82,19 +111,43 @@ export default function OrderDetail() {
   const writtenFor = (it: any) =>
     (writtenPerItem.get(String(it.id)) ?? 0) * (it.smart_card + it.classic_card);
 
+  const payments: Payment[] = o?.payments ?? [];
+  const collected = payments.reduce((t, p) => t + Number(p.amount ?? 0), 0);
+
   const owed = items.reduce((t, it) => t + owedFor(it), 0);
   const written = items.reduce((t, it) => t + writtenFor(it), 0);
 
+  /** Takes the money. Handing the order over is its own button. */
   const settle = async () => {
     setBusy(true);
     try {
-      await api.post(`/orders/${id}/deliver`, {
-        discount,
+      await api.post(`/orders/${id}/settle`, {
+        // What the quote was priced at, so the bill written matches the tiles.
+        discount: q?.discount ?? 0,
         paid_amount: paid === '' ? undefined : Number(paid),
         pay_mode: payMode,
       });
       setSettling(false);
-      toast.ok('Order settled and marked delivered.');
+      toast.ok('Payment recorded.');
+      order.reload();
+      quote.reload();
+    } catch (err) {
+      toast.error(messageOf(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Hands it over. Separate from the money on purpose: an order can be paid for
+   * days before it is collected, and one with dues outstanding is still handed
+   * over — that is what the dues list is.
+   */
+  const deliver = async () => {
+    setBusy(true);
+    try {
+      await api.post(`/orders/${id}/deliver`, {});
+      toast.ok('Order delivered.');
       order.reload();
       quote.reload();
     } catch (err) {
@@ -117,6 +170,38 @@ export default function OrderDetail() {
   return (
     <>
 
+      {/*
+        The money, at the head of the page.
+
+        Three figures and only these three: the bill, what has been taken
+        against it, and what is left. Billed-before-GST, the discount and the
+        payable are the arithmetic that produces the first — the discount has
+        its own box and the breakdown is in the table below, so as tiles they
+        were four numbers to read before reaching the one anybody wanted.
+
+        Coloured, because each is a state as much as a figure: money owed reads
+        red until it is not owed, and a settled order is green. A quarter of the
+        row each, so they read as a summary above the page rather than as a
+        band across it.
+      */}
+      {q && q.certificates.length > 0 && (
+        <Grid container spacing={1.5} sx={{ mb: 2 }}>
+          <Grid size={{ xs: 12, sm: 4, md: 3 }}>
+            <Tile label="Billed with GST" value={money(q.amount_with_gst)} fill="brand" />
+          </Grid>
+          <Grid size={{ xs: 6, sm: 4, md: 3 }}>
+            <Tile label="Paid" value={money(q.paid_amount)} fill="settled" />
+          </Grid>
+          <Grid size={{ xs: 6, sm: 4, md: 3 }}>
+            <Tile
+              label="Due"
+              value={money(q.balance_due)}
+              fill={q.balance_due > 0 ? 'refused' : 'settled'}
+            />
+          </Grid>
+        </Grid>
+      )}
+
       {/* Who the order belongs to travels with the first panel now that the
           page carries no heading. The breadcrumb already names the order, so
           this says the part the trail cannot: whose it is and where it is. */}
@@ -127,7 +212,8 @@ export default function OrderDetail() {
             <span>
               {o.customer_name} · {o.mobile} · taken {o.order_date}
             </span>
-            <OrderChip status={o.status} />
+            {/* Ready reads the same here as it does on the list. */}
+            <OrderChip status={o.status} ready={owed > 0 && written >= owed} />
           </Box>
         }
         actions={
@@ -145,19 +231,34 @@ export default function OrderDetail() {
               Invoice
             </Button>
             {o.status !== 'delivered' && (
-              /*
-                Not settleable until something has been certified. Without this
-                the button was live on an order priced at zero, and settling it
-                writes that zero to the order as its bill and marks it
-                delivered — a mistake with no undo on this screen.
-              */
-              <Button
-                variant="contained"
-                onClick={() => setSettling(true)}
-                disabled={!q || written === 0}
-              >
-                Settle and deliver
-              </Button>
+              <>
+                {/*
+                  Not payable until something has been certified. Without this
+                  the button was live on an order priced at zero, and settling
+                  it writes that zero to the order as its bill.
+                */}
+                <Button
+                  variant="contained"
+                  onClick={() => setSettling(true)}
+                  disabled={!q || written === 0}
+                >
+                  Pay
+                </Button>
+                {/*
+                  Handing it over is its own act, and the one that closes the
+                  order — so it waits until every certificate it was taken for
+                  is written. The money may still be owing: an order delivered
+                  with dues is what the dues list is for.
+                */}
+                <Button
+                  variant="contained"
+                  color="success"
+                  onClick={deliver}
+                  disabled={busy || owed === 0 || written < owed}
+                >
+                  Deliver Order
+                </Button>
+              </>
             )}
           </Stack>
         }
@@ -218,8 +319,11 @@ export default function OrderDetail() {
             label="Discount"
             type="number"
             value={discount}
-            onChange={(e) => setDiscount(Number(e.target.value) || 0)}
-            slotProps={{ htmlInput: { min: 0 } }}
+            onChange={(e) => setDiscount(e.target.value)}
+            placeholder={q ? String(q.discount) : '0'}
+            /* Nothing to take a discount off until a certificate is written. */
+            disabled={!q || q.certificates.length === 0}
+            slotProps={{ htmlInput: { min: 0 }, inputLabel: { shrink: true } }}
             sx={{ width: 130 }}
           />
         }
@@ -253,11 +357,14 @@ export default function OrderDetail() {
               <TableBody>
                 {q.certificates.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} sx={{ py: 3, color: 'text.secondary' }}>
-                      No certificate has been written against this order yet, so there is nothing
-                      to price. An order is billed per certificate — the weight band is chosen by
-                      the carat weight each one records — so the totals below stay at zero until
-                      the first is issued. {written} of {owed} written.
+                    {/* Table cells are nowrap by theme, which ran this sentence
+                        off the right edge of the panel. */}
+                    <TableCell
+                      colSpan={6}
+                      sx={{ py: 3, color: 'text.secondary', whiteSpace: 'normal' }}
+                    >
+                      Nothing to price yet: an order is billed per certificate, and the weight band
+                      comes from the carat weight each one records. {written} of {owed} written.
                     </TableCell>
                   </TableRow>
                 )}
@@ -289,21 +396,6 @@ export default function OrderDetail() {
               </TableBody>
             </Table>
 
-            <Grid container spacing={1.5} sx={{ p: 2 }}>
-              <Grid size={{ xs: 6, md: 3 }}>
-                <Tile label="Billed" value={money(q.total_amount)} />
-              </Grid>
-              <Grid size={{ xs: 6, md: 3 }}>
-                <Tile label="Discount" value={money(q.discount)} />
-              </Grid>
-              <Grid size={{ xs: 6, md: 3 }}>
-                <Tile label="Payable" value={money(q.payable_amount)} />
-              </Grid>
-              <Grid size={{ xs: 6, md: 3 }}>
-                <Tile label="With 18% GST" value={money(q.amount_with_gst)} />
-              </Grid>
-            </Grid>
-
             {q.unpriced_count > 0 && (
               <Box sx={{ px: 2, pb: 2 }}>
                 <Notice kind="error" sx={{ mb: 0 }}>
@@ -317,6 +409,47 @@ export default function OrderDetail() {
         )}
       </Panel>
 
+      {/*
+        What has been taken, and when. The order's columns hold the running
+        totals and say nothing about how they got there — which is the question
+        somebody asks when a customer pays in parts across three visits.
+      */}
+      {payments.length > 0 && (
+        <>
+          <Typography variant="h2" sx={{ mt: 4, mb: 1.5 }}>
+            Payments
+          </Typography>
+          <Panel title="Taken against this order" count={`${money(collected)} collected`}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>When</TableCell>
+                  <TableCell align="right">Amount</TableCell>
+                  <TableCell>Mode</TableCell>
+                  <TableCell>Transaction no.</TableCell>
+                  <TableCell>Taken by</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {payments.map((p: Payment) => (
+                  <TableRow key={p.id} hover>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                      {String(p.created_at ?? '').slice(0, 16).replace('T', ' ') || '—'}
+                    </TableCell>
+                    <TableCell align="right" className="tabular">
+                      {money(p.amount)}
+                    </TableCell>
+                    <TableCell>{p.pay_mode ?? '—'}</TableCell>
+                    <TableCell className="mono">{p.transaction_no ?? '—'}</TableCell>
+                    <TableCell>{p.received_by_name ?? '—'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Panel>
+        </>
+      )}
+
       <Typography sx={{ mt: 3 }}>
         <Link component={RouterLink} to="/orders">
           Back to orders
@@ -325,22 +458,32 @@ export default function OrderDetail() {
 
       {settling && q && (
         <Dialog
-          title="Settle and deliver"
+          title="Take payment"
           onClose={() => setSettling(false)}
           onSubmit={settle}
-          submitLabel="Settle"
+          submitLabel="Pay"
           busy={busy}
         >
           <Typography variant="body2" sx={{ mb: 2 }}>
-            Payable including GST is <strong>{money(q.amount_with_gst)}</strong>. Anything less is
-            recorded as dues.
+            {q.paid_amount > 0 ? (
+              <>
+                {money(q.paid_amount)} of {money(q.amount_with_gst)} has been taken.{' '}
+                <strong>{money(q.balance_due)}</strong> is still owed; anything less is recorded as
+                dues.
+              </>
+            ) : (
+              <>
+                Payable including GST is <strong>{money(q.amount_with_gst)}</strong>. Anything less
+                is recorded as dues.
+              </>
+            )}
           </Typography>
           <Stack spacing={2}>
             <TextField
               label="Amount collected"
               type="number"
               value={paid}
-              placeholder={String(q.amount_with_gst)}
+              placeholder={String(q.balance_due)}
               onChange={(e) => setPaid(e.target.value)}
               slotProps={{
                 htmlInput: { min: 0 },

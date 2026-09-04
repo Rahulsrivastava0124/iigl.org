@@ -607,7 +607,9 @@ export default function Attributes() {
                             open: true,
                             id: a.id,
                             attr_name: a.attr_name,
-                            order_no: String(a.order_no),
+                            // Never `String(null)`: the column is nullable, and
+                            // the word "null" in the box is what gets saved back.
+                            order_no: a.order_no == null ? '' : String(a.order_no),
                             category_id: String(a.category_id),
                             subcategory_id: String(a.subcategory_id),
                             show_in_smart_card: Boolean(a.show_in_smart_card),

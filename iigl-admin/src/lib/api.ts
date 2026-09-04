@@ -244,7 +244,8 @@ export interface Attribute {
   show_image: number;
   is_opensource: number;
   is_required: number;
-  order_no: number;
+  /** Nullable in the database: an attribute nobody has ordered has none. */
+  order_no: number | null;
 }
 
 export interface Price {

@@ -4,7 +4,11 @@ import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
 import { empidOf, requireLabScope, ROLE } from '../middleware/auth.js';
 import { ddmmyyyy, live, liveJoined } from '../services/order.service.js';
-import { TRANSACTION_TYPE } from '../services/commission.service.js';
+import {
+  accruedByLab,
+  COMMISSION_TYPE,
+  TRANSACTION_TYPE,
+} from '../services/commission.service.js';
 
 export const dashboardRoutes = Router();
 dashboardRoutes.use(requireLabScope);
@@ -49,14 +53,23 @@ dashboardRoutes.get(
     };
 
     /**
-     * Money is summed over delivered orders only, and the billed figure comes
-     * from payable_amt rather than total_amount — matching
+     * Money is summed over orders that have been billed, and the billed figure
+     * comes from payable_amt rather than total_amount — matching
      * Admin\DashboardController@adminindex.
      *
      * The distinction matters: total_amount is the list price before discount,
      * payable_amt is what was actually charged. Summing the wrong one across
-     * every order rather than the delivered ones overstated by 7,808 against
-     * the Laravel figure.
+     * every order rather than the billed ones overstated by 7,808 against the
+     * Laravel figure.
+     *
+     * **"Billed", not "delivered".** Laravel took the money and handed the
+     * order over in one press, so `delivered` was a fair proxy for `settled`
+     * and that is what this summed. They are two acts now — a customer pays on
+     * account and collects on Friday — and an order paid for this morning
+     * belongs in today's takings whether or not anybody has come for it. Every
+     * row Laravel counted is still counted: a delivered order was settled, and
+     * a legacy one that was never given a `payable_amt` is caught by the
+     * status.
      */
     const sum = async (
       column: 'payable_amt' | 'paid_amount' | 'dues_amount',
@@ -66,7 +79,9 @@ dashboardRoutes.get(
         db
           .selectFrom('orders')
           .select(db.fn.sum<number>(column).as('total'))
-          .where('status', '=', 'delivered'),
+          .where((eb) =>
+            eb.or([eb('status', '=', 'delivered'), eb('payable_amt', 'is not', null)]),
+          ),
       );
       if (todayOnly) q = q.where('order_date', '=', today);
       const row = await q.executeTakeFirstOrThrow();
@@ -110,29 +125,17 @@ dashboardRoutes.get(
     };
 
     /**
-     * Commission a laboratory has accrued: its own rate applied to what it
-     * collected. The rate is per laboratory, so this is summed laboratory by
-     * laboratory rather than by applying a single rate to the whole
-     * collection.
+     * Commission a laboratory has accrued, on its own terms — a percentage of
+     * what it collected, or a flat amount for each piece it certified. Both
+     * the rate and the reading are per laboratory, so this is summed
+     * laboratory by laboratory rather than by applying one rate to the whole
+     * collection. The arithmetic itself lives in `accruedByLab`, which the
+     * laboratory list and one laboratory's page read too: four screens report
+     * this figure, and four copies of the sum is how they came to disagree.
      */
     const commissionAccrued = async () => {
-      let q = liveJoined(
-        db.selectFrom('orders').innerJoin('users', 'users.id', 'orders.lab_id'),
-      )
-        .select([
-          'users.commision as rate',
-          db.fn.sum<number>('orders.paid_amount').as('collected'),
-        ])
-        .where('orders.status', '=', 'delivered')
-        .groupBy(['orders.lab_id', 'users.commision']);
-      if (!isAdmin) q = q.where('orders.lab_id', '=', labId);
-      const rows = await q.execute();
-      return round2(
-        rows.reduce(
-          (total, r) => total + ((Number(r.collected) || 0) * (Number(r.rate) || 0)) / 100,
-          0,
-        ),
-      );
+      const byLab = await accruedByLab(isAdmin ? undefined : labId!);
+      return round2([...byLab.values()].reduce((total, n) => total + n, 0));
     };
 
     /**
@@ -247,6 +250,24 @@ dashboardRoutes.get(
         return Number(row.total ?? 0);
       };
 
+      /**
+       * Money the laboratory took at its own counter.
+       *
+       * `collectedByStaff` reads collections received by the laboratory's
+       * *employees*, through `employements.parent_id` — and a laboratory is not
+       * on its own books, so everything it took itself counted nowhere and both
+       * wallet tiles stayed at zero however much came in.
+       */
+      const collectedByLab = async () => {
+        const row = await db
+          .selectFrom('transactions')
+          .select(db.fn.sum<number>('amount').as('total'))
+          .where('transaction_type', '=', TRANSACTION_TYPE.ORDER_COLLECTION)
+          .where('received_by', '=', me)
+          .executeTakeFirstOrThrow();
+        return Number(row.total ?? 0);
+      };
+
       /** Approved wallet transfers into this laboratory. */
       const walletIn = async () => {
         const row = await db
@@ -294,20 +315,40 @@ dashboardRoutes.get(
        * delivered orders. The two tiles are not the same measure at two scales,
        * and never were.
        */
+      /** Orders this laboratory took money on today. */
+      const settledToday = () =>
+        db
+          .selectFrom('transactions')
+          .select('order_id')
+          .where('transaction_type', '=', TRANSACTION_TYPE.ORDER_COLLECTION)
+          .where('created_at', '>=', startOfToday)
+          .where('created_at', '<', startOfTomorrow);
+
       const saleToday = async () => {
         const row = await live(db.selectFrom('orders'))
           .select(db.fn.sum<number>('payable_amt').as('total'))
           .where('lab_id', '=', labId)
-          .where('delivery_date', 'like', `${isoToday}%`)
+          // Billed today, or handed over today. Paying and delivering are two
+          // acts, and an order billed this morning is today's sale whether or
+          // not the customer has been back for it.
+          .where((eb) =>
+            eb.or([
+              eb('delivery_date', 'like', `${isoToday}%`),
+              eb('id', 'in', settledToday()),
+            ]),
+          )
           .executeTakeFirstOrThrow();
         return Number(row.total ?? 0);
       };
 
       /**
-       * Taken in today, against orders delivered today.
+       * Taken in today: money dated by when it was taken.
        *
-       * **Quirk, carried over:** both dates must be today — an order delivered
-       * yesterday and paid this morning appears on neither day's tile.
+       * Laravel also required the order to have been *delivered* today, which
+       * made sense while paying and delivering were one press and made none
+       * afterwards — an order delivered yesterday and paid this morning
+       * appeared on neither day's tile. The date on the payment is the date the
+       * money arrived, and that is the whole of it.
        */
       const paidToday = async () => {
         const row = await liveJoined(
@@ -317,7 +358,6 @@ dashboardRoutes.get(
         )
           .select(db.fn.sum<number>('transactions.amount').as('total'))
           .where('orders.lab_id', '=', labId)
-          .where('orders.delivery_date', 'like', `${isoToday}%`)
           // `created_at` is a datetime rather than the text the date columns
           // hold, so today is a half-open range on it, not a prefix match.
           .where('transactions.created_at', '>=', startOfToday)
@@ -333,6 +373,7 @@ dashboardRoutes.get(
         classicGenerated,
         collected,
         walletCredit,
+        collectedHere,
         transferred,
         smartToday,
         classicToday,
@@ -346,6 +387,7 @@ dashboardRoutes.get(
         generated('classic_card'),
         collectedByStaff(),
         walletIn(),
+        collectedByLab(),
         sentToHeadOffice(),
         ordered('smart_card', true),
         ordered('classic_card', true),
@@ -353,27 +395,58 @@ dashboardRoutes.get(
         paidToday(),
         db
           .selectFrom('users')
-          .select('commision')
+          .select(['commision', 'commission_type'])
           .where('id', '=', me)
           .executeTakeFirst()
-          .then((r) => Number(r?.commision ?? 0)),
+          .then((r) => ({
+            rate: Number(r?.commision ?? 0),
+            perPiece: r?.commission_type === COMMISSION_TYPE.PER_PIECE,
+          })),
       ]);
 
       // What is left in the laboratory's own wallet after what it has passed
-      // on, and the head-office share of that.
-      const myWallet = round2(walletCredit - transferred);
+      // on: what its staff have handed in, plus what it took at its own
+      // counter, less what it has sent to head office.
+      const myWallet = round2(walletCredit + collectedHere - transferred);
+
+      /*
+        What head office is owed, on this laboratory's own terms.
+
+        On a percentage the commission is a share of money, so it is taken from
+        what the laboratory is holding — the Laravel formula, unchanged.
+
+        On per-piece terms money is not the base at all: the agreement is a flat
+        amount for every piece certified, and a share of the wallet is not a
+        figure anybody agreed to. That case reads the same accrual the rest of
+        the panel does, so this tile and the laboratory list cannot disagree
+        about what the same franchise owes.
+      */
+      const adminCommission = rate.perPiece
+        ? ((await accruedByLab(labId!)).get(labId!) ?? 0)
+        : round2((myWallet * rate.rate) / 100);
 
       return {
         cards_ordered: smartOrdered + classicOrdered,
         cards_generated: smartGenerated + classicGenerated,
         smart_generated: smartGenerated,
         classic_generated: classicGenerated,
-        collected: round2(collected),
-        // Never negative: staff holding less than has been transferred in is a
-        // float, not a debt.
+        /*
+          Everything taken in for this laboratory: what its staff collected and
+          what it collected itself at its own counter.
+
+          `collectedByStaff` reads collections received by the laboratory's
+          employees, through `employements.parent_id` — and a laboratory is not
+          on its own books. Paid Amount therefore read zero however much the
+          counter had taken, and the Dues tile beside it, which is the sale less
+          this, showed the whole bill as outstanding.
+        */
+        collected: round2(collected + collectedHere),
+        // Staff-held money only, and never negative: staff holding less than
+        // has been transferred in is a float, not a debt. What the laboratory
+        // took itself is in its own wallet, not in theirs.
         employee_wallet: round2(Math.max(0, collected - walletCredit)),
         my_wallet: myWallet,
-        admin_commission: round2((myWallet * rate) / 100),
+        admin_commission: adminCommission,
         today: {
           cards_ordered: smartToday + classicToday,
           sale: round2(todaySaleLab),

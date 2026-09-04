@@ -183,6 +183,9 @@ export async function accruedByLab(
   let ratesQuery = exec.selectFrom('users').select(['id', 'commision', 'commission_type']);
   if (labId) ratesQuery = ratesQuery.where('id', '=', labId);
 
+  // A deleted order is not earnings, on either set of terms. Qualified as
+  // `orders.deleted_at` because the second query reaches the table through a
+  // join, where the bare column name is ambiguous.
   let collectedQuery = exec
     .selectFrom('orders')
     .where('orders.deleted_at', 'is', null)

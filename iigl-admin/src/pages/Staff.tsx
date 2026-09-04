@@ -66,6 +66,8 @@ interface Role {
   id: number;
   role_name: string;
   description: string | null;
+  /** NULL is head office's, shared with everybody; anything else is one laboratory's. */
+  owner_id: number | null;
 }
 
 /**
@@ -98,7 +100,9 @@ interface Account {
 const BLANK_ACCOUNT = {
   open: false,
   id: undefined as number | undefined,
-  role_id: '3',
+  // Chosen, never assumed: what an employee may do is the first decision on
+  // this form, and the list it is chosen from differs by who is hiring.
+  role_id: '',
   fullname: '',
   mobile: '',
   email: '',
@@ -160,6 +164,24 @@ export default function Staff() {
     id === null
       ? 'No role'
       : (roles.data?.data.find((r) => r.id === id)?.role_name ?? `role ${id}`);
+
+  /**
+   * The roles this account may hire into.
+   *
+   * Head office hires into its own shared roles — Team and anything it has
+   * added — and never into super admin or Laboratory, which are what an account
+   * *is* rather than a job somebody is given.
+   *
+   * A laboratory hires into the roles it owns, and only those. Team is head
+   * office's: shared with every franchise, so a laboratory cannot say what it
+   * allows, and offering it here hands somebody a job description they have no
+   * control over. "No role" is gone with it — an account with no role holds
+   * only the grants somebody remembers to give it one by one, which is not a
+   * thing to offer in a dropdown by accident.
+   */
+  const assignable = (roles.data?.data ?? []).filter((r) =>
+    admin ? r.owner_id === null && r.id > ROLE.ADMIN : r.owner_id !== null,
+  );
 
   /**
    * One form for both jobs, on the page rather than in a dialog. `id` is what
@@ -301,9 +323,15 @@ export default function Staff() {
   };
 
   /**
-   * Filter to show only super admin's employees (Head office).
+   * Head office's own employees, on head office's screen.
+   *
+   * `/users/staff` returns the whole network to head office, which wants only
+   * the people it employs itself here — a laboratory's staff belong to that
+   * laboratory's page. For a laboratory the endpoint has already scoped the
+   * rows to its own employees, and applying this filter to them left the list
+   * empty: every one of them is employed by a laboratory, not by head office.
    */
-  const filteredRows = rows.filter((r) => r.employer_role_id === ROLE.SUPER);
+  const filteredRows = admin ? rows.filter((r) => r.employer_role_id === ROLE.SUPER) : rows;
 
   return (
     <>
@@ -327,14 +355,16 @@ export default function Staff() {
                     onChange={(e) => setForm({ ...form, role_id: e.target.value })}
                     required
                   >
-                    {(roles.data?.data ?? [])
-                      .filter((r) => r.id > 2)
-                      .map((r) => (
-                        <MenuItem key={r.id} value={String(r.id)}>
-                          {r.role_name}
-                        </MenuItem>
-                      ))}
-                    <MenuItem value="">No role</MenuItem>
+                    {assignable.map((r) => (
+                      <MenuItem key={r.id} value={String(r.id)}>
+                        {r.role_name}
+                      </MenuItem>
+                    ))}
+                    {assignable.length === 0 && (
+                      <MenuItem value="" disabled>
+                        No roles yet — make one in Roles &amp; Permissions
+                      </MenuItem>
+                    )}
                   </TextField>
                 </Grid>
                 <Grid size={{ xs: 12, md: 4 }}>
@@ -487,6 +517,11 @@ export default function Staff() {
                     bucket="documentation"
                     value={form.adhar_photo}
                     onChange={(url) => setForm({ ...form, adhar_photo: url ?? '' })}
+                    /* Portrait, like every other document scan in the panel: an
+                       Aadhaar card is photographed or scanned upright, and an
+                       unshaped zone renders as a wide bar next to the square
+                       photo field beside it. */
+                    ratio="3 / 4"
                   />
                 </Grid>
               </Grid>

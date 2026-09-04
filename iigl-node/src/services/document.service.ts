@@ -95,8 +95,12 @@ export async function orderDocumentHtml(orderId: number, kind: DocumentKind): Pr
       discount: quote.discount,
       payable_amount: quote.payable_amount,
       amount_with_gst: quote.amount_with_gst,
-      paid: Number(order.paid_amount ?? 0),
-      dues: Number(order.dues_amount ?? 0),
+      // From the quote, not from the order's columns: those hold what the last
+      // settlement wrote, and an order paid in parts has had several. The
+      // quote sums the collections themselves, so the invoice cannot disagree
+      // with the payment history it is printed from.
+      paid: quote.paid_amount,
+      dues: quote.balance_due,
     };
   }
 

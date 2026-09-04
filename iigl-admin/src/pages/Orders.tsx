@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -28,12 +28,13 @@ import {
   RowActions,
   SearchField,
   TableFrame,
-  money,
 } from '../components/ui';
 import { apiUrl } from '../lib/config';
 import type { Order, Paged } from '../lib/api';
+import NextIcon from '@mui/icons-material/ArrowForwardOutlined';
 import OpenIcon from '@mui/icons-material/VisibilityOutlined';
 import ReceiptIcon from '@mui/icons-material/ReceiptLongOutlined';
+import EditIcon from '@mui/icons-material/EditOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
 
 export default function Orders() {
@@ -142,14 +143,18 @@ export default function Orders() {
                 <TableCell align="right">Items</TableCell>
                 <TableCell align="right">Reports</TableCell>
                 <TableCell>Assigned to</TableCell>
-                <TableCell align="right">Billed</TableCell>
-                <TableCell align="right">Paid</TableCell>
-                <TableCell align="right">Dues</TableCell>
                 <TableCell />
               </TableRow>
             </TableHead>
             <TableBody>
-              {rows.map((o) => (
+              {rows.map((o) => {
+                /* Every certificate written, and not yet handed over: nothing
+                   is left to do on it but deliver. */
+                const ready =
+                  o.status === 'preparing' &&
+                  o.total_reports > 0 &&
+                  o.reports_generated >= o.total_reports;
+                return (
                 <TableRow key={o.id} hover>
                   <TableCell>{o.order_date}</TableCell>
                   <TableCell className="mono">{o.order_no}</TableCell>
@@ -158,7 +163,7 @@ export default function Orders() {
                   </TableCell>
                   <TableCell className="mono">{o.mobile}</TableCell>
                   <TableCell>
-                    <OrderChip status={o.status} />
+                    <OrderChip status={o.status} ready={ready} />
                   </TableCell>
                   <TableCell align="right" className="tabular">
                     {o.total_items}
@@ -194,15 +199,6 @@ export default function Orders() {
                       </Box>
                     )}
                   </TableCell>
-                  <TableCell align="right" className="tabular">
-                    {money(o.total_amount)}
-                  </TableCell>
-                  <TableCell align="right" className="tabular">
-                    {money(o.paid_amount)}
-                  </TableCell>
-                  <TableCell align="right" className="tabular">
-                    {money(o.dues_amount)}
-                  </TableCell>
                   <TableCell>
                     {/*
                       View stays on the row; the receipt and the delete go
@@ -210,7 +206,51 @@ export default function Orders() {
                       anything marked `overflow` or `danger`.
                     */}
                     <RowActions>
+                      {/*
+                        One control, and which one depends on what the order is
+                        waiting for. While certificates are outstanding the
+                        arrow carries on with the work; once they are all
+                        written the only thing left is to take the money and
+                        hand it over, so the arrow gives way to Pay — a disabled
+                        arrow beside a finished order is a control that exists
+                        to say no.
+
+                        Settling happens on the order's own page, where the
+                        amount payable is in front of whoever takes the money.
+                      */}
+                      {ready ? (
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="success"
+                          component={RouterLink}
+                          to={`/orders/${o.id}?settle=1`}
+                          sx={{ mr: 0.5 }}
+                        >
+                          Pay
+                        </Button>
+                      ) : (
+                        <IconAction
+                          label={
+                            o.reports_generated >= o.total_reports
+                              ? 'Every certificate on this order is written'
+                              : 'Write the next certificate'
+                          }
+                          icon={NextIcon}
+                          disabled={o.reports_generated >= o.total_reports}
+                          to={`/reports/new?order=${o.id}`}
+                        />
+                      )}
                       <IconAction label="View order" icon={OpenIcon} to={`/orders/${o.id}`} />
+                      {/* Amending is occasional and it rewrites a record
+                          somebody may already have a receipt for, so it sits
+                          behind the ⋯ with the other second thoughts. */}
+                      <IconAction
+                        label="Edit order"
+                        icon={EditIcon}
+                        overflow
+                        to={`/orders/${o.id}/edit`}
+                      />
                       <IconAction
                         label="Receipt"
                         icon={ReceiptIcon}
@@ -238,7 +278,8 @@ export default function Orders() {
                     </RowActions>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </TableFrame>

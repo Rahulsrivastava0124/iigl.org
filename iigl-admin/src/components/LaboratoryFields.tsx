@@ -102,6 +102,7 @@ export interface LabForm {
   commission_type: string;
   registration_fee: string;
   profile_photo: string;
+  company_logo: string;
   signature: string;
   /** The attachment list. JSON on the record, an array here. */
   documents: LabDocument[];
@@ -143,6 +144,7 @@ export const BLANK_LAB: LabForm = {
   commission_type: 'percent',
   registration_fee: '',
   profile_photo: '',
+  company_logo: '',
   signature: '',
   documents: [],
 };
@@ -250,6 +252,7 @@ export function labPatch(form: LabForm): Record<string, string | number | null |
     commission_type: form.commission_type === 'per_pc' ? 'per_pc' : 'percent',
     registration_fee: form.registration_fee === '' ? null : Number(form.registration_fee),
     profile_photo: text(form.profile_photo),
+    company_logo: text(form.company_logo),
     signature: text(form.signature),
     // Sent as an array; the API validates each entry and stores the JSON.
     documents: form.documents,
@@ -858,6 +861,19 @@ export default function LaboratoryFields({ form, set, extra }: Props) {
               fill
               value={form.profile_photo || null}
               onChange={(v) => set('profile_photo', v ?? '')}
+            />
+          </Grid>
+          <Grid size={upright}>
+            <FileField
+              label="Logo"
+              bucket="employee"
+              // The franchise's own mark, for its letterhead and its cards. A
+              // logo is drawn to fit rather than cropped to a shape: cropping
+              // one is the difference between a brand and a piece of it.
+              ratio="1 / 1"
+              fill
+              value={form.company_logo || null}
+              onChange={(v) => set('company_logo', v ?? '')}
             />
           </Grid>
           <Grid size={wide}>

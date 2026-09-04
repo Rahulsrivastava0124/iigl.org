@@ -57,6 +57,8 @@ export interface CreateOrderInput {
   show_name_in_card?: number;
   show_image_in_card?: number;
   show_name_input?: string | null;
+  /** The picture to print on the card, when one was handed over. */
+  show_image_in_card_file?: string | null;
   items: OrderItemInput[];
 }
 
@@ -96,6 +98,7 @@ export function validateOrderInput(body: unknown): CreateOrderInput {
     show_name_in_card: b.show_name_in_card ? 1 : 0,
     show_image_in_card: b.show_image_in_card ? 1 : 0,
     show_name_input: b.show_name_input ? String(b.show_name_input) : null,
+    show_image_in_card_file: b.show_image_in_card_file ? String(b.show_image_in_card_file) : null,
     items: parsed,
   };
 }
@@ -150,6 +153,7 @@ export async function createOrder(user: SessionUser, input: CreateOrderInput) {
           show_name_in_card: input.show_name_in_card ?? 0,
           show_image_in_card: input.show_image_in_card ?? 0,
           show_name_input: input.show_name_input,
+          show_image_in_card_file: input.show_image_in_card_file,
           created_at: new Date(),
           updated_at: new Date(),
         })
@@ -187,9 +191,12 @@ export interface UpdateOrderInput {
   gst?: string | null;
   address?: string | null;
   dues_date?: string | null;
+  /** Who the work is with. Reassigning it is an amendment like any other. */
+  assigned_to?: number | null;
   show_name_in_card?: number;
   show_image_in_card?: number;
   show_name_input?: string | null;
+  show_image_in_card_file?: string | null;
   /** When present, replaces the item list. An item with an id is updated. */
   items?: Array<OrderItemInput & { id?: number }>;
 }
@@ -206,8 +213,19 @@ export function validateUpdateOrderInput(body: unknown): UpdateOrderInput {
     if (!b.mobile) throw badRequest('Mobile number cannot be blank.');
     out.mobile = String(b.mobile);
   }
-  for (const key of ['alt_mobile', 'email', 'gst', 'address', 'dues_date', 'show_name_input'] as const) {
+  for (const key of [
+    'alt_mobile',
+    'email',
+    'gst',
+    'address',
+    'dues_date',
+    'show_name_input',
+    'show_image_in_card_file',
+  ] as const) {
     if (b[key] !== undefined) out[key] = b[key] == null ? null : String(b[key]);
+  }
+  if (b.assigned_to !== undefined) {
+    out.assigned_to = b.assigned_to === null || b.assigned_to === '' ? null : Number(b.assigned_to);
   }
   if (b.show_name_in_card !== undefined) out.show_name_in_card = b.show_name_in_card ? 1 : 0;
   if (b.show_image_in_card !== undefined) out.show_image_in_card = b.show_image_in_card ? 1 : 0;
@@ -259,6 +277,8 @@ export async function updateOrder(orderId: number, input: UpdateOrderInput) {
       'show_name_input',
       'show_name_in_card',
       'show_image_in_card',
+      'show_image_in_card_file',
+      'assigned_to',
     ] as const) {
       if (input[key] !== undefined) patch[key] = input[key];
     }

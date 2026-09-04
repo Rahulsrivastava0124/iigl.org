@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Grid,
   MenuItem,
   Stack,
   Table,
@@ -11,6 +10,7 @@ import {
   TableRow,
   TextField,
 } from '@mui/material';
+import { LedgerTable, LedgerTotals, type LedgerPage } from '../components/Ledger';
 import { useToast } from '../components/Toast';
 import { useFetch, useDebounced } from '../lib/useFetch';
 import { api } from '../lib/api';
@@ -21,7 +21,6 @@ import {
   SearchField,
   StatusChip,
   TableFrame,
-  Tile,
   ToneAction,
   money,
 } from '../components/ui';
@@ -29,37 +28,6 @@ import type { Paged, Transaction } from '../lib/api';
 import { isSuper } from '../lib/portal';
 import ApproveIcon from '@mui/icons-material/CheckCircleOutlined';
 import DeclineIcon from '@mui/icons-material/CancelOutlined';
-import BalanceIcon from '@mui/icons-material/SavingsOutlined';
-import ReceivedIcon from '@mui/icons-material/SouthWestOutlined';
-import SentIcon from '@mui/icons-material/NorthEastOutlined';
-import AwaitingIcon from '@mui/icons-material/FactCheckOutlined';
-
-/** Four to a row on a wide screen, two on a tablet — as the dashboard sets them. */
-const LEDGER_CELL = { xs: 12, sm: 6, md: 3 } as const;
-
-/** One line of the running account, as /transactions/ledger returns it. */
-interface LedgerEntry {
-  id: number;
-  date: string | null;
-  type: string | null;
-  direction: 'credit' | 'debit';
-  amount: number;
-  status: number;
-  order_id: number | null;
-  transaction_no: string | null;
-  remark: string | null;
-  balance: number;
-}
-
-interface LedgerPage {
-  entries: LedgerEntry[];
-  credit_total: number;
-  debit_total: number;
-  balance: number;
-  pending_out: number;
-  pending_in: number;
-  total: number;
-}
 
 export default function Transactions() {
   const toast = useToast();
@@ -109,95 +77,13 @@ export default function Transactions() {
 
       {ledgerView ? (
         <>
-          {/*
-            A grid, not a row of shrink-to-fit cards. In a Stack each card was
-            as wide as its own longest word, so "Sent" came out half the width
-            of "Awaiting approval" and the four read as an accident rather than
-            as one set of figures. Four to a row, matching the dashboard.
-          */}
-          <Grid container spacing={2} sx={{ mb: 2 }}>
-            <Grid size={LEDGER_CELL}>
-              <Tile
-                label="Balance"
-                value={money(account?.balance ?? 0)}
-                fill="brand"
-                icon={BalanceIcon}
-              />
-            </Grid>
-            <Grid size={LEDGER_CELL}>
-              <Tile
-                label="Received"
-                value={money(account?.credit_total ?? 0)}
-                fill="settled"
-                icon={ReceivedIcon}
-              />
-            </Grid>
-            <Grid size={LEDGER_CELL}>
-              <Tile
-                label="Sent"
-                value={money(account?.debit_total ?? 0)}
-                fill="brand"
-                icon={SentIcon}
-              />
-            </Grid>
-            <Grid size={LEDGER_CELL}>
-              {/*
-                Amber only while something is actually waiting. A permanent
-                warning colour over a zero is a warning nobody reads.
-              */}
-              <Tile
-                label="Awaiting approval"
-                value={money(account?.pending_out ?? 0)}
-                fill={(account?.pending_out ?? 0) > 0 ? 'waiting' : 'plain'}
-                icon={AwaitingIcon}
-              />
-            </Grid>
-          </Grid>
-
-          <Panel title="Ledger">
-            <TableFrame
-              loading={ledger.loading}
-              error={ledger.error}
-              empty={entries.length === 0}
-            >
-              <Table size="small" stickyHeader>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Date</TableCell>
-                    <TableCell>Reference</TableCell>
-                    <TableCell>Remark</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell align="right">Credit</TableCell>
-                    <TableCell align="right">Debit</TableCell>
-                    <TableCell align="right">Balance</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {entries.map((e) => (
-                    <TableRow key={e.id} hover>
-                      <TableCell>{e.date?.slice(0, 10) ?? '—'}</TableCell>
-                      <TableCell className="mono">{e.transaction_no ?? `#${e.id}`}</TableCell>
-                      <TableCell sx={{ whiteSpace: 'normal', minWidth: 180 }}>
-                        {e.remark ?? e.type ?? '—'}
-                      </TableCell>
-                      <TableCell>
-                        <StatusChip status={e.status} />
-                      </TableCell>
-                      <TableCell align="right" className="tabular">
-                        {e.direction === 'credit' ? money(e.amount) : '—'}
-                      </TableCell>
-                      <TableCell align="right" className="tabular">
-                        {e.direction === 'debit' ? money(e.amount) : '—'}
-                      </TableCell>
-                      <TableCell align="right" className="tabular">
-                        {money(e.balance)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableFrame>
-          </Panel>
+          <LedgerTotals account={account} />
+          <LedgerTable
+            entries={entries}
+            loading={ledger.loading}
+            error={ledger.error}
+            count={account ? `${account.total.toLocaleString()} movements` : 'Loading…'}
+          />
         </>
       ) : (
       <Panel

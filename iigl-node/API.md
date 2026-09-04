@@ -1,6 +1,6 @@
 # IIGL API
 
-198 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
+199 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
 
 The interactive version is at `/docs` when the server is running, and the raw
 document at `/openapi.json`.
@@ -147,10 +147,11 @@ Customer orders and the items on them.
 | GET | `/api/orders` | session | `page`, `per_page`, `status`, `dues` | — | 401, 403 | List orders |
 | POST | `/api/orders` | session | — | — | 400, 401, 403, 409 | Create an order |
 | GET | `/api/orders/{id}` | session | — | — | 401, 403, 404 | Read an order with its items and certificates |
-| PATCH | `/api/orders/{id}` | session | — | customer_name, mobile, alt_mobile, email, gst, address, dues_date, show_name_in_card, +2 more | 400, 401, 403, 404, 409 | Amend an order |
+| PATCH | `/api/orders/{id}` | session | — | customer_name, mobile, alt_mobile, email, gst, address, dues_date, assigned_to, +5 more | 400, 401, 403, 404, 409 | Amend an order |
 | DELETE | `/api/orders/{id}` | session | — | — | 401, 403, 404, 409 | Delete an order |
-| POST | `/api/orders/{id}/deliver` | session | — | discount, paid_amount, pay_mode, transaction_no | 400, 401, 403, 404 | Settle and deliver an order |
+| POST | `/api/orders/{id}/deliver` | session | — | — | 400, 401, 403, 404 | Hand the order over |
 | GET | `/api/orders/{id}/quote` | session | `discount` | — | 401, 403, 404 | Price an order |
+| POST | `/api/orders/{id}/settle` | session | — | discount, paid_amount, pay_mode, transaction_no, deliver | 400, 401, 403, 404 | Take payment on an order |
 | GET | `/api/orders/customer/lookup` | session | `mobile` | — | 401, 403 | Find a returning customer by mobile |
 | DELETE | `/api/orders/items/{id}` | session | — | — | 401, 403, 404 | Remove an item from an order |
 
@@ -434,4 +435,4 @@ The general enquiry book: questions, visits, leads and complaints.
 
 Bold body fields are required.
 
-198 endpoints: 16 public, 182 requiring a session.
+199 endpoints: 16 public, 183 requiring a session.

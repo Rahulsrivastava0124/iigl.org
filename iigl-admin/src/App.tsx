@@ -2,7 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Box, Button, CircularProgress, Typography } from '@mui/material';
 import { AuthProvider, useAuth } from './lib/auth';
 import { PermissionProvider } from './lib/permissions';
-import { basenameFor, currentPortal, isSuper } from './lib/portal';
+import { basenameFor, currentPortal, isLab, isSuper } from './lib/portal';
 import Shell from './components/Shell';
 import { ToastProvider } from './components/Toast';
 import ForgotPassword from './pages/ForgotPassword';
@@ -50,6 +50,21 @@ import Settings from './pages/Settings';
 function AdminOnly({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   if (!isSuper(user)) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
+/**
+ * Head office and a laboratory owner, and nobody they employ.
+ *
+ * Roles are owned: head office's are shared with every laboratory, and a
+ * laboratory's own are its alone. Both need the screen — a franchise hires its
+ * own front desk and decides what a front desk may do — so both are let in,
+ * and the API scopes what each of them sees. Their staff are not: a role is
+ * what is done *to* an employee.
+ */
+function OwnerOnly({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!isSuper(user) && !isLab(user)) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -109,18 +124,15 @@ function Routed() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/orders" element={<Orders />} />
         <Route path="/orders/new" element={<NewOrder />} />
+        {/* The same form, amending. See `NewOrder`. */}
+        <Route path="/orders/:id/edit" element={<NewOrder />} />
         <Route path="/orders/:id" element={<OrderDetail />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/reports/new" element={<NewReport />} />
         <Route path="/transactions" element={<Transactions />} />
-        <Route
-          path="/wallet"
-          element={
-            <AdminOnly>
-              <Wallet />
-            </AdminOnly>
-          }
-        />
+        {/* Both roles have a wallet, and the dashboard's "My wallet" tile sends
+            a laboratory here. The endpoint behind it scopes to whoever asks. */}
+        <Route path="/wallet" element={<Wallet />} />
         <Route path="/attendance" element={<Attendance />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/profile" element={<Profile />} />
@@ -272,17 +284,17 @@ function Routed() {
         <Route
           path="/roles"
           element={
-            <AdminOnly>
+            <OwnerOnly>
               <Roles />
-            </AdminOnly>
+            </OwnerOnly>
           }
         />
         <Route
           path="/roles/:id/edit"
           element={
-            <AdminOnly>
+            <OwnerOnly>
               <RoleEdit />
-            </AdminOnly>
+            </OwnerOnly>
           }
         />
         <Route path="*" element={<Navigate to="/" replace />} />

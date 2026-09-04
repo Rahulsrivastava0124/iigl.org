@@ -67,13 +67,28 @@ export default function Roles() {
   // `list` itself stays whole: it resolves the selected role and drives the
   // permission matrix below, neither of which a search of the table should touch.
   const [search, setSearch] = useState('');
-  // Show only head office roles: filter out super admin (#1) and lab-owned roles
-  const shown = list.filter(
-    (r) => r.id !== ROLE.SUPER && r.owner_id === null && hits(search, r.id, r.role_name),
-  );
+  /*
+    Which roles this screen is about, per viewer. This screen manages roles, so
+    it lists the ones the viewer can manage and nothing else.
+
+    Head office: the shared roles it owns, less super admin. A laboratory's own
+    roles belong to that laboratory's panel.
+
+    A laboratory: the roles it owns, and only those. Super admin, Laboratory and
+    Team are head office's — shared with every franchise, so none of them can be
+    renamed, re-granted or deleted from here, and three rows whose every control
+    is refused are three rows of noise. They still exist and are still assignable
+    to an employee; they are simply not this screen's business.
+  */
+  const shown = list.filter((r) => {
+    if (isSuper(user) ? r.id === ROLE.SUPER || r.owner_id !== null : r.owner_id === null) {
+      return false;
+    }
+    return hits(search, r.id, r.role_name);
+  });
 
   const [roleId, setRoleId] = useState<string>('');
-  const chosen = roleId || (list.find((r) => !isBuiltIn(r))?.id ?? list[0]?.id ?? '');
+  const chosen = roleId || (shown.find((r) => !isBuiltIn(r))?.id ?? shown[0]?.id ?? '');
   const role = list.find((r) => String(r.id) === String(chosen));
 
   const permissions = useFetch<{ data: Permission[] }>(
@@ -187,7 +202,20 @@ export default function Roles() {
           </>
         }
       >
-        <TableFrame loading={roles.loading} error={roles.error} empty={shown.length === 0}>
+        <TableFrame
+          loading={roles.loading}
+          error={roles.error}
+          empty={shown.length === 0}
+          /* A laboratory starts with none of its own, and an empty table with
+             no explanation reads as a screen that failed to load. */
+          emptyText={
+            search.trim()
+              ? 'No role matches that.'
+              : isSuper(user)
+                ? 'No roles yet.'
+                : 'You have no roles of your own yet. Add one, grant it what it needs, and hire into it.'
+          }
+        >
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -266,7 +294,9 @@ export default function Roles() {
           note={
             role.id === ROLE.ADMIN
               ? 'A laboratory account already has full access to its own laboratory data. These grants apply to what it may do beyond that.'
-              : undefined
+              : !mayRename(role)
+                ? "Head office's role, shared with every laboratory. You can see what it allows; to change it, make one of your own."
+                : undefined
           }
           onClose={() => setRoleId('')}
           onSaved={() => {

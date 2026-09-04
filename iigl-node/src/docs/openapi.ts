@@ -281,6 +281,22 @@ const document = {
                   },
                 },
               },
+              payments: {
+                type: 'array',
+                description:
+                  'What has been taken against this order, newest first. Paying and delivering are separate acts, so an order can be paid in parts over several visits: the columns on the order hold the running totals and say nothing about how they got there.',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'integer' },
+                    amount: { type: 'string' },
+                    pay_mode: { type: ['string', 'null'] },
+                    transaction_no: { type: ['string', 'null'] },
+                    created_at: { type: ['string', 'null'] },
+                    received_by_name: { type: ['string', 'null'] },
+                  },
+                },
+              },
             },
           },
         ],
@@ -296,11 +312,12 @@ const document = {
           email: { type: ['string', 'null'] },
           gst: { type: ['string', 'null'] },
           address: { type: ['string', 'null'] },
-          dues_date: { type: ['string', 'null'] },
+          dues_date: { type: ['string', 'null'], description: 'When the order is expected ready. A varchar the order document prints verbatim, written by the counter as "ddd DD MMM YYYY hh:mm A" — the format the Laravel picker used, kept so old and new orders read the same way on one page.' },
           assigned_to: { type: ['integer', 'null'], description: 'Staff member to assign the work to.' },
           show_name_in_card: { type: 'integer', enum: [0, 1] },
           show_image_in_card: { type: 'integer', enum: [0, 1] },
-          show_name_input: { type: ['string', 'null'] },
+          show_name_input: { type: ['string', 'null'], description: 'The name to print, when `show_name_in_card` is 1.' },
+          show_image_in_card_file: { type: ['string', 'null'], description: 'The picture to print, as an uploaded path from POST /api/uploads/order. Sent when `show_image_in_card` is 1.' },
           items: {
             type: 'array',
             minItems: 1,
@@ -453,6 +470,14 @@ const document = {
             type: 'integer',
             description: 'Payable plus 18% GST, truncated rather than rounded, matching the original calculation.',
           },
+          paid_amount: {
+            type: 'number',
+            description: 'Taken against the order so far, summed from its `collected_by_order` transactions rather than read from `orders.paid_amount` — an order paid in parts has had several settlements, and the column holds only what the last one wrote.',
+          },
+          balance_due: {
+            type: 'number',
+            description: 'What is still owed: `amount_with_gst` less `paid_amount`, floored at zero. This is what a payment is checked against, not the whole bill.',
+          },
           unpriced_count: {
             type: 'integer',
             description: 'Certificates whose carat weight fell outside every band. Non-zero means the price table has a gap.',
@@ -601,10 +626,18 @@ const document = {
               collected: {
                 type: 'number',
                 description:
-                  'Everything this laboratory\u2019s staff have taken in. Carried over from Laravel without a status filter, so a collection nobody has approved counts the same as an approved one.',
+                  'Everything taken in for this laboratory \u2014 by its staff, and by the laboratory itself at its own counter. Laravel counted only the staff, through `employements.parent_id`, and a laboratory is not on its own books: Paid Amount read zero however much the counter had taken. Carried over without a status filter, so a collection nobody has approved counts the same as an approved one.',
               },
-              employee_wallet: { type: 'number' },
-              my_wallet: { type: 'number' },
+              employee_wallet: {
+                type: 'number',
+                description:
+                  'Money the staff are holding: what they collected less what they have handed in. Not the laboratory\u2019s own takings, which are in its wallet rather than theirs.',
+              },
+              my_wallet: {
+                type: 'number',
+                description:
+                  'What the laboratory holds: staff hand-ins plus its own counter takings, less what it has sent on to head office.',
+              },
               admin_commission: { type: 'number' },
               today: {
                 type: 'object',
@@ -1306,8 +1339,11 @@ const document = {
                   gst: { type: ['string', 'null'] },
                   address: { type: ['string', 'null'] },
                   dues_date: { type: ['string', 'null'] },
+                  assigned_to: { type: ['integer', 'null'], description: 'Moves the work to somebody else, or to nobody. Null clears it.' },
                   show_name_in_card: { type: 'integer', enum: [0, 1] },
                   show_image_in_card: { type: 'integer', enum: [0, 1] },
+                  show_name_input: { type: ['string', 'null'] },
+                  show_image_in_card_file: { type: ['string', 'null'] },
                   items: {
                     type: 'array',
                     minItems: 1,
@@ -1394,7 +1430,7 @@ const document = {
           'Prices every certificate on the order against the weight bands and returns the breakdown. Changes nothing, so it is safe to call while the operator adjusts the discount.',
         parameters: [
           { name: 'id', in: 'path', required: true, schema: { type: 'integer' } },
-          { name: 'discount', in: 'query', schema: { type: 'number', minimum: 0 }, description: 'Flat amount off, not a percentage.' },
+          { name: 'discount', in: 'query', schema: { type: 'number', minimum: 0 }, description: 'Flat amount off, not a percentage. Omit it and the order’s own `discount` applies — an order settled at a discount priced back at full rate when this defaulted to zero, and the balance owing jumped by the discount somebody had already given.' },
         ],
         responses: {
           200: {
@@ -1407,12 +1443,12 @@ const document = {
       },
     },
 
-    '/api/orders/{id}/deliver': {
+    '/api/orders/{id}/settle': {
       post: {
         tags: ['Orders'],
-        summary: 'Settle and deliver an order',
+        summary: 'Take payment on an order',
         description:
-          'Prices the order, writes the totals, records the collection as a transaction and marks the order delivered — all in one database transaction. Totals are computed from the price bands and never taken from the request body; the Laravel screen posts total_amount from the browser, so whatever the client sends becomes the bill.',
+          'Prices the order, writes the totals and records the collection as a transaction, in one database transaction. Totals are computed from the price bands and never taken from the request body; the Laravel screen posts total_amount from the browser, so whatever the client sends becomes the bill.\n\nDelivering is a separate act — `POST /api/orders/{id}/deliver` — because a customer may pay on account days before collecting, and an order may be handed over with dues outstanding, which is what the dues list is. Send `deliver: true` to do both in one press, as the Laravel bill modal did.',
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
         requestBody: {
           content: {
@@ -1421,9 +1457,10 @@ const document = {
                 type: 'object',
                 properties: {
                   discount: { type: 'number', minimum: 0, default: 0, description: 'Flat amount off, not a percentage.' },
-                  paid_amount: { type: 'number', minimum: 0, description: 'Defaults to the full amount including GST. Any shortfall is recorded as dues.' },
+                  paid_amount: { type: 'number', minimum: 0, description: 'This instalment, not the settlement — defaults to whatever is still owed. Refused above the balance, and added to what has already been taken rather than written over it.' },
                   pay_mode: { type: 'string', default: 'cash' },
                   transaction_no: { type: ['string', 'null'] },
+                  deliver: { type: 'boolean', default: false, description: 'Hand the order over in the same press.' },
                 },
               },
             },
@@ -1431,10 +1468,29 @@ const document = {
         },
         responses: {
           200: {
-            description: 'Delivered. Returns the quote plus what was paid and what remains outstanding.',
+            description: 'Settled. Returns the quote plus what was paid and what remains outstanding.',
             content: { 'application/json': { schema: dataOf({ $ref: '#/components/schemas/Quote' }) } },
           },
           400: errorResponse('Discount exceeds the total, or the paid amount exceeds the payable amount.'),
+          404: errorResponse('Order not found.'),
+          ...guarded,
+        },
+      },
+    },
+
+    '/api/orders/{id}/deliver': {
+      post: {
+        tags: ['Orders'],
+        summary: 'Hand the order over',
+        description:
+          'Marks the order delivered and records who handed it over. The money is not touched: an order may be delivered with dues outstanding, and one paid for on Tuesday may be collected on Friday.\n\nRefused while certificates are outstanding — handing over an order short of the certificates it was taken for is the one mistake this cannot be undone from, since delivering is what closes it.',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        responses: {
+          200: {
+            description: 'Delivered.',
+            content: { 'application/json': { schema: dataOf({ type: 'object', properties: { id: { type: 'integer' }, status: { type: 'string' }, certificates: { type: 'integer' } } }) } },
+          },
+          400: errorResponse('Already delivered, or certificates are still outstanding.'),
           404: errorResponse('Order not found.'),
           ...guarded,
         },

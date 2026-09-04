@@ -181,6 +181,7 @@ const ADMIN_GROUPS: Group[] = [
     label: 'Account',
     icon: TransactionsIcon,
     items: [
+      { to: '/wallet', label: 'Wallet' },
       { to: '/transactions?status=0', label: 'Commission Approval' },
       { to: '/transactions', label: 'Commission History' },
       { to: '/transactions?view=ledger', label: 'Ledger' },
@@ -328,6 +329,7 @@ const FIELD_GROUPS: Group[] = [
     label: 'Account',
     icon: TransactionsIcon,
     items: [
+      { to: '/wallet', label: 'Wallet' },
       { to: '/transactions', label: 'Transfer History' },
       { to: '/transactions?view=ledger', label: 'Ledger' },
     ],
@@ -336,7 +338,15 @@ const FIELD_GROUPS: Group[] = [
     label: 'Employee',
     icon: StaffIcon,
     labOnly: true,
-    items: [{ to: '/staff', label: 'Employee List' }],
+    items: [
+      { to: '/staff', label: 'Employee List' },
+      // A franchise decides what its own front desk may do. The roles it makes
+      // are its own — no other laboratory sees them — and head office's shared
+      // roles show here read-only. Its staff do not see this: `labOnly` is the
+      // laboratory account itself, and a role is something done to an employee
+      // rather than by one.
+      { to: '/roles', label: 'Roles & Permissions' },
+    ],
   },
 ];
 

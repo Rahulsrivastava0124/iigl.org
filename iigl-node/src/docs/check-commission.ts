@@ -100,6 +100,16 @@ try {
     await trx.updateTable('orders').set({ status: 'pending' }).where('id', '=', orderId).execute();
     check('per piece, nothing delivered', (await accruedByLab(labId, trx)).get(labId) ?? 0, 0);
 
+    // Nor is a deleted one. The dashboard filtered these out and the shared
+    // helper did not, so the two screens disagreed by exactly the orders
+    // somebody had cancelled.
+    await trx
+      .updateTable('orders')
+      .set({ status: 'delivered', deleted_at: new Date() })
+      .where('id', '=', orderId)
+      .execute();
+    check('per piece, order deleted', (await accruedByLab(labId, trx)).get(labId) ?? 0, 0);
+
     throw new Error(ROLLBACK);
   });
 } catch (e) {

@@ -28,7 +28,13 @@ export default function RolePermissionsDialog({
 }: {
   roleId: number;
   roleName: string;
-  /** The role's name cannot be changed here — a built-in, or someone else's. */
+  /**
+   * Somebody else's role: head office's, seen from a laboratory. Shown in full
+   * — knowing what a shared role allows is the reason to open it — but nothing
+   * on it can be changed, because the name and the matrix are shared with every
+   * other laboratory. The API refuses the write either way; this is so the
+   * dialog does not offer a Save that cannot work.
+   */
   readOnly?: boolean;
   note?: string;
   onClose: () => void;
@@ -100,7 +106,7 @@ export default function RolePermissionsDialog({
           fontWeight: 600,
         }}
       >
-        Edit Role
+        {readOnly ? 'Role' : 'Edit Role'}
         <IconButton onClick={onClose} size="small" sx={{ color: 'inherit' }} aria-label="Close">
           <CloseIcon />
         </IconButton>
@@ -142,13 +148,15 @@ export default function RolePermissionsDialog({
               ({total.granted}/{total.total})
             </Typography>
           </Typography>
-          <Button
-            color="error"
-            onClick={() => rows && setRows(cleared(rows))}
-            disabled={!rows || busy}
-          >
-            Clear all
-          </Button>
+          {!readOnly && (
+            <Button
+              color="error"
+              onClick={() => rows && setRows(cleared(rows))}
+              disabled={!rows || busy}
+            >
+              Clear all
+            </Button>
+          )}
         </Stack>
 
         {!rows ? (
@@ -161,18 +169,20 @@ export default function RolePermissionsDialog({
             onChange={setRows}
             open={open}
             onToggleGroup={(title) => setOpen({ ...open, [title]: !open[title] })}
-            disabled={busy}
+            disabled={busy || readOnly}
           />
         )}
       </DialogContent>
 
       <DialogActions sx={{ px: 3, py: 2 }}>
         <Button onClick={onClose} color="inherit" variant="outlined" disabled={busy}>
-          Cancel
+          {readOnly ? 'Close' : 'Cancel'}
         </Button>
-        <Button onClick={save} variant="contained" disabled={busy || !rows || !name.trim()}>
-          {busy ? 'Saving…' : 'Save role'}
-        </Button>
+        {!readOnly && (
+          <Button onClick={save} variant="contained" disabled={busy || !rows || !name.trim()}>
+            {busy ? 'Saving…' : 'Save role'}
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   );

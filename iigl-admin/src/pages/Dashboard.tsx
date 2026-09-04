@@ -46,7 +46,13 @@ const TODAY_CELL = { xs: 12, sm: 6, md: 'grow' } as const;
  */
 const owed = (amount: number): Tone => (amount > 0 ? 'refused' : 'settled');
 
-const n = (v: number) => v.toLocaleString();
+/*
+  A count. Guards its input the way `money` does, and for the same reason: an
+  older API — a server left running across a deploy — answers with a field this
+  build expects and that one never sent, and `undefined.toLocaleString()` takes
+  the whole dashboard down rather than one tile.
+*/
+const n = (v: number | null | undefined) => (v == null ? '—' : v.toLocaleString());
 
 export default function Dashboard() {
   const { data, loading, error } = useFetch<{ data: DashboardSummary }>('/dashboard/summary');

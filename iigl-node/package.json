@@ -18,6 +18,8 @@
     "migrate:status": "tsx src/db/migrate.ts --status",
     "check:parents": "tsx src/docs/check-parents.ts",
     "check:commission": "tsx src/docs/check-commission.ts",
+    "check:nulls": "tsx src/docs/check-nulls.ts",
+    "check:roles": "tsx src/docs/check-role-scope.ts",
     "dev:dist": "nodemon --watch src --ext ts,ejs,json --exec \"npm run build && npm start\"",
     "check:soft-delete": "tsx src/docs/check-soft-delete.ts"
   },

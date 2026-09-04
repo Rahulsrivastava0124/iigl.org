@@ -15,9 +15,9 @@ export const isPdf = (stored: string | null | undefined) =>
  * legacy disk resolves through the same URL. Nothing here needs to know which
  * of the two holds the bytes.
  *
- * A PDF is not drawn inline. An <object> of a scanned document inside a dialog
- * is smaller and worse than the browser's own viewer, so that one opens in a
- * tab instead.
+ * A PDF is drawn by the browser's own viewer in an iframe — the same viewer a
+ * tab would use, at the height of the dialog, and no library to carry for it.
+ * The tab is still one button away for a document worth the whole window.
  */
 export default function FilePreview({
   stored,
@@ -58,9 +58,18 @@ export default function FilePreview({
             This record has no file.
           </Typography>
         ) : pdf ? (
-          <Typography variant="body2" color="text.secondary">
-            A PDF. Open it in a tab to read it.
-          </Typography>
+          /*
+            Read here, not only in a tab. The browser's own viewer draws it —
+            no library, and it is the viewer the reader already knows — at the
+            height of the dialog. "Open in a tab" is still there for a document
+            worth the whole window.
+          */
+          <Box
+            component="iframe"
+            src={url}
+            title={title}
+            sx={{ width: '100%', height: '70vh', border: 0, bgcolor: 'common.white' }}
+          />
         ) : (
           <Box
             component="img"

@@ -28,7 +28,6 @@ import {
   SearchField,
   TableFrame,
   commissionRate,
-  money,
 } from '../components/ui';
 
 /** True when the row's text contains the term. Case-insensitive; blank matches all. */
@@ -129,9 +128,6 @@ export default function Laboratories() {
                 <TableCell>Mobile</TableCell>
                 <TableCell>City</TableCell>
                 <TableCell align="right">Rate</TableCell>
-                <TableCell align="right">Commission</TableCell>
-                <TableCell align="right">Paid</TableCell>
-                <TableCell align="right">Due</TableCell>
                 <TableCell>Active</TableCell>
                 <TableCell />
               </TableRow>
@@ -148,24 +144,6 @@ export default function Laboratories() {
                   <TableCell>{l.city ?? '—'}</TableCell>
                   <TableCell align="right" className="tabular">
                     {commissionRate(l.commision, l.commission_type)}
-                  </TableCell>
-                  {/*
-                    What the rate has earned on delivered orders, what has been
-                    approved against it, and the difference. The staff count
-                    that used to sit here is on the View dialog with the names.
-                  */}
-                  <TableCell align="right" className="tabular">
-                    {money(l.commission_accrued ?? 0)}
-                  </TableCell>
-                  <TableCell align="right" className="tabular">
-                    {money(l.commission_paid ?? 0)}
-                  </TableCell>
-                  <TableCell
-                    align="right"
-                    className="tabular"
-                    sx={{ color: (l.commission_due ?? 0) > 0 ? 'warning.main' : undefined }}
-                  >
-                    {money(l.commission_due ?? 0)}
                   </TableCell>
                   <TableCell>
                     <Chip

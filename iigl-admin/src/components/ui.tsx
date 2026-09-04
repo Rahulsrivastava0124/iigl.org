@@ -128,9 +128,20 @@ export function transactionState(status: number): { tone: Tone; label: string } 
 }
 
 /** orders.status, a free-text column: only two values are in use. */
-export function orderState(status: string): { tone: Tone; label: string } {
+/**
+ * An order's state, as the list shows it.
+ *
+ * `ready` is not a status the column holds — it is a preparing order whose
+ * certificates are all written, which is a different thing to look at from one
+ * still being worked on: nothing is left to do but hand it over and take the
+ * money. The column keeps saying `preparing` until it is delivered, because
+ * that is what it is; this is the reading, not the record.
+ */
+export function orderState(status: string, ready = false): { tone: Tone; label: string } {
   if (status === 'delivered') return { tone: 'settled', label: 'Delivered' };
-  if (status === 'preparing') return { tone: 'waiting', label: 'In progress' };
+  if (status === 'preparing') {
+    return ready ? { tone: 'settled', label: 'Ready' } : { tone: 'waiting', label: 'In progress' };
+  }
   return { tone: 'plain', label: status || 'unknown' };
 }
 
@@ -643,8 +654,8 @@ export function StatusChip({ status }: { status: number }) {
   return <StateChip {...transactionState(status)} />;
 }
 
-export function OrderChip({ status }: { status: string }) {
-  return <StateChip {...orderState(status)} />;
+export function OrderChip({ status, ready }: { status: string; ready?: boolean }) {
+  return <StateChip {...orderState(status, ready)} />;
 }
 
 export function YesNo({ on }: { on: boolean | number }) {

@@ -1,129 +1,81 @@
 import { useState } from 'react';
-import { Table, TableBody, TableCell, TableHead, TableRow } from '@mui/material';
-import { useFetch, useDebounced } from '../lib/useFetch';
-import { fileUrl } from '../lib/config';
-import {
-  IconAction,
-  Pager,
-  Panel,
-  RowActions,
-  SearchField,
-  StatusChip,
-  TableFrame,
-  money,
-} from '../components/ui';
-import type { Paged, Transaction } from '../lib/api';
-import DownloadIcon from '@mui/icons-material/FileDownloadOutlined';
-
-interface Wallet {
-  received: number;
-  sent: number;
-  balance: number;
-}
+import { Box, Typography } from '@mui/material';
+import { useFetch } from '../lib/useFetch';
+import { useAuth } from '../lib/auth';
+import { isSuper } from '../lib/portal';
+import { Notice, Pager } from '../components/ui';
+import { LedgerTable, LedgerTotals, type LedgerPage } from '../components/Ledger';
 
 /**
- * The wallet: the commission the head office has been paid.
+ * The wallet: this account's money, and every movement that made it.
  *
- * Ported from `Admin\DashboardController@admin_wallet`, which lists
- * `transactions` where `transaction_type = 'commision'` and `status = 1`,
- * newest first — the same rows the "Current wallet" figure on the dashboard is
- * the sum of. Reached from that figure, as it was in the Laravel panel.
+ * Reached from the wallet figures on the dashboard — head office's "Current
+ * wallet", a laboratory's "My wallet" — which is where somebody looks when the
+ * number is not the one they expected. The answer to that is never a total; it
+ * is the list of what went in and out, so the wallet *is* the ledger, with the
+ * balance stated above it.
+ *
+ * It used to be a list of approved commission credits, which answered the
+ * question for head office alone and left a laboratory clicking through to a
+ * screen it was not allowed to open.
+ *
+ * Both roles read the same endpoint: `/transactions/ledger` scopes to whoever
+ * is asking, so nothing here decides what anyone may see.
  */
 export default function Wallet() {
+  const { user } = useAuth();
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
-  const term = useDebounced(search);
 
-  const query = new URLSearchParams({
-    page: String(page),
-    per_page: '25',
-    type: 'commision',
-    status: '1',
-  });
-  if (term.trim()) query.set('q', term.trim());
-
-  const { data, loading, error } = useFetch<Paged<Transaction>>(`/transactions?${query}`);
-  const balance = useFetch<{ data: Wallet }>('/transactions/wallet');
-  const rows = data?.data ?? [];
+  const PER_PAGE = 50;
+  const ledger = useFetch<{ data: LedgerPage }>(
+    `/transactions/ledger?page=${page}&per_page=${PER_PAGE}`,
+  );
+  const account = ledger.data?.data;
+  const entries = account?.entries ?? [];
+  const total = account?.total ?? 0;
 
   return (
-    <Panel
-      title="Wallet"
-      subtitle={balance.data ? `${money(balance.data.data.balance)} balance` : undefined}
-      count={
-        loading ? 'Loading…' : `${(data?.meta.total ?? 0).toLocaleString()} commission credits`
-      }
-      actions={
-        <SearchField
-          placeholder="Transaction no, remark, mode…"
-          value={search}
-          onChange={(v) => {
-            setSearch(v);
-            setPage(1);
-          }}
-        />
-      }
-    >
-      <TableFrame loading={loading} error={error} empty={rows.length === 0}>
-        <Table size="small" stickyHeader>
-          <TableHead>
-            <TableRow>
-              <TableCell>Date</TableCell>
-              <TableCell>Sent by</TableCell>
-              {/*
-                The Laravel view had these two headings the wrong way round —
-                "Commision for(₹)" printed `amount` and "Amount" printed
-                `comission_on`. `comission_on` is the sale the commission was
-                worked out from and `amount` is the commission itself, so the
-                headings are kept and the values put under the right ones.
-              */}
-              <TableCell align="right">Commission for</TableCell>
-              <TableCell align="right">Amount</TableCell>
-              <TableCell>Mode</TableCell>
-              <TableCell>Transaction no.</TableCell>
-              <TableCell>Remark</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell>Attachment</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows.map((t) => (
-              <TableRow key={t.id} hover>
-                <TableCell>{String(t.created_at ?? '').slice(0, 10) || '—'}</TableCell>
-                <TableCell>{t.send_by_name ?? `#${t.send_by}`}</TableCell>
-                <TableCell align="right" className="tabular">
-                  {money(t.comission_on)}
-                </TableCell>
-                <TableCell align="right" className="tabular">
-                  {money(t.amount)}
-                </TableCell>
-                <TableCell>{t.pay_mode ?? '—'}</TableCell>
-                <TableCell className="mono">{t.transaction_no ?? '—'}</TableCell>
-                <TableCell sx={{ whiteSpace: 'normal', minWidth: 180 }}>
-                  {t.remark ?? '—'}
-                </TableCell>
-                <TableCell>
-                  <StatusChip status={t.status} />
-                </TableCell>
-                <TableCell>
-                  {t.attachment ? (
-                    <RowActions>
-                      <IconAction
-                        label="Open attachment"
-                        icon={DownloadIcon}
-                        to={fileUrl(t.attachment) ?? undefined}
-                      />
-                    </RowActions>
-                  ) : (
-                    '—'
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableFrame>
-      <Pager meta={data?.meta} onPage={setPage} />
-    </Panel>
+    <>
+      <LedgerTotals account={account} />
+
+      {/*
+        Pending money is money nobody has agreed to yet: it is on the statement,
+        marked, but it has not moved the balance. Said once, here, rather than
+        left for somebody to work out from a chip in a row.
+      */}
+      {(account?.pending_out ?? 0) > 0 && (
+        <Notice kind="warn" sx={{ mb: 2 }}>
+          {(account?.pending_out ?? 0).toLocaleString('en-IN')} is awaiting approval and has not
+          been taken off the balance.
+        </Notice>
+      )}
+
+      <LedgerTable
+        entries={entries}
+        loading={ledger.loading}
+        error={ledger.error}
+        title={isSuper(user) ? 'Head office account' : 'Your account'}
+        count={ledger.loading ? 'Loading…' : `${total.toLocaleString()} movements`}
+        footer={
+          <Pager
+            meta={{
+              page,
+              per_page: PER_PAGE,
+              total,
+              total_pages: Math.max(1, Math.ceil(total / PER_PAGE)),
+            }}
+            onPage={setPage}
+          />
+        }
+      />
+
+      <Box sx={{ mt: 2 }}>
+        <Typography variant="caption" color="text.secondary">
+          Credits are money received, debits money sent on. The balance is the running total after
+          each approved movement; declined and pending rows appear so the history is complete but
+          leave it unchanged.
+        </Typography>
+      </Box>
+    </>
   );
 }

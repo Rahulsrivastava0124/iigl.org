@@ -47,6 +47,39 @@ export const userRoutes = Router();
 
 /** Columns safe to return. Never selects password or remember_token. */
 /**
+ * A role this person may actually put somebody in.
+ *
+ * Roles are owned now: `owner_id` NULL is head office's, offered to everybody,
+ * and anything else belongs to one laboratory. Nothing else checked that.
+ * `POST /users` refuses a laboratory the two senior roles and let any other
+ * number through — so a laboratory could hire an employee into laboratory
+ * twelve's "Front desk" and inherit twelve's permission matrix, simply by
+ * posting its id. The panel never offers it; that is not the same as it being
+ * refused.
+ *
+ * `null` is a real answer — no role, permissions granted one by one — and is
+ * allowed through.
+ */
+async function assertRoleAssignable(user: Express.Request['user'], roleId: number | null) {
+  if (roleId === null) return;
+
+  const role = await db
+    .selectFrom('roles')
+    .select(['id', 'role_name', 'owner_id'])
+    .where('id', '=', roleId)
+    .executeTakeFirst();
+  if (!role) throw badRequest('That role does not exist.');
+
+  if (user.roleId === ROLE.SUPER) return;
+  if (role.owner_id === null) return;
+
+  const mine = Number(user.labId ?? user.id);
+  if (Number(role.owner_id) !== mine) {
+    throw forbidden(`${role.role_name} belongs to another laboratory.`);
+  }
+}
+
+/**
  * Head office or a laboratory — the two roles nobody below them may act on.
  *
  * Written as a set rather than `<= 2`: custom roles can hold any number above
@@ -584,6 +617,7 @@ userRoutes.post(
     if (clash) throw conflict('An account with that mobile number already exists.');
 
     const role = role_id === null || role_id === '' ? null : Number(role_id);
+    await assertRoleAssignable(req.user, role);
 
     // An empid or the account is half-made. `employements.parent_id` and
     // `users.parent_id` name an employer by empid, so an account without one
@@ -940,8 +974,10 @@ userRoutes.patch(
     }
 
     if (req.body?.role_id !== undefined) {
-      patch.role_id =
+      const wanted =
         req.body.role_id === null || req.body.role_id === '' ? null : Number(req.body.role_id);
+      await assertRoleAssignable(req.user, wanted);
+      patch.role_id = wanted;
     }
     if (req.body?.is_active !== undefined) patch.is_active = req.body.is_active ? 1 : 0;
     if (req.body?.commision !== undefined) patch.commision = Number(req.body.commision);

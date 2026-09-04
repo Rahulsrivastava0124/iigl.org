@@ -6,8 +6,14 @@ import { conflict, notFound } from '../lib/errors.js';
 import { paged, readPage, readSearch } from '../lib/paginate.js';
 import { assertLabOwnership, requireLabScope, ROLE } from '../middleware/auth.js';
 import { createOrder, live, liveJoined, updateOrder, validateOrderInput, validateUpdateOrderInput } from '../services/order.service.js';
-import { quoteOrder, settleAndDeliver, validateSettleInput } from '../services/pricing.service.js';
+import {
+  deliverOrder,
+  quoteOrder,
+  settleAndDeliver,
+  validateSettleInput,
+} from '../services/pricing.service.js';
 import { orderVisibility } from '../services/permission.service.js';
+import { TRANSACTION_TYPE } from '../services/commission.service.js';
 import { numericId, numericParams } from '../middleware/params.js';
 
 export const orderRoutes = Router();
@@ -197,7 +203,30 @@ orderRoutes.get(
           .execute()
       : [];
 
-    res.json({ data: { ...order, items, reports } });
+    /*
+      What has been taken against this order, newest first.
+
+      Paying and delivering are separate acts, so an order can be paid in parts
+      over several visits: the columns on the order hold the running totals and
+      say nothing about how they got there. This is how they got there.
+    */
+    const payments = await db
+      .selectFrom('transactions')
+      .leftJoin('users', 'users.id', 'transactions.received_by')
+      .select([
+        'transactions.id as id',
+        'transactions.amount as amount',
+        'transactions.pay_mode as pay_mode',
+        'transactions.transaction_no as transaction_no',
+        'transactions.created_at as created_at',
+        'users.fullname as received_by_name',
+      ])
+      .where('transactions.order_id', '=', Number(order.id))
+      .where('transactions.transaction_type', '=', TRANSACTION_TYPE.ORDER_COLLECTION)
+      .orderBy('transactions.id', 'desc')
+      .execute();
+
+    res.json({ data: { ...order, items, reports, payments } });
   }),
 );
 
@@ -353,24 +382,38 @@ orderRoutes.get(
   numericId,
   wrap(async (req, res) => {
     const order = await live(db.selectFrom('orders'))
-      .select(['id', 'lab_id'])
+      .select(['id', 'lab_id', 'discount'])
       .where('id', '=', Number(req.params.id))
       .executeTakeFirst();
     if (!order) throw notFound('Order not found.');
     assertLabOwnership(req.user, Number(order.lab_id));
 
-    const discount = req.query.discount ? Number(req.query.discount) : 0;
+    /*
+      The discount the caller is trying, or the one the order already carries.
+      Defaulting to zero meant an order settled at a discount priced back at
+      full rate the next time anybody opened it, and the balance owing jumped
+      by the discount somebody had already given.
+    */
+    const discount =
+      req.query.discount === undefined || req.query.discount === ''
+        ? Number(order.discount ?? 0)
+        : Number(req.query.discount);
     res.json({ data: await quoteOrder(Number(order.id), discount) });
   }),
 );
 
 /**
- * Settle and deliver. Totals are computed from the price bands, never taken
- * from the request — the Laravel screen posts total_amount from the browser,
- * so any figure the client sends is stored as the bill.
+ * Take the money. Totals are computed from the price bands, never taken from
+ * the request — the Laravel screen posts total_amount from the browser, so any
+ * figure the client sends is stored as the bill.
+ *
+ * Delivering is `POST /:id/deliver` and is a separate act: a customer can pay
+ * on account days before collecting, and an order can be handed over with dues
+ * outstanding. Send `deliver: true` to do both in one press, which is what the
+ * Laravel bill modal did.
  */
 orderRoutes.post(
-  '/:id/deliver',
+  '/:id/settle',
   numericId,
   wrap(async (req, res) => {
     const order = await live(db.selectFrom('orders'))
@@ -380,13 +423,32 @@ orderRoutes.post(
     if (!order) throw notFound('Order not found.');
     assertLabOwnership(req.user, Number(order.lab_id));
 
+    // Paying and delivering are two acts. `deliver` says whether this one is
+    // both; the panel's Pay dialog sends false and hands over separately.
     const result = await settleAndDeliver(
       Number(order.id),
       req.user.id,
       validateSettleInput(req.body),
+      req.body?.deliver === true,
     );
 
     res.json({ data: result });
+  }),
+);
+
+/** Hand the order over. The money is settled separately, and may be owing. */
+orderRoutes.post(
+  '/:id/deliver',
+  numericId,
+  wrap(async (req, res) => {
+    const order = await live(db.selectFrom('orders'))
+      .select(['id', 'lab_id'])
+      .where('id', '=', Number(req.params.id))
+      .executeTakeFirst();
+    if (!order) throw notFound('Order not found.');
+    assertLabOwnership(req.user, Number(order.lab_id));
+
+    res.json({ data: await deliverOrder(Number(order.id), req.user.id) });
   }),
 );
 

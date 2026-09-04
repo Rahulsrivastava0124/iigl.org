@@ -49,6 +49,10 @@ export interface Quote {
   payable_amount: number;
   /** Payable plus 18% GST, truncated. What the customer actually pays. */
   amount_with_gst: number;
+  /** Taken against the order so far, summed from its collections. */
+  paid_amount: number;
+  /** `amount_with_gst` less what has been taken. Never negative. */
+  balance_due: number;
   unpriced_count: number;
 }
 
@@ -144,7 +148,28 @@ export async function quoteOrder(orderId: number, discount = 0): Promise<Quote> 
   const payable = round2(total - discount);
   const withGst = gstOf(payable);
 
+  /*
+    What has already been taken against this order, and what is left.
+
+    Money is collected in parts now that paying and delivering are separate
+    acts, so "payable" alone is not the figure anybody at the counter needs —
+    they need what is still owed. It is summed from the transactions rather
+    than read from `orders.paid_amount` so it cannot disagree with the payment
+    history printed beside it.
+  */
+  const taken = await db
+    .selectFrom('transactions')
+    .select(({ fn }) => fn.sum<number>('amount').as('total'))
+    .where('order_id', '=', orderId)
+    .where('transaction_type', '=', 'collected_by_order')
+    .executeTakeFirst();
+  const paid = round2(Number(taken?.total ?? 0));
+
   return {
+    paid_amount: paid,
+    // Never negative: an overpayment is somebody's change, not a debt the
+    // order owes back.
+    balance_due: round2(Math.max(0, withGst - paid)),
     order_id: Number(order.id),
     order_no: order.order_no,
     certificates,
@@ -189,18 +214,48 @@ export function validateSettleInput(body: unknown): SettleInput {
  * transaction. Everything happens in one database transaction; the PHP writes
  * the order and the transaction separately with neither guarded.
  */
-export async function settleAndDeliver(orderId: number, collectedBy: number, input: SettleInput) {
+/**
+ * Takes the money, and hands the order over only if asked to.
+ *
+ * They were one act, as they are in the Laravel screen: its bill modal recorded
+ * the payment and delivered in the same press. In practice they are two — a
+ * customer pays something on account days before collecting, and an order can
+ * be handed over with dues outstanding, which is what the dues list is for. So
+ * `deliver` decides, and the money is written either way.
+ */
+export async function settleAndDeliver(
+  orderId: number,
+  collectedBy: number,
+  input: SettleInput,
+  deliver = false,
+) {
   const quote = await quoteOrder(orderId, input.discount ?? 0);
 
   if (quote.discount > quote.total_amount) {
     throw badRequest(`Discount of ${quote.discount} exceeds the order total of ${quote.total_amount}.`);
   }
 
-  const paid = input.paid_amount ?? quote.amount_with_gst;
-  if (paid > quote.amount_with_gst) {
-    throw badRequest(`Paid amount exceeds the payable amount of ${quote.amount_with_gst}.`);
+  /*
+    This payment, and the running total after it.
+
+    An order is paid in parts — that is what separating payment from delivery
+    is for — so what arrives here is the instalment, not the settlement. It is
+    checked against what is still owed rather than against the whole bill, and
+    added to what has already been taken rather than written over it: the
+    second payment used to replace the first, and the order came out owing more
+    than the customer had left to pay.
+  */
+  const instalment = input.paid_amount ?? quote.balance_due;
+  if (instalment > quote.balance_due) {
+    throw badRequest(
+      quote.paid_amount > 0
+        ? `${quote.paid_amount} has already been taken against this order. Only ${quote.balance_due} is still owed.`
+        : `Paid amount exceeds the payable amount of ${quote.amount_with_gst}.`,
+    );
   }
-  const dues = round2(quote.amount_with_gst - paid);
+
+  const paid = round2(quote.paid_amount + instalment);
+  const dues = round2(Math.max(0, quote.amount_with_gst - paid));
 
   await db.transaction().execute(async (trx) => {
     await trx
@@ -213,19 +268,25 @@ export async function settleAndDeliver(orderId: number, collectedBy: number, inp
         dues_amount: String(dues),
         pay_mode: input.pay_mode ?? 'cash',
         transaction_no: input.transaction_no,
-        status: 'delivered',
-        delivery_date: new Date().toISOString().slice(0, 10),
-        deliver_by: collectedBy,
+        ...(deliver
+          ? {
+              status: 'delivered',
+              delivery_date: new Date().toISOString().slice(0, 10),
+              deliver_by: collectedBy,
+            }
+          : null),
         updated_at: new Date(),
       })
       .where('id', '=', orderId)
       .execute();
 
-    if (paid > 0) {
+    // The instalment, not the running total: the history is a list of the
+    // payments that were made, and writing the total would double-count.
+    if (instalment > 0) {
       await trx
         .insertInto('transactions')
         .values({
-          amount: String(paid),
+          amount: String(instalment),
           pay_mode: input.pay_mode ?? 'cash',
           transaction_no: input.transaction_no,
           transaction_type: 'collected_by_order',
@@ -243,5 +304,57 @@ export async function settleAndDeliver(orderId: number, collectedBy: number, inp
     }
   });
 
-  return { ...quote, paid_amount: paid, dues_amount: dues };
+  return { ...quote, paid_amount: paid, balance_due: dues, dues_amount: dues };
+}
+
+/**
+ * Hands the order over. The money is not touched: an order may be delivered
+ * with dues outstanding — that is what the dues list is — and one paid for on
+ * Tuesday may be collected on Friday.
+ *
+ * Refused while certificates are outstanding: handing over an order that is
+ * short of the certificates it was taken for is the one mistake this cannot be
+ * undone from, since delivering is what closes it.
+ */
+export async function deliverOrder(orderId: number, deliveredBy: number) {
+  const order = await db
+    .selectFrom('orders')
+    .select(['id', 'status'])
+    .where('deleted_at', 'is', null)
+    .where('id', '=', orderId)
+    .executeTakeFirst();
+  if (!order) throw notFound('Order not found.');
+  if (order.status === 'delivered') throw badRequest('This order has already been delivered.');
+
+  const quote = await quoteOrder(orderId);
+  const items = await db
+    .selectFrom('order_details')
+    .select(['qty', 'smart_card', 'classic_card'])
+    .where('order_id', '=', orderId)
+    .execute();
+
+  // A line carrying both card kinds is owed a certificate for each, which is
+  // how the list counts it too.
+  const owed = items.reduce(
+    (n, it) => n + Number(it.qty) * (Number(it.smart_card) + Number(it.classic_card)),
+    0,
+  );
+  if (quote.certificates.length < owed) {
+    throw badRequest(
+      `${quote.certificates.length} of ${owed} certificates are written. Finish them before delivering.`,
+    );
+  }
+
+  await db
+    .updateTable('orders')
+    .set({
+      status: 'delivered',
+      delivery_date: new Date().toISOString().slice(0, 10),
+      deliver_by: deliveredBy,
+      updated_at: new Date(),
+    })
+    .where('id', '=', orderId)
+    .execute();
+
+  return { id: orderId, status: 'delivered' as const, certificates: quote.certificates.length };
 }

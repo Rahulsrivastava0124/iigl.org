@@ -19,7 +19,17 @@ import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { hint, remainingState, Notice, Panel, StateChip, TableFrame } from '../components/ui';
+import {
+  hint,
+  remainingState,
+  IconAction,
+  Notice,
+  Panel,
+  RowActions,
+  StateChip,
+  TableFrame,
+} from '../components/ui';
+import NextIcon from '@mui/icons-material/ArrowForwardOutlined';
 import FileField from '../components/FileField';
 import type { Attribute, Order, Paged, Subcategory } from '../lib/api';
 
@@ -184,9 +194,15 @@ export default function NewReport() {
                     <TableCell className="mono">{o.mobile}</TableCell>
                     <TableCell>{o.order_date}</TableCell>
                     <TableCell>
-                      <Button variant="contained" onClick={() => setOrderId(o.id)}>
-                        Choose
-                      </Button>
+                      {/* An arrow, not the word: this moves the wizard on to
+                          the next step, and a row's controls are icons here. */}
+                      <RowActions>
+                        <IconAction
+                          label="Choose this order"
+                          icon={NextIcon}
+                          onClick={() => setOrderId(o.id)}
+                        />
+                      </RowActions>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -231,13 +247,18 @@ export default function NewReport() {
                         <StateChip {...remainingState(left)} />
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="contained"
-                          disabled={left <= 0}
-                          onClick={() => setItemId(it.id)}
-                        >
-                          Choose
-                        </Button>
+                        <RowActions>
+                          <IconAction
+                            label={
+                              left <= 0
+                                ? 'Every card on this item is written'
+                                : 'Write a certificate for this item'
+                            }
+                            icon={NextIcon}
+                            disabled={left <= 0}
+                            onClick={() => setItemId(it.id)}
+                          />
+                        </RowActions>
                       </TableCell>
                     </TableRow>
                   );
