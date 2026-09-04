@@ -4,13 +4,16 @@ import { ROLE } from '../middleware/auth.js';
 /**
  * Commission and ledger.
  *
- * A laboratory owes the administrator a percentage of what it collects. The
- * rate is per laboratory, held in `users.commision`, and the payment is
- * recorded as a transaction of type `commision` — the column value is spelled
- * that way in the data and must stay spelled that way.
+ * A laboratory owes the administrator commission on what it certifies. The
+ * rate is per laboratory, held in `users.commision`, and `commission_type`
+ * says how to read it — a percentage of what was collected, or a flat amount
+ * for each piece. The payment is recorded as a transaction of type `commision`
+ * — the column value is spelled that way in the data and must stay spelled
+ * that way.
  *
  *   comission_on = the collected amount the commission is calculated on
- *   amount       = the commission itself, comission_on × rate ÷ 100
+ *   amount       = the commission itself: comission_on × rate ÷ 100 on a
+ *                  percentage, or pieces × rate on per-piece terms
  *
  * The Laravel version takes both figures from the request, so a laboratory can
  * post any commission it likes against any base. Here the base is supplied and
@@ -33,8 +36,18 @@ export function validateCommissionInput(body) {
     if (!Number.isFinite(base) || base <= 0) {
         throw badRequest('Enter the collected amount the commission is calculated on.');
     }
+    // Only meaningful for a per-piece laboratory, and checked here rather than
+    // there so a nonsense value is refused before anything is written.
+    let pieces;
+    if (b.pieces !== undefined && b.pieces !== null && b.pieces !== '') {
+        pieces = Number(b.pieces);
+        if (!Number.isInteger(pieces) || pieces <= 0) {
+            throw badRequest('Pieces must be a whole number above zero.');
+        }
+    }
     return {
         commission_on: base,
+        pieces,
         pay_mode: b.pay_mode ? String(b.pay_mode) : 'cash',
         transaction_no: b.transaction_no ? String(b.transaction_no) : null,
         remark: b.remark ? String(b.remark) : null,
@@ -48,14 +61,26 @@ export async function sendCommission(user, input) {
     }
     const lab = await db
         .selectFrom('users')
-        .select(['id', 'commision'])
+        .select(['id', 'commision', 'commission_type'])
         .where('id', '=', user.id)
         .executeTakeFirstOrThrow();
     const rate = Number(lab.commision ?? 0);
     if (rate <= 0) {
         throw badRequest('No commission rate is set for this laboratory. Ask the administrator to set one.');
     }
-    const amount = round2((input.commission_on * rate) / 100);
+    /*
+      The rate is read on the laboratory's own terms. A percentage applies to the
+      collected base; a per-piece rate applies to the pieces, and the collected
+      amount is recorded beside it as context rather than being multiplied by
+      anything. A per-piece laboratory that sends no piece count is refused: the
+      alternative is charging it a percentage of its takings, which is not the
+      agreement it signed.
+    */
+    const perPiece = lab.commission_type === COMMISSION_TYPE.PER_PIECE;
+    if (perPiece && !input.pieces) {
+        throw badRequest('This laboratory is paid per piece. Send the number of pieces certified.');
+    }
+    const amount = round2(perPiece ? (input.pieces ?? 0) * rate : (input.commission_on * rate) / 100);
     const result = await db
         .insertInto('transactions')
         .values({
@@ -79,9 +104,76 @@ export async function sendCommission(user, input) {
     return {
         id: Number(result.insertId),
         commission_on: input.commission_on,
-        rate_percent: rate,
+        rate,
+        commission_type: perPiece ? COMMISSION_TYPE.PER_PIECE : COMMISSION_TYPE.PERCENT,
         amount,
     };
+}
+/** How a laboratory's rate is read. `users.commission_type`. */
+export const COMMISSION_TYPE = { PERCENT: 'percent', PER_PIECE: 'per_pc' };
+/**
+ * What each laboratory has earned but not necessarily been paid.
+ *
+ * One helper, because three screens report this figure — the laboratory list,
+ * one laboratory's page and the dashboard — and three copies of the same
+ * arithmetic is how the dashboard and the list came to disagree about what a
+ * franchise is owed.
+ *
+ * The rate is read two ways, and which one applies is on the laboratory:
+ *
+ *   percent  what it collected on delivered orders, times the rate, over 100
+ *   per_pc   the pieces on those orders, times the rate — the money the order
+ *            was worth does not enter into it
+ *
+ * Collected and pieces are counted in two queries rather than one join: joining
+ * `order_details` to `orders` repeats each order's `paid_amount` once per line
+ * on it, which silently multiplies the collection of any order with more than
+ * one line.
+ *
+ * `labId` narrows it to one laboratory; without it the map covers them all.
+ * `exec` is the pool unless a caller hands it a transaction — which the check
+ * does, to read a fixture it has not committed.
+ */
+export async function accruedByLab(labId, exec = db) {
+    let ratesQuery = exec.selectFrom('users').select(['id', 'commision', 'commission_type']);
+    if (labId)
+        ratesQuery = ratesQuery.where('id', '=', labId);
+    let collectedQuery = exec
+        .selectFrom('orders')
+        .select(({ fn }) => [
+        'orders.lab_id as lab_id',
+        fn.sum('orders.paid_amount').as('total'),
+    ])
+        .where('orders.status', '=', 'delivered')
+        .groupBy('orders.lab_id');
+    if (labId)
+        collectedQuery = collectedQuery.where('orders.lab_id', '=', labId);
+    let piecesQuery = exec
+        .selectFrom('order_details')
+        .innerJoin('orders', 'orders.id', 'order_details.order_id')
+        .select(({ fn }) => [
+        'orders.lab_id as lab_id',
+        fn.sum('order_details.qty').as('total'),
+    ])
+        .where('orders.status', '=', 'delivered')
+        .groupBy('orders.lab_id');
+    if (labId)
+        piecesQuery = piecesQuery.where('orders.lab_id', '=', labId);
+    const [rates, collected, pieces] = await Promise.all([
+        ratesQuery.execute(),
+        collectedQuery.execute(),
+        piecesQuery.execute(),
+    ]);
+    const totals = (rows) => new Map(rows.map((r) => [Number(r.lab_id), Number(r.total) || 0]));
+    const money = totals(collected);
+    const qty = totals(pieces);
+    return new Map(rates.map((lab) => {
+        const rate = Number(lab.commision) || 0;
+        const earned = lab.commission_type === COMMISSION_TYPE.PER_PIECE
+            ? (qty.get(Number(lab.id)) ?? 0) * rate
+            : ((money.get(Number(lab.id)) ?? 0) * rate) / 100;
+        return [Number(lab.id), round2(earned)];
+    }));
 }
 export async function ledgerFor(userId, limit = 100, offset = 0) {
     const mine = (eb) => eb.or([eb('send_by', '=', userId), eb('received_by', '=', userId)]);

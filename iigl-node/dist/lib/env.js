@@ -58,4 +58,18 @@ export const env = {
         .split(',')
         .map((o) => o.trim())
         .filter(Boolean),
+    /**
+     * Cloudflare R2, where uploaded files are kept. The four credentials travel
+     * together: with any one of them missing there is no usable client, so
+     * storage reports itself unconfigured rather than failing on first upload.
+     * `publicUrl` is the read side — the r2.dev (or custom) domain a stored
+     * object is served from, which is not the S3 endpoint the API writes to.
+     */
+    r2: {
+        accountId: process.env.R2_ACCOUNT_ID ?? '',
+        accessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? '',
+        bucket: process.env.R2_BUCKET_NAME ?? '',
+        publicUrl: (process.env.R2_PUBLIC_URL ?? '').replace(/\/+$/, ''),
+    },
 };

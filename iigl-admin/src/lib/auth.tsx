@@ -1,4 +1,11 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from 'react';
 import { api, ApiError, setSessionLostHandler, type SessionUser } from './api';
 import { currentPortal, PORTALS, type Portal } from './portal';
 
@@ -15,6 +22,14 @@ interface AuthState {
    */
   offline: boolean;
   portal: Portal;
+  /**
+   * Read the session's own record again.
+   *
+   * The photograph travels beside the session rather than inside it, so a
+   * person who changes theirs on their profile would otherwise keep the old
+   * one in the bar until the next full load.
+   */
+  refresh: () => Promise<void>;
   signIn: (mobile: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -37,23 +52,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Ask the API who we are on first load: the session cookie survives a reload,
   // so a signed-in person should not be bounced back to sign-in.
+  const refresh = useCallback(
+    () =>
+      api
+        .get<{ user: SessionUser }>('/auth/me')
+        .then((r) => {
+          // Someone who signed in at another door should not be carried into
+          // this one by a shared cookie.
+          setUser(r.user.roleId !== null && config.admits(r.user.roleId) ? r.user : null);
+          setOffline(false);
+        })
+        .catch((e) => {
+          setUser(null);
+          // A 401 is a real answer: there is no session. Anything else on this
+          // call means the API did not answer at all.
+          setOffline(e instanceof ApiError && e.code === 'offline');
+        })
+        .finally(() => setLoading(false)),
+    [config],
+  );
+
   useEffect(() => {
-    api
-      .get<{ user: SessionUser }>('/auth/me')
-      .then((r) => {
-        // Someone who signed in at another door should not be carried into
-        // this one by a shared cookie.
-        setUser(r.user.roleId !== null && config.admits(r.user.roleId) ? r.user : null);
-        setOffline(false);
-      })
-      .catch((e) => {
-        setUser(null);
-        // A 401 is a real answer: there is no session. Anything else on this
-        // call means the API did not answer at all.
-        setOffline(e instanceof ApiError && e.code === 'offline');
-      })
-      .finally(() => setLoading(false));
-  }, [config]);
+    void refresh();
+  }, [refresh]);
 
   const signIn = async (mobile: string, password: string) => {
     setOffline(false);
@@ -77,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, offline, portal, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, loading, offline, portal, refresh, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

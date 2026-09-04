@@ -4,6 +4,7 @@ import FaqSection from './components/sections/FaqSection.jsx';
 import Footer from './components/sections/Footer.jsx';
 import HeroSection from './components/sections/HeroSection.jsx';
 import IiglReportsSection from './components/sections/IiglReportsSection.jsx';
+import OurBranchesSection from './components/sections/OurBranchesSection.jsx';
 import Navbar from './components/sections/Navbar.jsx';
 import ReportCategoriesSection from './components/sections/ReportCategoriesSection.jsx';
 import ReviewsSection from './components/sections/ReviewsSection.jsx';
@@ -35,6 +36,7 @@ export default function App() {
       <EducationSection />
       <AvailableCoursesSection />
       <ReviewsSection />
+      <OurBranchesSection />
       <FaqSection />
       <Footer />
     </div>

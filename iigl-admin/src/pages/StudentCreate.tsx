@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -29,29 +29,48 @@ const STATUSES: Array<{ id: Status; label: string }> = [
   { id: 'active', label: 'Active' },
 ];
 
+/** What a conversion carries over from the enquiry it came from. */
+interface FromEnquiry {
+  id: number;
+  name: string;
+  mobile: string;
+  email: string;
+  course_id: number | null;
+  remark: string;
+}
+
 export default function StudentCreate() {
   const navigate = useNavigate();
+  const location = useLocation();
   const toast = useToast();
+
+  /*
+    Arriving from a converted enquiry, the form starts filled with what that
+    enquiry already knows. Everything stays editable — the enquiry was taken
+    over a telephone and a name spelled out loud is a name worth checking —
+    but nobody retypes a mobile number that is already in the system.
+  */
+  const from = (location.state as { fromEnquiry?: FromEnquiry } | null)?.fromEnquiry;
 
   const courses = useFetch<{ data: Course[] }>('/courses?active=1&per_page=100');
   const courseList = courses.data?.data ?? [];
 
   const [form, setForm] = useState({
-    name: '',
+    name: from?.name ?? '',
     father_name: '',
     dob: '',
     gender: '',
-    mobile: '',
+    mobile: from?.mobile ?? '',
     alt_mobile: '',
-    email: '',
+    email: from?.email ?? '',
     address: '',
     city: '',
     state: '',
     pincode: '',
     registration_date: new Date().toISOString().slice(0, 10),
-    course_id: '',
+    course_id: from?.course_id ? String(from.course_id) : '',
     status: 'pending' as Status,
-    remark: '',
+    remark: from?.remark ?? '',
   });
 
   const [docs, setDocs] = useState({

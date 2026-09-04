@@ -1,5 +1,6 @@
 import { Children, isValidElement, useEffect, useState } from 'react';
 import type { ComponentType, ReactElement, ReactNode } from 'react';
+import { alpha } from '@mui/material/styles';
 import type { SxProps, Theme } from '@mui/material/styles';
 import { Link as RouterLink } from 'react-router-dom';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -40,7 +41,7 @@ import HideIcon from '@mui/icons-material/VisibilityOffOutlined';
 import HintIcon from '@mui/icons-material/InfoOutlined';
 import type { TextFieldProps } from '@mui/material';
 import type { PageMeta } from '../lib/api';
-import { BRAND, TONE } from '../lib/theme';
+import { BRAND_FILL, TONE } from '../lib/theme';
 import type { ToneName } from '../lib/theme';
 
 /**
@@ -176,6 +177,16 @@ export function Notice({
  */
 
 /**
+ * A colour a tile can be filled with: the fill itself, and what is legible on
+ * top of it. TONE's entries are already this shape.
+ */
+interface Fill {
+  main: string;
+  on: string;
+  soft: string;
+}
+
+/**
  * A figure on a card. One implementation: the dashboard and the order totals
  * were drifting apart on padding and type size.
  */
@@ -186,6 +197,7 @@ export function Tile({
   accent,
   tone,
   fill,
+  solid,
   icon: Icon,
   to,
 }: {
@@ -214,14 +226,27 @@ export function Tile({
    * and the icon, which is where the meaning is.
    */
   fill?: Tone | 'brand';
+  /**
+   * Fills the card with the whole colour rather than its pale end, sets the
+   * label and figure to the colour that sits on it, and puts the icon in a
+   * white disc.
+   *
+   * For a short group that has to be seen first — today's figures at the top
+   * of the dashboard. It is deliberately not the default: a screen of solid
+   * cards is a screen where nothing is emphasised.
+   *
+   * Has no effect without `fill`, which is what supplies the colour.
+   */
+  solid?: boolean;
   /** Says what the figure counts, so a group can be read without the labels. */
   icon?: ComponentType<SvgIconProps>;
 }) {
-  const tint = fill
+  const tint: Fill | null = fill
     ? fill === 'brand'
-      ? { main: BRAND.navy, soft: BRAND.navyWash }
+      ? BRAND_FILL
       : TONE[fill]
     : null;
+  const filled = Boolean(tint && solid);
 
   return (
     <Paper
@@ -234,7 +259,10 @@ export function Tile({
         alignItems: 'flex-start',
         justifyContent: 'space-between',
         gap: 1.5,
-        ...(tint && { bgcolor: tint.soft, borderColor: tint.soft }),
+        ...(tint &&
+          (filled
+            ? { bgcolor: tint.main, borderColor: tint.main }
+            : { bgcolor: tint.soft, borderColor: tint.soft })),
         ...(to && {
           textDecoration: 'none',
           transition: 'box-shadow 150ms, border-color 150ms',
@@ -246,7 +274,16 @@ export function Tile({
       }}
     >
       <Box sx={{ minWidth: 0 }}>
-        <Typography variant="overline" color="text.secondary" sx={{ display: 'block' }}>
+        <Typography
+          variant="overline"
+          sx={{
+            display: 'block',
+            // On a filled card the muted grey is unreadable; the tone's own
+            // `on` colour at less than full strength keeps the label
+            // subordinate to the figure without losing it.
+            color: filled ? alpha(tint!.on, 0.75) : 'text.secondary',
+          }}
+        >
           {label}
         </Typography>
         <Typography
@@ -255,9 +292,11 @@ export function Tile({
             fontSize: 22,
             fontWeight: 600,
             letterSpacing: '-0.02em',
-            color: tint
-              ? tint.main
-              : tone && tone !== 'plain'
+            color: filled
+              ? tint!.on
+              : tint
+                ? tint.main
+                : tone && tone !== 'plain'
                 ? `${TONE_COLOUR[tone]}.main`
                 : accent
                   ? 'primary.main'
@@ -266,19 +305,50 @@ export function Tile({
         >
           {value}
           {note && (
-            <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 0.75 }}>
+            <Typography
+              component="span"
+              variant="body2"
+              sx={{ ml: 0.75, color: filled ? alpha(tint!.on, 0.75) : 'text.secondary' }}
+            >
               {note}
             </Typography>
           )}
         </Typography>
       </Box>
       {Icon && (
-        <Icon
-          // Decoration, not information: the label already says what this is,
-          // so the icon is hidden from a screen reader rather than read out.
-          aria-hidden
-          sx={{ fontSize: 26, color: tint ? tint.main : 'primary.main', opacity: 0.65, flexShrink: 0 }}
-        />
+        filled ? (
+          /*
+            On a filled card the icon has no ground of its own — a white glyph
+            on a saturated fill is the same weight as the figure beside it, and
+            the two compete. The disc gives it one, and inverts the colours, so
+            it reads as a mark on the card rather than as more text.
+          */
+          <Box
+            sx={{
+              width: 40,
+              height: 40,
+              flexShrink: 0,
+              borderRadius: '50%',
+              bgcolor: tint!.on,
+              display: 'grid',
+              placeItems: 'center',
+            }}
+          >
+            <Icon aria-hidden sx={{ fontSize: 22, color: tint!.main }} />
+          </Box>
+        ) : (
+          <Icon
+            // Decoration, not information: the label already says what this is,
+            // so the icon is hidden from a screen reader rather than read out.
+            aria-hidden
+            sx={{
+              fontSize: 26,
+              color: tint ? tint.main : 'primary.main',
+              opacity: 0.65,
+              flexShrink: 0,
+            }}
+          />
+        )
       )}
     </Paper>
   );
@@ -417,6 +487,7 @@ export function FormPanel({
   onSubmit,
   submitLabel = 'Save',
   busy,
+  actions,
   children,
 }: {
   title: string;
@@ -425,6 +496,13 @@ export function FormPanel({
   onSubmit: () => void;
   submitLabel?: string;
   busy?: boolean;
+  /**
+   * Anything this record can have done to it besides being saved — converting
+   * an enquiry into a registration, undoing one. Kept at the far left of the
+   * footer, away from Save and Cancel: it is a different kind of act, and a
+   * row of three equal buttons invites the wrong one.
+   */
+  actions?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -475,14 +553,24 @@ export function FormPanel({
           <Stack
             direction="row"
             spacing={1}
-            sx={{ mt: 3, pt: 2, borderTop: 1, borderColor: 'divider', justifyContent: 'flex-end' }}
+            sx={{
+              mt: 3,
+              pt: 2,
+              borderTop: 1,
+              borderColor: 'divider',
+              alignItems: 'center',
+              justifyContent: actions ? 'space-between' : 'flex-end',
+            }}
           >
-            <Button type="button" color="inherit" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="contained" disabled={busy}>
-              {busy ? 'Saving…' : submitLabel}
-            </Button>
+            {actions}
+            <Stack direction="row" spacing={1}>
+              <Button type="button" color="inherit" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="contained" disabled={busy}>
+                {busy ? 'Saving…' : submitLabel}
+              </Button>
+            </Stack>
           </Stack>
         </Box>
       </Panel>
@@ -1109,6 +1197,7 @@ export function Dialog({
   busy,
   disabled,
   actions,
+  secondary,
   maxWidth = 'sm',
   children,
 }: {
@@ -1139,6 +1228,12 @@ export function Dialog({
    * Save, because they neither commit nor abandon what is being edited.
    */
   actions?: ReactNode;
+  /**
+   * A second way of committing this form — saving it and going on somewhere
+   * else. It sits in the footer beside Save, because it does commit; `actions`
+   * is for controls that do not.
+   */
+  secondary?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -1170,6 +1265,9 @@ export function Dialog({
           <Button onClick={onClose} color="inherit">
             Cancel
           </Button>
+          {/* A second way of committing sits beside the first, not across
+              Cancel from it. */}
+          {secondary}
           <Button type="submit" variant="contained" disabled={busy || disabled}>
             {busy ? 'Saving…' : submitLabel}
           </Button>

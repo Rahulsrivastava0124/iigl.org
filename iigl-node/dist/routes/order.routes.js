@@ -57,8 +57,76 @@ orderRoutes.get('/', wrap(async (req, res) => {
         q.orderBy('id', 'desc').limit(p.limit).offset(p.offset).execute(),
         c.executeTakeFirstOrThrow(),
     ]);
-    res.json(paged(rows, Number(count.n), p));
+    res.json(paged(await withCounts(rows), Number(count.n), p));
 }));
+/**
+ * The four columns the Laravel order list carried beside the money: how many
+ * pieces the order is for, how many certificates it is owed, how many have been
+ * written, and who it is with.
+ *
+ * `common/order/index.blade.php` computed these inside the row loop — five
+ * queries per order and a sixth for the name. They are done here in three, over
+ * the whole page at once, and folded onto the rows the list already has.
+ *
+ * A line can carry both card kinds, and where it does the blade counted its
+ * quantity once for each. That is kept, for `total_reports` and for
+ * `reports_generated` alike: these say what the order is billed for and how far
+ * that is answered, not how many rows are involved.
+ */
+async function withCounts(rows) {
+    if (!rows.length)
+        return [];
+    const ids = rows.map((r) => r.id);
+    const assignees = [...new Set(rows.map((r) => r.assigned_to).filter((v) => !!v))];
+    const [lines, names] = await Promise.all([
+        db
+            .selectFrom('order_details')
+            .select(['id', 'order_id', 'qty', 'smart_card', 'classic_card'])
+            .where('order_id', 'in', ids)
+            .execute(),
+        assignees.length
+            ? db.selectFrom('users').select(['id', 'fullname']).where('id', 'in', assignees).execute()
+            : Promise.resolve([]),
+    ]);
+    // `reports.order_detail_id` is a varchar, so the ids handed to it have to be
+    // strings — a numeric IN list matches nothing. The detail row is what ties a
+    // certificate back to its order; `reports.order_no` holds the order id rather
+    // than the order number and is not used for this.
+    const reports = lines.length
+        ? await db
+            .selectFrom('reports')
+            .select('order_detail_id')
+            .where('order_detail_id', 'in', lines.map((l) => String(l.id)))
+            .execute()
+        : [];
+    const reportsPerLine = new Map();
+    for (const r of reports) {
+        reportsPerLine.set(r.order_detail_id, (reportsPerLine.get(r.order_detail_id) ?? 0) + 1);
+    }
+    const totals = new Map();
+    for (const line of lines) {
+        const kinds = line.smart_card + line.classic_card;
+        const t = totals.get(line.order_id) ?? { items: 0, ordered: 0, generated: 0 };
+        t.items += line.qty;
+        t.ordered += line.qty * kinds;
+        t.generated += (reportsPerLine.get(String(line.id)) ?? 0) * kinds;
+        totals.set(line.order_id, t);
+    }
+    const nameById = new Map(names.map((u) => [u.id, u.fullname]));
+    return rows.map((r) => {
+        const t = totals.get(r.id);
+        return {
+            ...r,
+            total_items: t?.items ?? 0,
+            total_reports: t?.ordered ?? 0,
+            reports_generated: t?.generated ?? 0,
+            // Null rather than a crash when the order is with nobody. Laravel called
+            // `User::find($order->assigned_to)->fullname` unguarded, which is a fatal
+            // error on an unassigned order.
+            assigned_to_name: r.assigned_to ? (nameById.get(r.assigned_to) ?? null) : null,
+        };
+    });
+}
 orderRoutes.get('/:id', numericId, wrap(async (req, res) => {
     const order = await db
         .selectFrom('orders')
@@ -68,10 +136,15 @@ orderRoutes.get('/:id', numericId, wrap(async (req, res) => {
     if (!order)
         throw notFound('Order not found.');
     assertLabOwnership(req.user, Number(order.lab_id));
+    // The category by name, not by id. The Laravel detail screen resolved it
+    // with `Category::find($item->category_id)->name` per row; the panel had
+    // nothing to resolve it with and was printing the number.
     const items = await db
         .selectFrom('order_details')
-        .selectAll()
-        .where('order_id', '=', Number(order.id))
+        .leftJoin('categories', 'categories.id', 'order_details.category_id')
+        .selectAll('order_details')
+        .select('categories.name as category_name')
+        .where('order_details.order_id', '=', Number(order.id))
         .execute();
     // Reached through order_details.id — reports.order_no holds the order id,
     // not the order number, so joining on the number finds nothing.
@@ -161,10 +234,15 @@ orderRoutes.patch('/:id', numericId, wrap(async (req, res) => {
         .selectAll()
         .where('id', '=', Number(order.id))
         .executeTakeFirstOrThrow();
+    // The category by name, not by id. The Laravel detail screen resolved it
+    // with `Category::find($item->category_id)->name` per row; the panel had
+    // nothing to resolve it with and was printing the number.
     const items = await db
         .selectFrom('order_details')
-        .selectAll()
-        .where('order_id', '=', Number(order.id))
+        .leftJoin('categories', 'categories.id', 'order_details.category_id')
+        .selectAll('order_details')
+        .select('categories.name as category_name')
+        .where('order_details.order_id', '=', Number(order.id))
         .execute();
     res.json({ data: { ...updated, items } });
 }));

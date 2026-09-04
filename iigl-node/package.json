@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "tsx --test src/lib/money.test.ts",
-    "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "dev": "nodemon",
+    "build": "tsc && node scripts/copy-assets.mjs",
     "start": "node dist/server.js",
     "codegen": "kysely-codegen --dialect mysql --url $DATABASE_URL --out-file src/db/types.ts",
     "check:spec": "tsx src/docs/check-spec.ts",
@@ -17,7 +17,8 @@
     "migrate": "tsx src/db/migrate.ts",
     "migrate:status": "tsx src/db/migrate.ts --status",
     "check:parents": "tsx src/docs/check-parents.ts",
-    "check:commission": "tsx src/docs/check-commission.ts"
+    "check:commission": "tsx src/docs/check-commission.ts",
+    "dev:dist": "nodemon --watch src --ext ts,ejs,json --exec \"npm run build && npm start\""
   },
   "keywords": [],
   "author": "",

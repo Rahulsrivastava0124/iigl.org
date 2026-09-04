@@ -1,15 +1,22 @@
 import { db } from '../db/index.js';
+import { setting, settingNumber } from './settings.service.js';
 import { badRequest, conflict } from '../lib/errors.js';
 /**
  * Rebuilds the Laravel report number: lab id (2), day (2), running count (4),
  * yymm (4). Verified against live rows — 122600012608 is lab 12, day 26,
  * first report of the day, August 2026.
  */
-export function buildReportNo(labId, dailyCount, now = new Date()) {
+export function buildReportNo(labId, dailyCount, now = new Date(), 
+/** From Settings. Defaults reproduce the ported number exactly. */
+options = {}) {
     const p = (n, w) => String(n).padStart(w, '0');
     const lab = labId > 9 ? String(labId) : `0${labId}`;
     const yy = String(now.getFullYear()).slice(-2);
-    return `${lab}${p(now.getDate(), 2)}${p(dailyCount, 4)}${yy}${p(now.getMonth() + 1, 2)}`;
+    // The composition — laboratory, day, counter, year, month — is the Laravel
+    // one and is not configurable: it is what every certificate in circulation
+    // is identified by. Only the prefix in front and the counter's width are.
+    const width = options.counterWidth ?? 4;
+    return `${options.prefix ?? ''}${lab}${p(now.getDate(), 2)}${p(dailyCount, width)}${yy}${p(now.getMonth() + 1, 2)}`;
 }
 /** Reports already created today by this lab, which seeds the counter. */
 async function dailyCountForLab(labId, trx) {
@@ -146,7 +153,11 @@ export async function createReport(user, input) {
          * follow once the existing duplicate is resolved.
          */
         let count = (await dailyCountForLab(labId, trx)) + 1;
-        let reportNo = buildReportNo(labId, count);
+        const numbering = {
+            prefix: await setting('certificate.prefix'),
+            counterWidth: await settingNumber('certificate.counter_width'),
+        };
+        let reportNo = buildReportNo(labId, count, new Date(), numbering);
         for (let attempt = 0; attempt < 25; attempt++) {
             const clash = await trx
                 .selectFrom('reports')
@@ -156,7 +167,7 @@ export async function createReport(user, input) {
             if (!clash)
                 break;
             count++;
-            reportNo = buildReportNo(labId, count);
+            reportNo = buildReportNo(labId, count, new Date(), numbering);
         }
         const result = await trx
             .insertInto('reports')

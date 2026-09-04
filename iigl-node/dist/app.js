@@ -25,6 +25,9 @@ import { courseRoutes } from './routes/course.routes.js';
 import { studentCertificateRoutes } from './routes/student-certificate.routes.js';
 import { enquiryRoutes } from './routes/enquiry.routes.js';
 import { couponRoutes } from './routes/coupon.routes.js';
+import { fileRoutes } from './routes/file.routes.js';
+import { masterRoutes } from './routes/master.routes.js';
+import { settingsRoutes } from './routes/settings.routes.js';
 import { requireAuth } from './middleware/auth.js';
 import { loginLimiter, resetLimiter, verifyLogLimiter, renderLimiter } from './middleware/limits.js';
 import { openApiDocument } from './docs/openapi.js';
@@ -92,11 +95,17 @@ export function createApp() {
     // `public/uploads/<bucket>/<file>`, and until now nothing served those files
     // at all — the panel could upload an icon and never show it again.
     //
+    // Two sources, in this order. The legacy disk holds everything Laravel wrote
+    // and everything uploaded before R2; R2 holds everything since. Disk is tried
+    // first because it costs a stat rather than a request over the network, and
+    // `express.static` calls next() on a miss, which is what makes the fallback
+    // possible at all.
+    //
     // Only `uploads/` is mounted, not the whole Laravel public root, which also
     // holds the application's own source. `screenshots/` — payment proof — is
     // deliberately left out; it is evidence attached to a transaction rather than
     // a picture a list needs to render.
-    app.use('/api/files', express.static(path.resolve(env.legacyPublicRoot, 'uploads'), { index: false }));
+    app.use('/api/files', express.static(path.resolve(env.legacyPublicRoot, 'uploads'), { index: false }), fileRoutes);
     app.use('/api/attendance', attendanceRoutes);
     app.use('/api/content', contentRoutes);
     app.use('/api/customers', customerRoutes);
@@ -105,6 +114,8 @@ export function createApp() {
     app.use('/api/courses', courseRoutes);
     app.use('/api/student-certificates', studentCertificateRoutes);
     app.use('/api/enquiries', enquiryRoutes);
+    app.use('/api/master', masterRoutes);
+    app.use('/api/settings', settingsRoutes);
     app.use(notFoundHandler);
     app.use(errorHandler);
     return app;

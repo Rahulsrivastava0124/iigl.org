@@ -3,10 +3,10 @@ import { ArrowRight, Star } from 'lucide-react';
 /**
  * What clients say.
  *
- * Four quotes, five stars each, with the name and trade under a hairline. The
- * card is the house card — the same corner, border and shadow as the report
- * categories — so the row reads as part of the same site rather than as a
- * widget dropped into it.
+ * Four quotes, five stars each, with the client mark and name lifted to the
+ * top of the card. The card is the house card — the same corner, border and
+ * shadow as the report categories — so the row reads as part of the same site
+ * rather than as a widget dropped into it.
  *
  * The faces are initials in a soft gold disc. There are no client photographs
  * in `Assets/`, and putting stock portraits against named people would be a
@@ -75,9 +75,23 @@ export default function ReviewsSection() {
           {reviews.map((review) => (
             <article
               key={review.name}
-              className="flex flex-col rounded-xl border border-[#e6e8ee] bg-white px-5 py-7 shadow-[0_15px_38px_rgba(44,59,100,0.08)]"
+              className="flex flex-col items-center rounded-xl border border-[#e6e8ee] bg-white px-5 py-7 text-center shadow-[0_15px_38px_rgba(44,59,100,0.08)]"
             >
-              <div className="flex items-center gap-1" aria-label="Rated 5 out of 5">
+              <span
+                aria-hidden
+                className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-full bg-[#f7efe7] text-[19px] font-semibold tracking-[0.04em] text-[#bd7724] shadow-[0_12px_26px_rgba(213,138,43,0.14)]"
+              >
+                {initials(review.name)}
+              </span>
+
+              <h3 className="m-0 mt-4 text-[18px] font-semibold leading-tight tracking-normal text-[#061948]">
+                {review.name}
+              </h3>
+              <p className="m-0 mt-1 text-[14px] font-normal leading-tight text-[#4a5265]">
+                {review.trade}
+              </p>
+
+              <div className="mt-5 flex items-center justify-center gap-1" aria-label="Rated 5 out of 5">
                 {Array.from({ length: 5 }, (_, i) => (
                   // Filled, not outlined: a row of five outlines reads as five
                   // empty stars, which is the opposite of what it says.
@@ -88,21 +102,6 @@ export default function ReviewsSection() {
               <p className="mt-5 flex-1 text-[15px] font-normal leading-[1.75] text-[#3c4252]">
                 {review.quote}
               </p>
-
-              <div className="mt-6 flex items-center gap-3 border-t border-[#e6e8ee] pt-5">
-                <span
-                  aria-hidden
-                  className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full bg-[#f7efe7] text-[13px] font-medium tracking-[0.04em] text-[#bd7724]"
-                >
-                  {initials(review.name)}
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-[15px] font-medium text-[#061948]">{review.name}</span>
-                  <span className="block text-[13.5px] font-normal text-[#4a5265]">
-                    {review.trade}
-                  </span>
-                </span>
-              </div>
             </article>
           ))}
         </div>

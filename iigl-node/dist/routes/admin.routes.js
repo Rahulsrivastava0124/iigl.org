@@ -273,6 +273,26 @@ adminRoutes.delete('/attribute-values/:id', numericId, wrap(async (req, res) => 
         .execute();
     res.json({ ok: true, note: 'Retired. Existing certificates keep their values.' });
 }));
+/**
+ * The GST a course fee or a price band is quoted at.
+ *
+ * One of two, never both: a row from the master list, or a percent typed on
+ * the record itself. Choosing either clears the other, so nothing downstream
+ * has to decide which of two answers is the real one.
+ */
+function gstChoice(b) {
+    const id = b.gst_id ? Number(b.gst_id) : null;
+    if (id)
+        return { gst_id: id, gst_percent: null };
+    const raw = b.gst_percent;
+    if (raw == null || raw === '')
+        return { gst_id: null, gst_percent: null };
+    const percent = Number(raw);
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+        throw badRequest('GST percent must be a number between 0 and 100.');
+    }
+    return { gst_id: null, gst_percent: String(percent) };
+}
 // -------------------------------------------------------------------- prices
 /** Every price band, standard and laboratory-specific. */
 adminRoutes.get('/prices', wrap(async (req, res) => {
@@ -324,6 +344,9 @@ adminRoutes.post('/prices', wrap(async (req, res) => {
         rate: String(req.body?.rate ?? '0'),
         smart_price: positive(req.body?.smart_price, 'Smart card price'),
         classic_price: positive(req.body?.classic_price, 'Classic card price'),
+        // One of the two, never both. Order pricing applies the ported 18%
+        // either way; this records what the band is quoted at.
+        ...gstChoice(req.body ?? {}),
         created_at: new Date(),
         updated_at: new Date(),
     })
@@ -349,6 +372,9 @@ adminRoutes.patch('/prices/:id', numericId, wrap(async (req, res) => {
         patch.smart_price = positive(req.body.smart_price, 'Smart card price');
     if (req.body?.classic_price !== undefined)
         patch.classic_price = positive(req.body.classic_price, 'Classic card price');
+    if (req.body?.gst_id !== undefined || req.body?.gst_percent !== undefined) {
+        Object.assign(patch, gstChoice(req.body ?? {}));
+    }
     await db.updateTable('prices').set(patch).where('id', '=', id).execute();
     res.json({ ok: true });
 }));

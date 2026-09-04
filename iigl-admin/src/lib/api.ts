@@ -142,6 +142,18 @@ export interface Order {
   total_amount: string | null;
   paid_amount: string | null;
   dues_amount: string | null;
+  /** Pieces on the order: `order_details.qty` summed. */
+  total_items: number;
+  /**
+   * Certificates the order is owed. A line carrying both card kinds counts its
+   * quantity once for each, so this is not the same as `total_items`.
+   */
+  total_reports: number;
+  /** How many of those have been written. */
+  reports_generated: number;
+  assigned_to: number | null;
+  /** Resolved by the list endpoint. Null when the order is with nobody. */
+  assigned_to_name: string | null;
 }
 
 export interface Report {
@@ -259,10 +271,28 @@ export interface TrendMonth {
 }
 
 export interface DashboardSummary {
-  orders: { total: number; active: number; delivered: number; today: number };
+  orders: {
+    total: number;
+    active: number;
+    delivered: number;
+    today: number;
+    /** Ordered today and still in progress. */
+    active_today: number;
+  };
   reports: { total: number };
   cards: { smart: number; classic: number };
-  money: { sale: number; paid: number; dues: number; sale_today: number };
+  /**
+   * The `_today` three are the same three columns over orders delivered and
+   * dated today, so sale less paid is dues and the row adds up.
+   */
+  money: {
+    sale: number;
+    paid: number;
+    dues: number;
+    sale_today: number;
+    paid_today: number;
+    dues_today: number;
+  };
   wallet: {
     balance: number;
     commission_accrued: number;
@@ -270,6 +300,37 @@ export interface DashboardSummary {
     commission_dues: number;
     on_approval: number;
   };
+  /**
+   * The figures the Laravel laboratory dashboard showed. Null for head office,
+   * whose dashboard is a different screen with different quantities on it.
+   *
+   * These are not the head-office figures scoped down: cards are counted rather
+   * than orders, and the money is the laboratory's own ledger — what its staff
+   * have taken in, what has reached its wallet, and what head office is owed
+   * out of that.
+   */
+  lab: {
+    /** Cards ordered, smart and classic together. */
+    cards_ordered: number;
+    /** Certificates generated against those orders. */
+    cards_generated: number;
+    smart_generated: number;
+    classic_generated: number;
+    /** Everything this laboratory's staff have taken in, approved or not. */
+    collected: number;
+    /** Collected but not yet transferred in — money the staff still hold. */
+    employee_wallet: number;
+    /** Reached the laboratory, less what it has sent on to head office. */
+    my_wallet: number;
+    /** Head office's share of `my_wallet`, at this laboratory's rate. */
+    admin_commission: number;
+    today: {
+      cards_ordered: number;
+      sale: number;
+      paid: number;
+      dues: number;
+    };
+  } | null;
   people: {
     /** Null for a laboratory: it is one, so it does not count them. */
     laboratories: number | null;

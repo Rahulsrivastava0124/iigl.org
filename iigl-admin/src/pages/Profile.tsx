@@ -57,7 +57,7 @@ const TEXT_FIELDS = [
 
 export default function Profile() {
   const toast = useToast();
-  const { user } = useAuth();
+  const { user, refresh } = useAuth();
   const account = useFetch<{ data: Account }>('/users/me');
 
   const [form, setForm] = useState<Record<string, string>>({});
@@ -94,6 +94,10 @@ export default function Profile() {
       });
       toast.ok('Profile saved.');
       account.reload();
+      // The avatar in the bar reads the session's own photograph, which is
+      // read from the row rather than carried in the cookie. Without this the
+      // new picture only appears on the next full load.
+      void refresh();
     } catch (e) {
       toast.error(messageOf(e));
     } finally {

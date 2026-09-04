@@ -5,6 +5,7 @@ import { Avatar, Box, Stack, Typography } from '@mui/material';
 import PresentIcon from '@mui/icons-material/EventAvailableOutlined';
 import OpenIcon from '@mui/icons-material/HourglassEmptyOutlined';
 import HoursIcon from '@mui/icons-material/AccessTimeOutlined';
+import { fileUrl } from '../lib/config';
 import { useFetch } from '../lib/useFetch';
 import MonthCalendar, { monthRange, thisMonth } from '../components/MonthCalendar';
 import { Panel, StateChip, Tile, YesNo, attendanceState } from '../components/ui';
@@ -103,7 +104,7 @@ export default function EmployeeView() {
           sx={{ p: 2, alignItems: { md: 'center' } }}
         >
           <Avatar
-            src={p?.profile_photo || undefined}
+            src={fileUrl(p?.profile_photo) ?? undefined}
             sx={{ width: 56, height: 56, bgcolor: 'primary.main', fontSize: 18 }}
           >
             {initials(p?.fullname ?? '')}

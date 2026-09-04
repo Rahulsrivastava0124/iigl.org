@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Button,
@@ -169,6 +169,17 @@ export default function Master() {
   const [quickText, setQuickText] = useState('');
   const [quickParent, setQuickParent] = useState('');
 
+  useEffect(() => {
+    setQuickParent('');
+    setQuickText('');
+  }, [list.id]);
+
+  const allRows = rows.data?.data ?? [];
+  const visibleRows =
+    list.parent && quickParent
+      ? allRows.filter((row) => String(row[list.parent!.column]) === quickParent)
+      : allRows;
+
   const quickAdd = async () => {
     if (!quickField) return;
     const value = quickText.trim();
@@ -319,7 +330,13 @@ export default function Master() {
 
       <Panel
         title={`${list.label} list`}
-        count={rows.data ? `${rows.data.data.length.toLocaleString()} rows` : 'Loading…'}
+        count={
+          rows.data
+            ? `${visibleRows.length.toLocaleString()} ${
+                quickParent && list.parent ? 'filtered ' : ''
+              }rows`
+            : 'Loading…'
+        }
         actions={
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }} useFlexGap>
             {quickField && (
@@ -333,6 +350,7 @@ export default function Master() {
                     onChange={(e) => setQuickParent(e.target.value)}
                     sx={{ minWidth: 150 }}
                   >
+                    <MenuItem value="">All {list.parent.label.toLowerCase()}s</MenuItem>
                     {parents.data?.data.map((p) => (
                       <MenuItem key={p.id} value={String(p.id)}>
                         {String(p.name)}
@@ -394,7 +412,7 @@ export default function Master() {
         <TableFrame
           loading={rows.loading}
           error={rows.error}
-          empty={(rows.data?.data.length ?? 0) === 0}
+          empty={visibleRows.length === 0}
           emptyText={`No ${list.noun.toLowerCase()} yet. Add the first one.`}
         >
           <Table size="small">
@@ -412,7 +430,7 @@ export default function Master() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {(rows.data?.data ?? []).map((row, index) => (
+              {visibleRows.map((row, index) => (
                 <TableRow key={row.id} hover>
                   <TableCell className="mono">{index + 1}</TableCell>
                   {list.parent && <TableCell>{parentName(row)}</TableCell>}

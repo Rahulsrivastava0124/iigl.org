@@ -147,6 +147,36 @@ what the business believes is owed.
 
 ---
 
+## The laboratory dashboard
+
+`Member\DashboardController@index` is a different screen from the head office
+one, not the same screen scoped down: it counts **cards** where head office
+counts orders, and its money is the laboratory's own ledger rather than the
+system's. It is now ported as its own block, `lab`, on
+`GET /api/dashboard/summary`, and is null for head office.
+
+Three of its queries are quirks rather than choices. All three are carried over
+as they are, because a laboratory reconciles its wallet against what that screen
+has been telling it for years, and each is marked in the route:
+
+| Tile | What Laravel actually does |
+| --- | --- |
+| Paid Amount | Sums every transaction its staff received, **with no status filter** — money nobody has approved counts the same as money that cleared. |
+| Today's Sale | Dated by `delivery_date` and counted whatever the status, while the Total Sale beside it counts delivered orders only. The two are not one measure at two scales. |
+| Today's Paid | Requires **both** the delivery and the payment to fall today, so an order delivered yesterday and paid this morning appears on neither day. |
+
+Two things in the blade were left behind rather than ported, both defects:
+
+- **Today's Active** rendered `$today_order` — the same variable as Today
+  Collect — so the two tiles always showed an identical number. It now counts
+  orders dated today whose status is `preparing`.
+- `employements.parent_id` was matched against a **user id**. This schema stores
+  an `empid` there, so the port resolves the laboratory's `empid` first, as the
+  rest of the API does.
+
+Not yet verified against a running Laravel instance: the figures come from
+reading the controller, not from diffing two live dashboards.
+
 ## Before cutover
 
 1. Resolve the duplicate certificate number, then add a unique index on

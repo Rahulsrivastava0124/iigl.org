@@ -5,6 +5,7 @@ import { db } from '../db/index.js';
 import { notFound } from '../lib/errors.js';
 import { expandAttributes } from './report.service.js';
 import { env } from '../lib/env.js';
+import { getObjectBuffer } from '../lib/storage.js';
 /**
  * Assembles everything a certificate card needs to render.
  *
@@ -27,6 +28,11 @@ const assetCache = new Map();
  * Reads an asset and returns it as a data URI, or null when it is missing.
  * Stored paths look like `public/uploads/report/123main.jpg`, relative to the
  * Laravel project root, so the leading `public/` is stripped.
+ *
+ * Disk first, then R2 — the same order `/api/files` uses, and for the same
+ * reason: everything Laravel wrote is on disk, everything since is in the
+ * bucket, and a stat is cheaper than a request. A card whose image is in
+ * neither renders without it rather than failing.
  */
 export async function asDataUri(storedPath) {
     if (!storedPath)
@@ -35,22 +41,17 @@ export async function asDataUri(storedPath) {
         return assetCache.get(storedPath) ?? null;
     const relative = storedPath.replace(/^\/?public\//, '').replace(/^\/+/, '');
     const absolute = path.resolve(PUBLIC_ROOT, relative);
+    const mime = MIME[path.extname(relative).toLowerCase()] ?? 'application/octet-stream';
     // Never read outside the public root, whatever the database holds.
-    if (!absolute.startsWith(path.resolve(PUBLIC_ROOT))) {
-        assetCache.set(storedPath, null);
-        return null;
+    const insideRoot = absolute.startsWith(path.resolve(PUBLIC_ROOT));
+    let buffer = null;
+    if (insideRoot) {
+        buffer = await readFile(absolute).catch(() => null);
     }
-    try {
-        const buffer = await readFile(absolute);
-        const mime = MIME[path.extname(absolute).toLowerCase()] ?? 'application/octet-stream';
-        const uri = `data:${mime};base64,${buffer.toString('base64')}`;
-        assetCache.set(storedPath, uri);
-        return uri;
-    }
-    catch {
-        assetCache.set(storedPath, null);
-        return null;
-    }
+    buffer ??= await getObjectBuffer(relative);
+    const uri = buffer ? `data:${mime};base64,${buffer.toString('base64')}` : null;
+    assetCache.set(storedPath, uri);
+    return uri;
 }
 export async function loadChrome() {
     const [cardLogo, backLogo, watermark] = await Promise.all([

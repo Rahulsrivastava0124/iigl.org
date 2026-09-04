@@ -97,6 +97,16 @@ export const TONE = {
   no: { main: '#fb3b5c', on: '#ffffff', soft: '#feeaee' },
 } as const;
 
+/**
+ * The brand navy in the shape TONE's entries have, so a tile filled with it and
+ * a tile filled with a tone are the same kind of value rather than one of them
+ * being assembled at the call site.
+ *
+ * `soft` is the wash, for a card that carries the colour without shouting it;
+ * `main` is the full navy, which takes white above 7:1.
+ */
+export const BRAND_FILL = { main: BRAND.navy, on: '#ffffff', soft: BRAND.navyWash } as const;
+
 export type ToneName = keyof typeof TONE;
 
 /**

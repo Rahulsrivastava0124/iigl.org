@@ -16,6 +16,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useToast } from '../components/Toast';
+import { fileUrl } from '../lib/config';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
@@ -189,7 +190,7 @@ export default function RoleEdit() {
                 <TableRow key={u.id} hover>
                   <TableCell>
                     <Avatar
-                      src={u.profile_photo || undefined}
+                      src={fileUrl(u.profile_photo) ?? undefined}
                       sx={{ width: 36, height: 36, fontSize: 14, bgcolor: 'primary.main' }}
                     >
                       {getInitials(u.fullname)}

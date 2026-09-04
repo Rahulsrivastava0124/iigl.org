@@ -59,6 +59,32 @@ export default function OrderDetail() {
   const o = order.data?.data;
   const q = quote.data?.data;
 
+  /**
+   * How far the order has been certified.
+   *
+   * The money on this screen is priced from certificates, not from the order —
+   * a line has no price of its own, and the band is chosen by the carat weight
+   * the certificate records. So an order nobody has written a certificate for
+   * prices at zero, correctly and unhelpfully. These two figures are what turn
+   * that zero into a sentence.
+   *
+   * `owed` counts a line's quantity once per card kind it asks for, matching
+   * the Total Report column the Laravel list and detail screens both carried.
+   */
+  const items: any[] = o?.items ?? [];
+  const reports: any[] = o?.reports ?? [];
+  const writtenPerItem = new Map<string, number>();
+  for (const r of reports) {
+    const key = String(r.order_detail_id);
+    writtenPerItem.set(key, (writtenPerItem.get(key) ?? 0) + 1);
+  }
+  const owedFor = (it: any) => it.qty * (it.smart_card + it.classic_card);
+  const writtenFor = (it: any) =>
+    (writtenPerItem.get(String(it.id)) ?? 0) * (it.smart_card + it.classic_card);
+
+  const owed = items.reduce((t, it) => t + owedFor(it), 0);
+  const written = items.reduce((t, it) => t + writtenFor(it), 0);
+
   const settle = async () => {
     setBusy(true);
     try {
@@ -119,10 +145,16 @@ export default function OrderDetail() {
               Invoice
             </Button>
             {o.status !== 'delivered' && (
+              /*
+                Not settleable until something has been certified. Without this
+                the button was live on an order priced at zero, and settling it
+                writes that zero to the order as its bill and marks it
+                delivered — a mistake with no undo on this screen.
+              */
               <Button
                 variant="contained"
                 onClick={() => setSettling(true)}
-                disabled={!q}
+                disabled={!q || written === 0}
               >
                 Settle and deliver
               </Button>
@@ -138,18 +170,38 @@ export default function OrderDetail() {
               <TableCell align="right">Quantity</TableCell>
               <TableCell>Smart card</TableCell>
               <TableCell>Classic card</TableCell>
+              <TableCell align="right">Certificates</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {(o.items ?? []).map((it: any) => (
+            {items.map((it: any) => (
               <TableRow key={it.id} hover>
                 <TableCell className="mono">#{it.id}</TableCell>
-                <TableCell>{it.category_id}</TableCell>
+                <TableCell>{it.category_name ?? it.category_id}</TableCell>
                 <TableCell align="right" className="tabular">
                   {it.qty}
                 </TableCell>
                 <TableCell>{it.smart_card ? 'Yes' : '—'}</TableCell>
                 <TableCell>{it.classic_card ? 'Yes' : '—'}</TableCell>
+                {/* Written of owed, the way the order list reads it. */}
+                <TableCell align="right" className="tabular">
+                  <Box
+                    component="span"
+                    sx={{
+                      fontWeight: 600,
+                      color:
+                        writtenFor(it) >= owedFor(it) && owedFor(it) > 0
+                          ? 'success.main'
+                          : 'text.primary',
+                    }}
+                  >
+                    {writtenFor(it)}
+                  </Box>
+                  <Box component="span" sx={{ color: 'text.secondary' }}>
+                    {' / '}
+                    {owedFor(it)}
+                  </Box>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -199,6 +251,16 @@ export default function OrderDetail() {
                 </TableRow>
               </TableHead>
               <TableBody>
+                {q.certificates.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} sx={{ py: 3, color: 'text.secondary' }}>
+                      No certificate has been written against this order yet, so there is nothing
+                      to price. An order is billed per certificate — the weight band is chosen by
+                      the carat weight each one records — so the totals below stay at zero until
+                      the first is issued. {written} of {owed} written.
+                    </TableCell>
+                  </TableRow>
+                )}
                 {q.certificates.map((c) => (
                   <TableRow key={c.report_id} hover>
                     <TableCell className="mono">{c.report_no}</TableCell>

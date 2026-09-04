@@ -1,0 +1,774 @@
+<%
+/*
+  The Franchise Agreement — the four pages that follow the registration form.
+
+  A typeset copy of the printed agreement (pages 2 to 5 of the paper pack),
+  filled from the laboratory's record where the paper has a blank and left
+  blank where the paper is filled in by hand.
+
+  What is printed here is the offer itself: the equipment a franchise must hold
+  before it opens, what is charged for and what is not, the refund position and
+  the order the establishment runs in. That is the same for every franchise, so
+  it is written in the template rather than read from a record — a laboratory
+  does not get its own equipment list. Only the header block is theirs.
+
+  Four pages, each `page-break-after` except the last, so a browser and the PDF
+  renderer both break where the paper does.
+*/
+const v = (x) => (x === null || x === undefined || x === '' ? '' : String(x));
+
+/*
+  The outline of a tag panel: a point at the end that faces its step, and the
+  far bottom corner cut. `preserveAspectRatio="none"` lets one polygon serve
+  every panel whatever its height, and a non-scaling stroke keeps the line a
+  hairline instead of stretching with the box.
+*/
+const frame = (flip) =>
+  '<svg class="frame" viewBox="0 0 200 60" preserveAspectRatio="none">' +
+  '<polygon points="' +
+  (flip ? '0,0 188,0 200,30 188,60 14,60 0,46' : '12,0 200,0 200,46 186,60 12,60 0,30') +
+  '" fill="#fff" stroke="#555" stroke-width="1" vector-effect="non-scaling-stroke"/></svg>';
+%>
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Franchise Agreement — <%= v(title) %></title>
+<style>
+  @page { size: A4; margin: 10mm; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+    /*
+      Set to the paper it copies. The scanned agreement is read across a
+      counter and initialled line by line, and the first typeset pass came out
+      a third smaller than the document it replaces — everything below is
+      sized from here.
+    */
+    font-size: 14px;
+    color: #111;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* One sheet of A4, and the break that follows it. */
+  .sheet { width: 190mm; margin: 0 auto; page-break-after: always; }
+  /*
+    The first sheet is laid out to the height of the page, so the stones and
+    the closing line sit near the foot of it as they do on the paper, instead
+    of stopping two-thirds down with a third of the sheet blank.
+  */
+  .sheet.first { min-height: 271mm; display: flex; flex-direction: column; }
+  .grow { flex: 1 1 auto; }
+  .sheet:last-of-type { page-break-after: auto; }
+
+  header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .brand { display: flex; gap: 9px; align-items: center; }
+  .brand img { height: 58px; }
+  .lockup { font-family: "Times New Roman", Georgia, serif; }
+  .lockup .row { display: flex; align-items: center; gap: 8px; }
+  .lockup .name { font-size: 30px; font-weight: 700; letter-spacing: .5px; line-height: 1; }
+  .lockup .sub { font-size: 11.5px; line-height: 1.25; }
+  .brand .iso {
+    font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 9.5px; font-weight: 700; letter-spacing: .2px; margin-top: 3px;
+  }
+  .tag { font-size: 12px; color: #555; font-style: italic; align-self: center; }
+
+  /* The grey contact bar the printed letterhead runs under its lockup. */
+  .bar {
+    background: #6b6b6b; color: #fff; display: flex; justify-content: space-between;
+    gap: 12px; padding: 7px 10px; margin-top: 8px; font-size: 12px; line-height: 1.45;
+  }
+  .bar b { font-weight: 700; }
+  .bar .right { text-align: right; }
+
+  /* The header block: what this agreement is, and whose it is. */
+  /*
+    What the sheet is, over the middle of the page.
+
+    It was the first row of the left-hand column, which made the title of the
+    document read as though it were one more field about the franchise. It
+    heads the block instead, with the date kept on its own line at the right
+    where a dated letter carries it.
+  */
+  .dhead {
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: baseline;
+    margin-top: 14px; column-gap: 12px;
+  }
+  .dhead .mid {
+    grid-column: 2; text-align: center; font-weight: 700; font-size: 16px;
+    letter-spacing: .4px;
+  }
+  .dhead .dated { grid-column: 3; text-align: right; font-size: 13.5px; }
+  .dhead .dated b { margin-left: 6px; }
+
+  /*
+    The details block, set as the paper sets it: a plain label, the answer in
+    bold beside it, two columns across the sheet.
+  */
+  .subject { display: flex; justify-content: space-between; gap: 24px; margin-top: 10px; }
+  .pairs { display: grid; grid-template-columns: 112px 1fr; gap: 6px 12px; font-size: 13.5px; }
+  .pairs .k { color: #111; }
+  .pairs .val { font-weight: 700; }
+  .pairs .val.blank { border-bottom: 1px solid #999; min-height: 15px; font-weight: 400; }
+
+  /* Address and pin code, ruled, with the empty second line the paper keeps
+     for an address that runs on. */
+  .addrbox { border: 1px solid #444; margin-top: 10px; font-size: 13.5px; }
+  .addrline { display: flex; }
+  .addrline + .addrline { border-top: 1px solid #444; }
+  .addrline .a { flex: 1; padding: 5px 8px; border-right: 1px solid #444; min-height: 24px; }
+  .addrline .p { width: 175px; padding: 5px 8px; min-height: 24px; }
+
+  h1 { font-size: 21px; text-align: center; margin: 0 0 10px; text-decoration: underline; }
+  h2 {
+    font-size: 17.5px; text-align: center; margin: 14px 0 8px;
+    text-decoration: underline; font-weight: 700;
+  }
+
+  /* The body of page one: the claim the franchise is being asked to accept. */
+  .claim {
+    font-family: "Times New Roman", Georgia, serif;
+    font-size: 16.5px; font-weight: 700; text-decoration: underline;
+    line-height: 1.55; margin: 12px 0;
+  }
+  /* The paper sets this one in italic, as it does the line naming the
+     directors. Bold and underlined like its neighbours, slanted like itself. */
+  .claim.slant { font-style: italic; }
+  .claim.plain {
+    font-weight: 400; text-decoration: none; font-style: italic;
+    text-align: center; font-size: 16px; line-height: 1.6;
+  }
+
+  /*
+    The five stones the paper prints above the closing line, drawn rather than
+    scanned: a round brilliant in profile, five of them stepping up in size on
+    a black band. Drawn because a scan of a photograph of a diamond prints as
+    grey mush at this size, and because an SVG is sharp at whatever the
+    printer's resolution turns out to be.
+  */
+  /* The band as it is printed: one image, centred, at the width the paper
+     gives it. */
+  .diamonds { text-align: center; margin: 16px 0 10px; }
+  .diamonds img { width: 62%; display: block; margin: 0 auto; }
+  .shout { text-align: center; font-size: 19px; font-weight: 700; text-decoration: underline; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { border: 1px solid #444; padding: 6px 8px; }
+  thead th { background: #111; color: #fff; font-weight: 700; text-align: center; }
+  th.left, td.left { text-align: left; }
+  td.mid { text-align: center; font-style: italic; }
+  td.sl { width: 34px; text-align: center; }
+  .band td {
+    background: #111; color: #fff; text-align: center; font-weight: 700; font-style: normal;
+  }
+  .note {
+    background: #111; color: #fff; font-size: 12px; font-style: italic;
+    padding: 4px 8px; margin-top: 2px;
+  }
+
+  .apply { text-align: center; margin-top: 18px; }
+  .apply .line { font-weight: 700; text-decoration: underline; font-size: 16.5px; margin: 8px 0; }
+
+  .policy { text-align: center; font-size: 13.5px; line-height: 1.6; margin-top: 10px; }
+  .policy .head { font-weight: 700; font-size: 16px; }
+  .boxed {
+    border: 1px solid #444; padding: 8px 10px; margin-top: 10px;
+    font-size: 13px; font-style: italic; text-align: center;
+  }
+
+  /*
+    The establishment diagram, drawn as the paper draws it.
+
+    A step is a dark rounded tablet; what has to be true for it is a white
+    panel notched into the tablet's side, so the pair reads as one shape with
+    a hinge rather than as two boxes that happen to touch. Steps alternate
+    left and right down the page, and the one branch in the sequence —
+    approval opening into registration and location — gets the black arm the
+    paper draws.
+  */
+  /*
+    Inset from both margins, as on the paper: the tablets start a little in
+    from the left and the right-hand column stops short of the right edge, so
+    the sequence reads as a drawing on the sheet rather than a table ruled to
+    its full width.
+  */
+  .flow { margin: 12px auto 0; width: 84%; }
+  /*
+    A row is centred on itself, not stretched.
+
+    Stretching made the branch row's tablet and panel as tall as the two
+    stacked pairs beside them — a step box four lines high with one line in it,
+    and a white panel that was mostly empty. On the paper every box is the
+    height of its own text, and the fork simply sits alongside.
+  */
+  /* Air between the steps, as the paper leaves it. */
+  .row { display: flex; align-items: center; margin-bottom: 9px; }
+  .row.right { justify-content: flex-end; }
+  .pair { display: flex; align-items: stretch; }
+
+  .tablet {
+    background: #464646; color: #fff; border-radius: 9px; width: 132px;
+    /* No padding at the sides at all: the tablet is a fixed width and its text
+       is centred, so every pixel of side padding is taken straight out of the
+       line — "Show The Concept Clearly" was wrapping with room to spare. */
+    /* Deeper boxes, as on the paper: a one-line step should still be a
+       tablet, not a strip. */
+    padding: 10px 0; min-height: 40px; font-size: 10.5px; font-weight: 600; line-height: 1.3;
+    display: flex; align-items: center; justify-content: center; text-align: center;
+  }
+  /*
+    The tag, drawn rather than clipped.
+
+    `clip-path` cuts the border off along with the shape, and the drop-shadow
+    trick that is supposed to trace the silhouette does not survive the print
+    render — both attempts left the point and the cut corner as gaps in the
+    outline. So the outline is an SVG behind the text: one polygon, stroked,
+    stretched to whatever size the panel ends up. The point faces the tablet
+    and the far bottom corner is cut, which is the shape on the paper.
+  */
+  .panel-note {
+    position: relative; width: 168px; padding: 9px 10px 11px 17px; min-height: 40px;
+    font-size: 9.5px; line-height: 1.4; display: flex; flex-direction: column;
+    justify-content: center; margin-left: -1px;
+  }
+  .panel-note .frame {
+    position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: -1;
+  }
+  /* Mirrored, for the rows where the panel sits to the left of its tablet. */
+  .pair.flip { flex-direction: row-reverse; }
+  .pair.flip .panel-note {
+    padding: 9px 17px 11px 10px; margin-left: 0; margin-right: -1px;
+  }
+  /*
+    The approvals panel: label, YES, NO in three columns, so the boxes stand
+    under each other whatever the label's length.
+  */
+  .panel-note.approvals { width: 224px; }
+  .panel-note.approvals .grid {
+    display: grid; grid-template-columns: auto auto auto;
+    column-gap: 10px; row-gap: 2px; align-items: center;
+  }
+  /* "Approved by Addmin" is one label, not two lines. */
+  .panel-note.approvals .grid > div { white-space: nowrap; }
+
+  .panel-note ul { margin: 0; padding-left: 11px; }
+  .panel-note li { margin: 0.5px 0; }
+
+  /* A closed box to tick, ruled on all four sides. */
+  .tick {
+    display: inline-block; width: 9px; height: 9px; margin: 0 7px 0 3px;
+    border: 1.1px solid #111;
+    /* Sits on the line rather than under it, and never alone: a "YES" whose
+       box has wrapped to the next line is a box for nothing. */
+    vertical-align: middle;
+  }
+  .nowrap { white-space: nowrap; }
+
+  /* The branch: one arm down, two arms out, each with a head. */
+  /*
+    The fork, built to the same rhythm as the pair of steps it points at.
+
+    The arms were positioned at guessed percentages of the row's height, which
+    put them a few pixels off each tablet's middle and — at 30px wide — let the
+    heads print on top of the tablets. Now the arm sits in a lane of its own,
+    one lane per step and the same gap between them as the stack uses, so each
+    arm is centred on the box it points at however tall that box turns out.
+  */
+  .branch {
+    position: relative; width: 48px; margin: 0 2px 0 2px; align-self: stretch;
+    display: flex; flex-direction: column; gap: 9px;
+  }
+  .branch .lane { flex: 1; display: flex; align-items: center; }
+  /*
+    Arm and head, proportioned like the drawn one: a thin rule out to a solid
+    head, not a block with a bite out of it.
+  */
+  /*
+    `arm`, not `bar`: the letterhead's grey contact strip is `.bar`, and its
+    7px of vertical padding was being added to every arm of this fork — which
+    is why they printed as slabs three times their height with the head stuck
+    on the middle of them.
+  */
+  .branch .arm { height: 4px; width: 28px; margin-left: 6px; background: #111; }
+  .branch .head {
+    width: 0; height: 0;
+    border-top: 6px solid transparent; border-bottom: 6px solid transparent;
+    border-left: 8px solid #111;
+  }
+  /*
+    The upright joining the two arms.
+
+    It has to end on the arms' own centres, and those are not at a quarter and
+    three quarters of the branch: each lane is `(height - gap) / 2` tall, so a
+    centre sits a quarter of the gap higher than the quarter mark. Written that
+    way rather than nudged by eye, so it stays joined if the gap changes.
+  */
+  .branch .spine {
+    position: absolute; left: 6px; width: 4px; background: #111;
+    top: calc(25% - 2.25px); bottom: calc(25% - 2.25px);
+  }
+  .stack { display: flex; flex-direction: column; gap: 9px; }
+
+  /* The closing artwork, as the paper closes the page: across the foot, with
+     the signature to the right of it. */
+  /* Across the sheet: the artwork closes the page, so it takes the full
+     measure rather than sitting as a small picture in the middle of it. */
+  .puzzle { margin: 4px 0 0; text-align: center; }
+  /*
+    Sized against the room the diagram leaves: the artwork is 2.5:1, so every
+    extra percent of width costs height, and the sign-off has to stay on this
+    page. 62% is the current ceiling.
+  */
+  .puzzle img { width: 62%; height: auto; display: block; margin: 0 auto; }
+
+  /* The diagram page carries the lockup under its title, as the paper does. */
+  .diagram-head { text-align: center; }
+  .diagram-head .title {
+    font-family: "Times New Roman", Georgia, serif; font-size: 20px; font-weight: 700;
+    letter-spacing: 2.5px; margin-bottom: 8px;
+  }
+  /* Lockup hard left, tagline hard right, with the rule between them — the
+     letterhead spans the sheet rather than bunching at one end. */
+  .diagram-head .lock {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-bottom: 8px;
+  }
+  .diagram-head .lock .mark { display: flex; align-items: center; gap: 10px; }
+  .diagram-head .lock .said { display: flex; align-items: center; }
+  .diagram-head .lock img { height: 46px; }
+  .diagram-head .lock .divider { width: 1px; align-self: stretch; background: #999; margin: 0 14px; }
+  .diagram-head .lock .tagline { font-size: 12px; color: #666; font-style: italic; }
+
+  .signoff { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 10px; }
+  .signoff .who { font-size: 13px; }
+  .signoff .rule { border-top: 1px solid #444; width: 190px; padding-top: 4px; font-size: 11.5px; text-align: center; }
+</style>
+</head>
+<body>
+
+<!-- =============================================================== page 1 -->
+<div class="sheet first">
+  <header>
+    <div class="brand">
+      <% if (logo) { %><img src="<%= logo %>" alt=""><% } %>
+      <div class="lockup">
+        <div class="row">
+          <div class="name">IIGL</div>
+          <div class="sub">Institute of International<br>Gemological Laboratory</div>
+        </div>
+        <div class="iso">AN ISO CERTIFIED 9001:2015 COMPANY</div>
+      </div>
+    </div>
+    <div class="tag">Giving an Identity of Pureness</div>
+  </header>
+
+  <div class="bar">
+    <div>
+      <%= v(company.address) || 'Door No. 201, 2nd Floor, 75 Topping Road' %><br>
+      <%= [v(company.city), v(company.state), v(company.pincode)].filter(Boolean).join(' - ')
+          || 'Kolkata - 700 071' %>
+    </div>
+    <div class="right">
+      Contact : <%= v(company.phone) || '+91 9570702777' %><br>
+      Email : <%= v(company.email) || 'support@iigl.org' %><br>
+      <b>Log on to : <%= v(company.website) || 'www.iigl.org' %></b>
+    </div>
+  </div>
+
+  <div class="dhead">
+    <div class="mid">Franchise Agreements Details</div>
+    <div class="dated">Date: <b><%= issuedOn %></b></div>
+  </div>
+
+  <div class="subject">
+    <div class="pairs">
+      <div class="k">Owner Name:</div><div class="val"><%= v(lab.owner_name) %></div>
+      <div class="k">Contact:</div><div class="val"><%= v(lab.mobile) %></div>
+      <div class="k">Sponsor Name :</div><div class="val blank"></div>
+    </div>
+    <div class="pairs">
+      <div class="k">Form Number:</div><div class="val"><%= v(lab.empid) %></div>
+      <div class="k">Company Name</div><div class="val"><%= v(lab.fullname) %></div>
+      <div class="k">Email Id</div><div class="val"><%= v(lab.email) %></div>
+    </div>
+  </div>
+
+  <div class="addrbox">
+    <div class="addrline">
+      <div class="a">Address : <%= [v(lab.address), v(lab.city), v(lab.state)].filter(Boolean).join(', ') %></div>
+      <div class="p">Pin Code : <%= v(lab.pincode) %></div>
+    </div>
+    <!-- The second line the paper leaves empty, for an address that runs on. -->
+    <div class="addrline"><div class="a">&nbsp;</div><div class="p">&nbsp;</div></div>
+  </div>
+
+  <%
+    /*
+      The words are the paper's, not a rewrite of them.
+
+      An earlier pass tidied the grammar; this is a signed agreement, and a
+      franchise comparing the printed sheet against the one in their hand
+      should find the same sentences. Only the run-together "Certifiedand" is
+      separated, which is a scanning artefact rather than something anybody
+      typed.
+    */
+  %>
+  <div class="claim">
+    IIGL is a self-reliant and independent laboratory center which is equipped
+    with state-of-the-art equipment and ISO 9001-2015 Certified Organization
+  </div>
+  <div class="claim slant">
+    Where all types of gems, Rudraksh, Diamond, and Diamond Jewellery are
+    Certified and Reports are Provided by us
+  </div>
+  <div class="claim">
+    <span style="font-style:italic">Chief Executive Director and Manager of IIGL</span>
+    Organization Mr. SURUJIT BANERJEE , and, JAI BANDHU
+  </div>
+  <div class="claim">
+    Who have shown their work experience of 17 years together Of which you too
+    be a part Organization. IIGL Unmatched good experience, known for his good
+    rapport and honesty in the market
+  </div>
+
+  <div class="claim plain">
+    We continuously strive to improve our service standards. and look forward to
+    increasing our customer base from you IIGL is reputed for its superior
+    quality which gives you the introduction the name of Gemologist
+  </div>
+  <div class="claim plain">
+    For the smooth running of the Lab system, at least 300, to 500, SQFT
+  </div>
+  <div class="claim plain">
+    space is required in the initial phase. In which clean drinking water
+  </div>
+  <div class="claim plain">and toilets are mandatory.</div>
+
+  <div class="grow"></div>
+
+  <div class="diamonds"><img src="<%= band %>" alt=""></div>
+  <div class="shout">( MAYBE IMPORTANT FOR YOU )</div>
+</div>
+
+<!-- =============================================================== page 2 -->
+<div class="sheet">
+  <h1>Mandatory Equipment for the Initial Phase</h1>
+  <div class="claim plain" style="margin-top:0">
+    We have the skill to show amazing features, for which we use high modern equipment.
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:34px">SL No</th>
+        <th class="left">Self-Dependent Franchise ( Category )</th>
+        <th style="width:110px">Initial</th>
+        <th style="width:110px">Upgrade</th>
+      </tr>
+    </thead>
+    <tbody>
+      <%
+        const equipment = [
+          ['Microscope 3.5–55x zoom, 0.5x and 2x Barlow lenses, with inbuilt camera and many features', '1 Pc', '2 Pc'],
+          ['Refractive Index meter', '1 Pc', '2 Pc'],
+          ['Diamond Mate', '1 Pc', '2 Pc'],
+          ['Hardness Detector', '1 Pc', '1 Pc'],
+          ['Digital Measurement', '2 Pc', '4 Pc'],
+          ['Colour Detector UV Light', '1 Pc', '1 Pc'],
+          ['Emerald Mate', '1 Pc', '1 Pc'],
+          ['Hand loops', '10 Pc', '5 Pc'],
+          ['Weight Machine', '1 Pc', '2 Pc'],
+          ['Trey, Gripper, Chimta etc.', '2 Pc each', '4 Pc each'],
+          ['Sorting Pad', '1 Pc', '1 Pc'],
+          ['Cutter', '2 Pc', '2 Pc'],
+          ['Lamination Machine', '2 Pc', '2 Pc'],
+          ['Chelsea Filter', '1 Pc', '1 Pc'],
+        ];
+      %>
+      <% equipment.forEach((row, i) => { %>
+        <tr>
+          <td class="sl"><%= i + 1 %></td>
+          <td class="left"><%= row[0] %></td>
+          <td class="mid"><%= row[1] %></td>
+          <td class="mid"><%= row[2] %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  <div class="note">
+    Note : Higher equipment is subject to your budget, based on accuracy and quality. For future
+    application only.
+  </div>
+
+  <h2>Commitment, Support, Advice and Services</h2>
+  <table>
+    <tbody>
+      <%
+        const commitments = [
+          'Maintenance of all reported data, base and optimisation from time to time',
+          'No server charge, no domain charge',
+          'No annual maintenance charge',
+          'No service visiting charge',
+        ];
+      %>
+      <% commitments.forEach((line) => { %>
+        <tr>
+          <td class="left"><%= line %></td>
+          <td class="mid" style="width:150px">Free</td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+
+  <div class="apply">
+    <div class="claim plain" style="margin:8px 0">
+      We provide a smile with our services — humbly supported by experts.
+    </div>
+    <div class="line">Apply for Registration</div>
+    <div class="line"><%= v(company.website) || 'www.iigl.org' %> &nbsp;·&nbsp; <%= v(company.email) || 'support@iigl.org' %></div>
+    <div class="line"><%= v(company.phone) || '+91 9570702777' %></div>
+  </div>
+</div>
+
+<!-- =============================================================== page 3 -->
+<div class="sheet">
+  <h1>What We Provide On Site After Registration</h1>
+
+  <table>
+    <thead>
+      <tr>
+        <th class="left">Name of Service</th>
+        <th style="width:110px">Paid Service</th>
+        <th style="width:110px">Free Service</th>
+      </tr>
+    </thead>
+    <tbody>
+      <%
+        const paid = [
+          'Printing material, at cost, according to market price',
+          'Best quality equipment at a very reasonable price',
+          'Highly experienced employees ( in your city, on your payroll )',
+          'Franchise fee, with GST charged extra at 18%',
+          'Commission and tax, applicable on the sale amount only',
+          'Your franchise centre branding material, at cost',
+          'Local advertisement ( social media etc. ) of your choice',
+        ];
+        const free = [
+          'SEO ( search engine optimisation ) — country wise',
+          'SEO ( search engine optimisation ) — state wise',
+          'SEO ( search engine optimisation ) — district wise',
+          'Social media — country wise',
+          'Social media — state wise',
+          'Social media — district wise',
+          'Marketing support and advice on how to grow',
+          'Design for your franchise centre’s branding and marketing',
+          'Maintenance of all reports and databases on the cloud',
+          'No cost applied for server or its service charge',
+          'No extra cost charged for a visit to your franchise point',
+          'Annual maintenance charge',
+          'Gemologist uniform',
+        ];
+      %>
+      <% paid.forEach((line) => { %>
+        <tr><td class="left"><%= line %></td><td class="mid">Yes</td><td class="mid">No</td></tr>
+      <% }) %>
+      <tr class="band"><td colspan="3">On-site service without any service charge</td></tr>
+      <% free.forEach((line) => { %>
+        <tr><td class="left"><%= line %></td><td class="mid">No</td><td class="mid">Yes</td></tr>
+      <% }) %>
+    </tbody>
+  </table>
+
+  <div class="policy">
+    <div class="head">:(( We have no refund policy )):-</div>
+    According to the contract, appropriate action is possible if a checked item is found to be
+    baseless. Unfortunately, that may render the franchise agreement inoperative.<br>
+    We have a no-return policy, because we cannot take back a service we have provided or an item
+    already purchased.
+  </div>
+
+  <div class="boxed">
+    We provide both including-tax and excluding-tax services — both are available according to the
+    amount the system calculates. Commission applies only to the amount received, less the GST
+    charge and material cost.
+  </div>
+
+  <div class="signoff">
+    <div class="who">
+      Franchise : <b><%= v(lab.fullname) %></b><br>
+      Form No. : <%= v(lab.empid) %>
+    </div>
+    <div class="rule">Authorised Signatory</div>
+  </div>
+</div>
+
+<!-- =============================================================== page 4 -->
+<div class="sheet">
+  <div class="diagram-head">
+    <div class="title">Franchise Establishment Diagram</div>
+    <div class="lock">
+      <div class="mark">
+        <% if (logo) { %><img src="<%= logo %>" alt=""><% } %>
+        <div class="lockup">
+          <div class="row" style="display:flex; align-items:center; gap:8px; margin:0">
+            <div class="name" style="font-size:26px">IIGL</div>
+            <div class="sub">Institute of International<br>Gemological Laboratory</div>
+          </div>
+        </div>
+      </div>
+      <div class="said">
+        <div class="divider"></div>
+        <div class="tagline">Giving an Identity of Pureness</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flow">
+    <%
+      /*
+        The sequence, in the paper's own words and its own order. A row is a
+        step and its condition; `flip` puts the condition first, which is how
+        the right-hand rows are drawn.
+      */
+      const tick = '<span class="tick"></span>';
+    %>
+
+    <div class="row">
+      <div class="pair">
+        <div class="tablet">Show The Concept<br>Clearly</div>
+        <div class="panel-note"><%- frame(false) %>
+          <ul>
+            <li>Conformation within 15 Days</li>
+            <li class="nowrap">Interested&nbsp; YES <%- tick %> NO <%- tick %></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="row right">
+      <div class="pair flip">
+        <div class="tablet">Documentation</div>
+        <div class="panel-note"><%- frame(true) %>
+          <ul>
+            <li>ID. Prof</li>
+            <li>Address Prof</li>
+            <li>Cancel Chaque</li>
+            <li>Passport Size Photo</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- The one branch: approval opens into registration and location. -->
+    <div class="row">
+      <div class="pair">
+        <div class="tablet">Approved By Admin</div>
+        <%
+          /*
+            One flex item, not three. The panel lays its children out in a
+            column, so a bare "YES <box> NO <box>" put each box on a line of
+            its own — a tick box under the word it belongs to reads as a box
+            for nothing.
+          */
+        %>
+        <div class="panel-note"><%- frame(false) %><span class="nowrap">YES <%- tick %> NO <%- tick %></span></div>
+      </div>
+      <div class="branch">
+        <div class="spine"></div>
+        <div class="lane"><div class="arm"></div><div class="head"></div></div>
+        <div class="lane"><div class="arm"></div><div class="head"></div></div>
+      </div>
+      <div class="stack">
+        <div class="pair">
+          <div class="tablet">Registration</div>
+          <div class="panel-note"><%- frame(false) %>Collocate the Payment<br>Online *Chaque *NEFT/Cash</div>
+        </div>
+        <div class="pair">
+          <div class="tablet">Location</div>
+          <div class="panel-note"><%- frame(false) %>
+            Conform by Side Supervisor<br>
+            <span class="nowrap">YES <%- tick %> NO <%- tick %></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="pair">
+        <div class="tablet">Complete the<br>Office Infrastructure</div>
+        <div class="panel-note"><%- frame(false) %>With in 25th to 30 Day's</div>
+      </div>
+    </div>
+
+    <div class="row right">
+      <div class="pair flip">
+        <div class="tablet">Complete the<br>Design &amp; Decoration</div>
+        <div class="panel-note"><%- frame(true) %>Conformation by<br>Franchises Owner<br>Within 45 Day's</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="pair">
+        <div class="tablet">Complete the<br>Equipment Setup</div>
+        <div class="panel-note"><%- frame(false) %>Conformation by<br>Franchises Owner<br>Within 50 Day's</div>
+      </div>
+    </div>
+
+    <div class="row right">
+      <div class="pair flip">
+        <div class="tablet">Complete<br>Installation Software<br>&amp; Training</div>
+        <div class="panel-note"><%- frame(true) %>Within 60 Day's</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="pair">
+        <div class="tablet">The Laboratory<br>Virtual Run &amp; Hand Over<br>to the Franchises Owner<br>Final Testing</div>
+        <div class="panel-note"><%- frame(false) %>Within 70 Day's</div>
+      </div>
+    </div>
+
+    <div class="row right">
+      <div class="pair flip">
+        <div class="tablet">All Proses Don<br>Opening Franchises<br>Since DD/MM/YYYY</div>
+        <%
+          /*
+            Three approvals, ruled as a small table rather than three loose
+            lines: "Team", "Addmin" and "ISO" are different lengths, so set as
+            running text their boxes stepped across the panel and the last one
+            fell outside the outline.
+          */
+        %>
+        <div class="panel-note approvals"><%- frame(true) %>
+          <div class="grid">
+            <% ['Team', 'Addmin', 'ISO'].forEach((who) => { %>
+              <div>Approved by <%= who %></div>
+              <div class="nowrap">YES <%- tick %></div>
+              <div class="nowrap">NO <%- tick %></div>
+            <% }) %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <% if (puzzle) { %>
+    <!-- The two hands and the puzzle, as the paper closes the diagram. -->
+    <div class="puzzle"><img src="<%= puzzle %>" alt=""></div>
+  <% } %>
+
+  <div class="signoff">
+    <div class="who">
+      Franchise : <b><%= v(lab.fullname) %></b><br>
+      Owner : <%= v(lab.owner_name) %><br>
+      Date : <%= issuedOn %>
+    </div>
+    <div class="rule">Authorised Signatory</div>
+  </div>
+</div>
+
+</body>
+</html>

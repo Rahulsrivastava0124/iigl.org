@@ -6,8 +6,9 @@ import PdfIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import FileIcon from '@mui/icons-material/DescriptionOutlined';
 import MissingIcon from '@mui/icons-material/BrokenImageOutlined';
 import ClearIcon from '@mui/icons-material/CloseOutlined';
-import { apiUrl, fileUrl } from '../lib/config';
+import { fileUrl } from '../lib/config';
 import { messageOf } from '../lib/auth';
+import { uploadFiles } from '../lib/upload';
 import { isPdf } from './FilePreview';
 import { BRAND } from '../lib/theme';
 import { FRAME_CELL, Notice, toneColour } from './ui';
@@ -169,27 +170,21 @@ export default function DocumentAssets({
   onChange: (documents: LabDocument[]) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  /* How far the upload has got, or null when the browser cannot say. */
+  const [percent, setPercent] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const send = useCallback(
     async (files: File[]) => {
       setBusy(true);
+      setPercent(0);
       setError(null);
       try {
-        const form = new FormData();
         // Several at once: paperwork arrives as a folder of scans, and four
         // round trips for four files is three more than the API needs.
-        for (const file of files) form.append('files', file);
+        const stored = await uploadFiles('documentation', files, setPercent);
 
-        const res = await fetch(apiUrl('/uploads/documentation'), {
-          method: 'POST',
-          credentials: 'include',
-          body: form,
-        });
-        const body = await res.json().catch(() => null);
-        if (!res.ok) throw new Error(body?.message ?? `Upload failed (${res.status})`);
-
-        const added: LabDocument[] = (body.data as Array<{ path: string }>).map((f, i) => ({
+        const added: LabDocument[] = stored.map((f, i) => ({
           title: nameOf(files[i]?.name ?? '') || 'Untitled',
           path: f.path,
           added_at: new Date().toISOString(),
@@ -198,6 +193,7 @@ export default function DocumentAssets({
       } catch (e) {
         setError(messageOf(e));
       } finally {
+        setPercent(null);
         setBusy(false);
       }
     },
@@ -265,9 +261,21 @@ export default function DocumentAssets({
           >
             <input {...getInputProps()} />
             <Stack spacing={0.75} sx={{ alignItems: 'center', px: 1.5 }}>
-              {busy ? <CircularProgress size={22} /> : <AddIcon sx={{ fontSize: 30, color: 'text.disabled' }} />}
+              {busy ? (
+                <CircularProgress
+                  size={22}
+                  variant={percent === null ? 'indeterminate' : 'determinate'}
+                  value={percent ?? undefined}
+                />
+              ) : (
+                <AddIcon sx={{ fontSize: 30, color: 'text.disabled' }} />
+              )}
               <Typography sx={{ fontSize: 11.5, textAlign: 'center' }} color="text.secondary">
-                {busy ? 'Uploading…' : 'Drop documents here, or click to choose'}
+                {busy
+                  ? percent === null || percent >= 100
+                    ? 'Uploading…'
+                    : `Uploading… ${percent}%`
+                  : 'Drop documents here, or click to choose'}
               </Typography>
             </Stack>
           </Box>

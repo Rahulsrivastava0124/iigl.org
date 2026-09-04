@@ -567,6 +567,10 @@ const document = {
               active: { type: 'integer', description: 'Status "preparing".' },
               delivered: { type: 'integer' },
               today: { type: 'integer' },
+              active_today: {
+                type: 'integer',
+                description: 'Ordered today and still preparing.',
+              },
             },
           },
           reports: {
@@ -580,6 +584,37 @@ const document = {
               paid: { type: 'number' },
               dues: { type: 'number' },
               sale_today: { type: 'number' },
+              paid_today: { type: 'number' },
+              dues_today: { type: 'number' },
+            },
+          },
+          lab: {
+            type: 'object',
+            nullable: true,
+            description:
+              'The figures the Laravel laboratory dashboard showed. Null for head office, whose dashboard is a different screen with different quantities on it: a laboratory counts cards rather than orders, and its money is its own ledger — what its staff have taken in, what has reached its wallet, and head office\u2019s share of that.',
+            properties: {
+              cards_ordered: { type: 'integer', description: 'Smart and classic together.' },
+              cards_generated: { type: 'integer' },
+              smart_generated: { type: 'integer' },
+              classic_generated: { type: 'integer' },
+              collected: {
+                type: 'number',
+                description:
+                  'Everything this laboratory\u2019s staff have taken in. Carried over from Laravel without a status filter, so a collection nobody has approved counts the same as an approved one.',
+              },
+              employee_wallet: { type: 'number' },
+              my_wallet: { type: 'number' },
+              admin_commission: { type: 'number' },
+              today: {
+                type: 'object',
+                properties: {
+                  cards_ordered: { type: 'integer' },
+                  sale: { type: 'number' },
+                  paid: { type: 'number' },
+                  dues: { type: 'number' },
+                },
+              },
             },
           },
         },
@@ -1185,7 +1220,8 @@ const document = {
       get: {
         tags: ['Orders'],
         summary: 'List orders',
-        description: 'Scoped to the caller’s laboratory. Administrators see every lab.',
+        description:
+          'Scoped to the caller’s laboratory. Administrators see every lab.\n\nEach row carries four figures the order table itself does not hold, resolved here rather than one query per row as `common/order/index.blade.php` did: `total_items` (`order_details.qty` summed), `total_reports` (what the order is owed — a line carrying both card kinds counts its quantity once for each, so this is not `total_items`), `reports_generated` (how many of those are written, weighted the same way) and `assigned_to_name`, null when the order is with nobody.',
         parameters: [
           ...pageParams,
           {
@@ -1330,6 +1366,21 @@ const document = {
         responses: {
           200: { description: 'Removed.' },
           404: errorResponse('Order item not found.'),
+          ...guarded,
+        },
+      },
+    },
+
+    '/api/orders/{id}': {
+      delete: {
+        tags: ['Orders'],
+        summary: 'Delete an order',
+        description:
+          'Scoped to the caller’s laboratory. New rather than ported: the Laravel panel could delete an order *line* (`DeleteDetail`) and never the order.\n\nRefused once anything real points at the order, because the schema has no foreign keys and nothing else would stop the rows being orphaned: a certificate is a document already in a customer’s hands whose number the public verification page must go on resolving, and a transaction is money that was counted. A delivered order is refused for the same reason — it has been billed and settled. The order’s own lines go with it.',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        responses: {
+          200: ok('Deleted.'),
+          409: err('Delivered, or certificates or payments still point at this order.'),
           ...guarded,
         },
       },
@@ -1742,7 +1793,7 @@ const document = {
         tags: ['Users'],
         summary: 'List staff',
         description:
-          'Joined through `employements`, filtered to people currently working. Each row carries the person’s own `empid` and `lab_empid` — the `employements.parent_id` as stored, the employer’s **`empid`** — alongside `lab_id`, that employer resolved to a **user id**, with `lab_name` and `employer_role_id`, so the caller can name the employer without a second request. An `employer_role_id` of 1 means they work for head office rather than for a laboratory. `lab_id`, `lab_name` and `employer_role_id` are null when no account holds the stored `empid`; `npm run check:parents` names those rows.',
+          'Joined through `employements`, filtered to people currently working. Each row carries the person’s own `empid` and `lab_empid` — the `employements.parent_id` as stored, the employer’s **`empid`** — alongside `lab_id`, that employer resolved to a **user id**, with `lab_name` and `employer_role_id`, so the caller can name the employer without a second request. An `employer_role_id` of 1 means they work for head office rather than for a laboratory. `lab_id`, `lab_name` and `employer_role_id` are null when no account holds the stored `empid`; `npm run check:parents` names those rows.\n\n`profile_photo` is the stored path as Laravel wrote it — `public/uploads/…` — not a URL; it is served under `/uploads/`.',
         parameters: [
           ...pageParams,
           {
@@ -1854,7 +1905,7 @@ const document = {
         tags: ['Dashboard'],
         summary: 'Counts and totals',
         description:
-          'Scoped to the caller’s laboratory, or every lab for an administrator. Today is matched against order_date, which is dd-mm-yyyy text rather than a date column.',
+          'Scoped to the caller’s laboratory, or every lab for an administrator. Today is matched against order_date, which is dd-mm-yyyy text rather than a date column.\n\nThe three `_today` money figures are the same three columns over the same set of orders — delivered, dated today — so `sale_today` less `paid_today` is `dues_today`. The Laravel dashboard read its today’s-paid from `transactions` and its today’s-sale from `delivery_date`, and the two never reconciled against each other.',
         responses: {
           200: {
             description: 'Summary.',

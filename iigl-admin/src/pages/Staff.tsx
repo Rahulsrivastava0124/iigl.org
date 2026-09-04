@@ -13,6 +13,7 @@ import {
   TextField,
 } from '@mui/material';
 import { useToast } from '../components/Toast';
+import { fileUrl } from '../lib/config';
 import { useFetch, useDebounced } from '../lib/useFetch';
 import { usePermissions } from '../lib/permissions';
 import { api } from '../lib/api';
@@ -502,7 +503,7 @@ export default function Staff() {
 
       <Panel
         footer={<Pager meta={data?.meta} onPage={setPage} />}
-        title="Staff"
+        title="Employee"
         count={data ? `${filteredRows.length} head office employees` : 'Loading…'}
         actions={
           <>
@@ -547,7 +548,15 @@ export default function Staff() {
                   <TableCell className="mono">{index + 1}</TableCell>
                   <TableCell>
                     <Avatar
-                      src={s.profile_photo || undefined}
+                      /*
+                        The column holds the stored path — `public/uploads/…` —
+                        which is not a URL a browser can fetch. Handed to
+                        `<Avatar>` raw it failed to load every time and the
+                        initials took over, which is why nobody's photograph
+                        was showing. `fileUrl` turns it into the served path,
+                        as the header avatar has always done.
+                      */
+                      src={fileUrl(s.profile_photo) ?? undefined}
                       sx={{
                         width: 36,
                         height: 36,

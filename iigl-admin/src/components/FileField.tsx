@@ -6,9 +6,10 @@ import ClearIcon from '@mui/icons-material/CloseOutlined';
 import PdfIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import MissingIcon from '@mui/icons-material/BrokenImageOutlined';
 import HintIcon from '@mui/icons-material/InfoOutlined';
-import { apiUrl, fileUrl } from '../lib/config';
+import { fileUrl } from '../lib/config';
 import FilePreview, { isPdf } from './FilePreview';
 import { messageOf } from '../lib/auth';
+import { uploadFiles } from '../lib/upload';
 import { BRAND } from '../lib/theme';
 import { IconAction, toneColour } from './ui';
 
@@ -77,6 +78,14 @@ export default function FileField({
   fill?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
+  /*
+    How far the upload has got, or null while that is unknown.
+
+    A round trip to object storage is the better part of a second before any
+    bytes move, and on a large photograph the wait is several. An indeterminate
+    spinner for that long reads as a hang, and somebody clicks again.
+  */
+  const [percent, setPercent] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
 
@@ -100,24 +109,15 @@ export default function FileField({
   const send = useCallback(
     async (file: File) => {
       setBusy(true);
+      setPercent(0);
       setError(null);
       try {
-        const form = new FormData();
-        form.append('files', file);
-
-        const res = await fetch(apiUrl(`/uploads/${bucket}`), {
-          method: 'POST',
-          credentials: 'include',
-          body: form,
-        });
-
-        const body = await res.json().catch(() => null);
-        if (!res.ok) throw new Error(body?.message ?? `Upload failed (${res.status})`);
-
-        onChange(body.data[0].path);
+        const [stored] = await uploadFiles(bucket, [file], setPercent);
+        onChange(stored.path);
       } catch (e) {
         setError(messageOf(e));
       } finally {
+        setPercent(null);
         setBusy(false);
       }
     },
@@ -175,7 +175,9 @@ export default function FileField({
   };
 
   const prompt = busy
-    ? 'Uploading…'
+    ? percent === null || percent >= 100
+      ? 'Uploading…'
+      : `Uploading… ${percent}%`
     : isDragActive
       ? isDragReject
         ? 'Not that kind of file'
@@ -298,7 +300,22 @@ export default function FileField({
             </Stack>
           )}
 
-          {busy && <CircularProgress size={24} />}
+          {/*
+            The figure while there is one, the spinner while there is not:
+            some proxies do not report a body length, and a bar that invents a
+            number is worse than none.
+          */}
+          {busy &&
+            (percent === null ? (
+              <CircularProgress size={24} />
+            ) : (
+              <Stack spacing={0.75} sx={{ alignItems: 'center', width: '72%' }}>
+                <CircularProgress size={24} variant="determinate" value={percent} />
+                <Typography sx={{ fontSize: 11.5 }} color="text.secondary">
+                  {percent}%
+                </Typography>
+              </Stack>
+            ))}
 
           {!value && !busy && (
             <Stack spacing={0.75} sx={{ alignItems: 'center', px: 2, textAlign: 'center' }}>

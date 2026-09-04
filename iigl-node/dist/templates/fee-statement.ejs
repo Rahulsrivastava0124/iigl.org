@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Course fee statement — <%= enrolment.student_name || 'student' %></title>
+<style>
+  /*
+    A statement of one enrolment's fee: what the course costs, what has come
+    in, what is left. Not a numbered receipt — nothing in the schema issues fee
+    receipt numbers, so the enrolment id is the reference and no official
+    looking number is invented for it.
+
+    A4 so it prints on ordinary office stock, same as the order paperwork.
+  */
+  @page { size: A4 portrait; margin: 14mm; }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    /* Explicit, not inherited: a headless Chrome set to a dark scheme paints a
+       transparent body dark, and the sheet goes out black. */
+    background: #ffffff;
+    font-family: "IBM Plex Sans", Arial, sans-serif;
+    font-size: 11pt;
+    color: #3c4252;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 1px solid #e6e8ee;
+    padding-bottom: 5mm;
+  }
+
+  /* The mark and the name, as they sit on the site: no asset carries the two
+     together, so the wordmark is type beside the image. */
+  .brand { display: flex; align-items: center; gap: 4mm; }
+  .brand img { height: 16mm; }
+  .brand .wordmark {
+    font-family: "Playfair Display", Georgia, serif;
+    font-size: 22pt;
+    letter-spacing: 0.02em;
+    color: #061948;
+  }
+
+  .title { text-align: right; }
+  .title h1 {
+    margin: 0;
+    font-size: 15pt;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #061948;
+  }
+  .title p { margin: 2mm 0 0; font-size: 9.5pt; }
+  .title strong { color: #061948; }
+
+  .details { width: 100%; border-collapse: collapse; margin-top: 7mm; }
+  .details td { padding: 2mm 0; vertical-align: top; }
+  .details .k { width: 42mm; color: #3c4252; }
+  .details .sep { width: 8mm; color: #4a5265; }
+  .details .v { color: #061948; }
+
+  .figures {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 6mm;
+    border-top: 1px solid #e6e8ee;
+    padding-top: 2mm;
+  }
+  .figures td { padding: 2mm 0; }
+  .figures td.amount {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .figures tr.total td {
+    border-top: 2px solid #061948;
+    padding-top: 3mm;
+    font-weight: 700;
+    font-size: 12pt;
+    color: #061948;
+  }
+
+  .note {
+    display: flex;
+    gap: 3mm;
+    margin-top: 9mm;
+    font-size: 9pt;
+    color: #4a5265;
+  }
+  .note .mark {
+    flex: none;
+    width: 4.5mm;
+    height: 4.5mm;
+    border: 1px solid #061948;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 4.2mm;
+    font-size: 7pt;
+    font-weight: 700;
+    color: #061948;
+  }
+  .note p { margin: 0; line-height: 1.55; }
+
+  footer {
+    margin-top: 14mm;
+    border-top: 1px solid #e6e8ee;
+    padding-top: 4mm;
+    text-align: center;
+    font-size: 9.5pt;
+    color: #3c4252;
+  }
+  .flourish {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4mm;
+    margin-top: -6.5mm;
+    margin-bottom: 3mm;
+  }
+  .flourish span { width: 16mm; height: 1px; background: #d58a2b; }
+  .flourish .gem { color: #061948; font-size: 10pt; line-height: 1; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <% if (logo) { %><img src="<%= logo %>" alt=""><% } %>
+      <div class="wordmark">IIGL</div>
+    </div>
+
+    <div class="title">
+      <h1>Course Fee Statement</h1>
+      <p><strong>Date:</strong> <%= issuedAt %></p>
+      <p><strong>Enrollment No:</strong> #<%= enrolment.id %></p>
+    </div>
+  </header>
+
+  <table class="details">
+    <% [
+         ['Student', enrolment.student_name],
+         ['Registration No', enrolment.registration_no],
+         ['Course', enrolment.course_name],
+         ['Batch', enrolment.batch],
+       ].forEach(function (pair) { %>
+      <tr>
+        <td class="k"><%= pair[0] %></td>
+        <td class="sep">:</td>
+        <td class="v"><%= pair[1] || '—' %></td>
+      </tr>
+    <% }); %>
+  </table>
+
+  <table class="figures">
+    <tr>
+      <td>Course Fee</td>
+      <td class="amount"><%= money(enrolment.fee) %></td>
+    </tr>
+
+    <%
+      /* The reason a coupon wrote onto the enrolment names the line, so the
+         statement says what the reduction was for rather than just "Discount". */
+      var discount = Number(enrolment.discount_amount || 0);
+    %>
+    <% if (discount > 0) { %>
+      <tr>
+        <td><%= enrolment.discount_reason || 'Discount' %></td>
+        <td class="amount">− <%= money(discount) %></td>
+      </tr>
+    <% } %>
+
+    <%
+      /* The tax, and the figure it was worked out on. Shown only where there
+         is one: an enrolment quoted with no GST should not carry an empty tax
+         line on a document somebody hands over. */
+      var gst = Number(enrolment.gst_amount || 0);
+      var rate = Number(enrolment.gst_percent || 0);
+    %>
+    <% if (gst > 0) { %>
+      <tr>
+        <td>Taxable</td>
+        <td class="amount"><%= money(enrolment.final_fee) %></td>
+      </tr>
+      <tr>
+        <td>GST @ <%= rate %>%</td>
+        <td class="amount"><%= money(gst) %></td>
+      </tr>
+    <% } %>
+
+    <tr>
+      <td>Payable</td>
+      <td class="amount"><%= money(payable) %></td>
+    </tr>
+    <tr>
+      <td>Paid</td>
+      <td class="amount"><%= money(enrolment.fee_paid) %></td>
+    </tr>
+    <tr class="total">
+      <td>Still Due</td>
+      <td class="amount"><%= money(due) %></td>
+    </tr>
+  </table>
+
+  <div class="note">
+    <div class="mark">i</div>
+    <p>
+      Figures as at the time of printing.<br>
+      Issued by <%= issuedBy %>.
+    </p>
+  </div>
+
+  <footer>
+    <div class="flourish">
+      <span></span>
+      <div class="gem">◆</div>
+      <span></span>
+    </div>
+    Thank you for choosing IIGL.
+  </footer>
+</body>
+</html>

@@ -77,7 +77,193 @@ export const extraTags = [
     { name: 'Courses', description: 'The course catalogue, the enrolments on it, and the discount that sits on the fee.' },
     { name: 'Enquiries', description: 'The general enquiry book: questions, visits, leads and complaints.' },
 ];
+/**
+ * The five master lists.
+ *
+ * Written from one description rather than five, because the router is one
+ * factory rather than five copies: documenting them by hand would be five
+ * chances for the docs and the code to disagree about the same twenty lines.
+ */
+const MASTER_DOCS = [
+    {
+        path: 'gst',
+        noun: 'GST rate',
+        props: { name: { type: 'string' }, percent: { type: 'number' }, is_active: bool },
+        required: ['name', 'percent'],
+        note: 'Offered when a course fee or a report price is set. Order pricing itself still applies the ported 18% in money.ts.',
+    },
+    {
+        path: 'enquiry-types',
+        noun: 'Enquiry type',
+        props: {
+            code: { type: 'string' },
+            label: { type: 'string' },
+            sort: int,
+            is_active: bool,
+        },
+        required: ['code', 'label'],
+        note: 'What `enquiries.kind` holds. The code is set once and cannot be edited: renaming it would orphan every enquiry filed under the old one.',
+    },
+    {
+        path: 'countries',
+        noun: 'Country',
+        props: { name: { type: 'string' }, code: str, is_active: bool },
+        required: ['name'],
+    },
+    {
+        path: 'states',
+        noun: 'State',
+        props: {
+            country_id: int,
+            name: { type: 'string' },
+            code: str,
+            is_active: bool,
+        },
+        required: ['country_id', 'name'],
+        parent: 'country_id',
+    },
+    {
+        path: 'districts',
+        noun: 'District',
+        props: { state_id: int, name: { type: 'string' }, is_active: bool },
+        required: ['state_id', 'name'],
+        parent: 'state_id',
+    },
+];
+const masterPaths = {};
+for (const m of MASTER_DOCS) {
+    const patchProps = { ...m.props };
+    // The code is immutable; the parent can be corrected.
+    delete patchProps.code;
+    if (m.path !== 'enquiry-types')
+        Object.assign(patchProps, {});
+    masterPaths[`/api/master/${m.path}`] = {
+        get: {
+            tags: ['Master'],
+            summary: `${m.noun}s`,
+            description: [m.note, 'Administrators only.'].filter(Boolean).join(' '),
+            parameters: [
+                {
+                    name: 'active',
+                    in: 'query',
+                    schema: { type: 'string', enum: ['1'] },
+                    description: 'Only what a form should offer. Omit it to see retired rows as well.',
+                },
+                ...(m.parent
+                    ? [{ name: m.parent, in: 'query', schema: int, description: 'Only the rows under one parent.' }]
+                    : []),
+            ],
+            responses: { 200: ok(`Every ${m.noun.toLowerCase()}.`), ...guarded },
+        },
+        post: {
+            tags: ['Master'],
+            summary: `Add a ${m.noun.toLowerCase()}`,
+            requestBody: body(m.props, m.required),
+            responses: {
+                201: ok(`${m.noun} created.`),
+                400: err('A required field is missing or invalid.'),
+                409: err('One with that value already exists.'),
+                ...guarded,
+            },
+        },
+    };
+    masterPaths[`/api/master/${m.path}/{id}`] = {
+        patch: {
+            tags: ['Master'],
+            summary: `Update a ${m.noun.toLowerCase()}`,
+            parameters: [idParam],
+            requestBody: body(patchProps),
+            responses: {
+                200: ok('Updated.'),
+                400: err('Nothing to update, or a value is invalid.'),
+                404: err(`${m.noun} not found.`),
+                ...guarded,
+            },
+        },
+        delete: {
+            tags: ['Master'],
+            summary: `Delete a ${m.noun.toLowerCase()}`,
+            description: 'For the row written by mistake. Refused as soon as anything points at it — retire those with the active endpoint instead, so what already refers to them still reads.',
+            parameters: [idParam],
+            responses: {
+                200: ok('Deleted.'),
+                404: err(`${m.noun} not found.`),
+                409: err('Something already refers to it.'),
+                ...guarded,
+            },
+        },
+    };
+    masterPaths[`/api/master/${m.path}/{id}/active`] = {
+        patch: {
+            tags: ['Master'],
+            summary: `Retire or restore a ${m.noun.toLowerCase()}`,
+            description: "The ordinary end of a master row's life. A retired row stops being offered on new records and stays readable on old ones.",
+            parameters: [idParam],
+            requestBody: body({ is_active: bool }, ['is_active']),
+            responses: { 200: ok('Updated.'), 404: err(`${m.noun} not found.`), ...guarded },
+        },
+    };
+}
 export const extraPaths = {
+    ...masterPaths,
+    '/api/courses/{id}/students': {
+        get: {
+            tags: ['Students'],
+            summary: 'Who is on one course, and what it has brought in',
+            description: 'The enrolled students with what each was charged, has paid and still owes, and the same three figures totalled for the course. Totalled from the rows returned, so the figures and the list cannot disagree. Not paged: a course holds a class, and a caller wanting to page through enrolments has /api/courses/enrolments.',
+            parameters: [idParam],
+            responses: {
+                200: ok('The course, its students and its totals.'),
+                404: err('Course not found.'),
+                ...guarded,
+            },
+        },
+    },
+    '/api/courses/enrolments/summary': {
+        get: {
+            tags: ['Students'],
+            summary: 'Enrolment money, totalled',
+            description: 'Billed, paid and outstanding across every enrolment, with the count. Summed on the server because a client only ever holds one page and would total that page rather than the business. `billed` is the fee after any discount, falling back to `fee` on a row that never had one, so billed minus paid is what is owed. `due` is never negative: an overpayment is a credit to sort out on the enrolment.',
+            responses: { 200: ok('The three totals and the count.'), ...guarded },
+        },
+    },
+    '/api/settings/test-smtp': {
+        post: {
+            tags: ['Settings'],
+            summary: 'Test the mail connection',
+            description: 'Connects, starts TLS and authenticates — everything except sending a message — and reports what happened. Nothing is stored and no mail is sent, so it is safe to run against a URL before saving it. Send `url` to test what somebody has just typed; omit it to test the stored one, which is how the button works on a field that is empty because its secret is held back. A refusal comes back as `{ ok: false, message }` with a 200, because the request succeeded even when the mail server said no.',
+            requestBody: body({ url: str }),
+            responses: {
+                200: ok('Whether it connected, and what the server said if it did not.'),
+                400: err('No URL given and none stored.'),
+                ...guarded,
+            },
+        },
+    },
+    '/api/settings': {
+        get: {
+            tags: ['Settings'],
+            summary: 'Every setting',
+            description: 'Each setting with its value, its built-in default, and whether anybody has set it. Nothing is seeded: an unset setting reads as the constant or environment variable the code used before the table existed, so an empty table behaves exactly as the hardcoded version did. A secret comes back empty, with `set` saying whether one is stored and `preview` showing it with the password replaced by dots — enough to check the server, account and port without the secret leaving the server.',
+            responses: { 200: ok('Every setting, grouped by the part of its key before the dot.'), ...guarded },
+        },
+        patch: {
+            tags: ['Settings'],
+            summary: 'Save settings',
+            description: 'Send only what changed, keyed. An empty value puts a setting back to its default by deleting the row — except a secret, where empty means leave what is stored. An unknown key is refused rather than written, since a typo that becomes a row is a setting nothing reads.',
+            requestBody: body({
+                'company.name': str,
+                'certificate.prefix': str,
+                'session.hours': str,
+                'mail.smtp_url': str,
+            }),
+            responses: {
+                200: ok('The keys written.'),
+                400: err('An unknown key, or a value the readers could not use.'),
+                ...guarded,
+            },
+        },
+    },
     // ------------------------------------------------------- catalogue admin
     ...crud('Catalogue admin', 'category', '/api/admin/categories', {
         name: { type: 'string' },
@@ -139,8 +325,21 @@ export const extraPaths = {
         max_wt: { type: 'number' },
         smart_price: { type: 'number' },
         classic_price: { type: 'number' },
+        gst_id: { type: ['integer', 'null'], description: 'A row of the GST master list.' },
+        gst_percent: {
+            type: ['number', 'string', 'null'],
+            description: 'A rate typed on this record instead of chosen from the list. One of the two is stored and the other cleared, so they cannot disagree.',
+        },
         rate: str,
-    }, ['category_id', 'min_wt', 'max_wt', 'smart_price', 'classic_price'], { min_wt: { type: 'number' }, max_wt: { type: 'number' }, smart_price: { type: 'number' }, classic_price: { type: 'number' }, rate: str }, {
+    }, ['category_id', 'min_wt', 'max_wt', 'smart_price', 'classic_price'], {
+        min_wt: { type: 'number' },
+        max_wt: { type: 'number' },
+        smart_price: { type: 'number' },
+        classic_price: { type: 'number' },
+        gst_id: { type: ['integer', 'null'] },
+        gst_percent: { type: ['number', 'string', 'null'] },
+        rate: str,
+    }, {
         '/api/admin/prices': {
             get: {
                 tags: ['Catalogue admin'],
@@ -329,6 +528,12 @@ export const extraPaths = {
                         enum: ['new', 'contacted', 'interested', 'converted', 'not_interested'],
                     },
                 },
+                {
+                    name: 'lab_id',
+                    in: 'query',
+                    description: 'Only the enquiries a given laboratory took.',
+                    schema: { type: 'integer' },
+                },
                 { name: 'q', in: 'query', schema: { type: 'string' } },
             ],
             responses: { 200: ok('A page of enquiries, newest first.'), ...guarded },
@@ -381,6 +586,39 @@ export const extraPaths = {
             summary: 'Delete a course enquiry',
             parameters: [idParam],
             responses: { 200: ok('Deleted.'), 404: err('Enquiry not found.'), ...guarded },
+        },
+    },
+    '/api/students/enquiries/{id}/followups': {
+        get: {
+            tags: ['Students'],
+            summary: 'The follow-up history of one course enquiry',
+            description: 'Newest first. The same log and the same code as `/api/enquiries/{id}/followups` — both books are worked the same way, so one mechanism serves them.',
+            parameters: [idParam],
+            responses: { 200: ok('The history.'), 404: err('Enquiry not found.'), ...guarded },
+        },
+        post: {
+            tags: ['Students'],
+            summary: 'Record a follow-up on a course enquiry',
+            description: "Writes the log row, the enquiry's next follow-up date, and — when one is asked for and it differs — its status. The move is written onto the log row as well as applied, so the history says how the enquiry reached its status.",
+            parameters: [idParam],
+            requestBody: body({
+                note: str,
+                outcome: {
+                    type: 'string',
+                    enum: ['reached', 'no_answer', 'interested', 'not_interested', 'converted'],
+                },
+                next_follow_up_on: { type: ['string', 'null'], format: 'date' },
+                status: {
+                    type: 'string',
+                    enum: ['new', 'contacted', 'interested', 'converted', 'not_interested'],
+                },
+            }),
+            responses: {
+                201: ok('Recorded.'),
+                400: err('Unknown outcome or status, or a date that is not YYYY-MM-DD.'),
+                404: err('Enquiry not found.'),
+                ...guarded,
+            },
         },
     },
     '/api/students/enquiries/{id}/convert': {
@@ -516,7 +754,10 @@ export const extraPaths = {
                 { name: 'active', in: 'query', schema: { type: 'string', enum: ['0', '1'] } },
                 { name: 'q', in: 'query', schema: { type: 'string' } },
             ],
-            responses: { 200: ok('Courses, by name.'), ...guarded },
+            responses: {
+                200: ok('Courses, by name. Each carries `enrolled` — how many are on it — and, where the course names a GST rate either from the master list or typed on itself, the resolved `gst_rate` with `gst_amount` and `fee_with_gst`. All three are null when no rate is named. Rounded, not truncated: the truncation in money.ts is the ported rule for what an order is billed, and a course fee is not an order.'),
+                ...guarded,
+            },
         },
         post: {
             tags: ['Courses'],
@@ -526,6 +767,11 @@ export const extraPaths = {
                 code: str,
                 duration: { type: ['string', 'null'], description: 'Free text — "6 months" — because that is how a prospectus says it.' },
                 fee: { type: 'number' },
+                gst_id: { type: ['integer', 'null'], description: 'A row of the GST master list.' },
+                gst_percent: {
+                    type: ['number', 'string', 'null'],
+                    description: 'A rate typed on this record instead of chosen from the list. One of the two is stored and the other cleared.',
+                },
                 description: str,
                 is_active: bool,
             }, ['name']),
@@ -671,12 +917,34 @@ export const extraPaths = {
         post: {
             tags: ['Courses'],
             summary: 'Take a fee payment',
-            description: 'Added to what is already paid rather than replacing it, and refused above the amount due.',
+            description: 'Added to what is already paid rather than replacing it, and refused above the amount due. What is due is the fee after discount plus its GST — `final_fee + gst_amount` — where the rate was snapshotted onto the enrolment when it was made. An enrolment created before migration 020 carries zero GST, so its cap is exactly what it always was.',
             parameters: [idParam],
             requestBody: body({ amount: { type: 'number' } }, ['amount']),
             responses: {
                 200: ok('The new paid total and what is still due.'),
                 400: err('Zero or less, or more than is due.'),
+                404: err('Enrolment not found.'),
+                ...guarded,
+            },
+        },
+    },
+    '/api/courses/enrolments/{id}/statement': {
+        get: {
+            tags: ['Courses'],
+            summary: 'Print the fee statement',
+            description: 'What the course costs, what has come in and what is left, as an A4 sheet to hand over. A statement rather than a numbered receipt: nothing in the schema issues fee receipt numbers, so the enrolment id is the reference and no official-looking number is invented for it.\n\nEvery figure is read from the enrolment rather than recomputed, so the sheet and the screen the money was taken on can never disagree. `?format=html` returns the markup the PDF is rendered from.',
+            parameters: [
+                idParam,
+                { name: 'format', in: 'query', schema: { type: 'string', enum: ['html'] }, description: 'Return the markup instead of a PDF.' },
+            ],
+            responses: {
+                200: {
+                    description: 'The statement as a PDF, or as HTML when format=html.',
+                    content: {
+                        'application/pdf': { schema: { type: 'string', format: 'binary' } },
+                        'text/html': { schema: { type: 'string' } },
+                    },
+                },
                 404: err('Enrolment not found.'),
                 ...guarded,
             },
@@ -751,7 +1019,7 @@ export const extraPaths = {
                 {
                     name: 'kind',
                     in: 'query',
-                    schema: { type: 'string', enum: ['ask', 'visit', 'lead', 'complaint'] },
+                    schema: { type: 'string', enum: ['ask', 'visit', 'lead', 'complaint', 'laboratory'] },
                     description: "The old menu's four entries: Ask Me, Visitor's Diary, Lead followup, Complain.",
                 },
                 { name: 'status', in: 'query', schema: { type: 'string', enum: ['new', 'open', 'closed'] } },
@@ -764,13 +1032,25 @@ export const extraPaths = {
             summary: 'Record an enquiry',
             description: 'Not public. The website form does not post here yet: an unauthenticated write endpoint needs a rate limit and a captcha decision of its own.',
             requestBody: body({
-                kind: { type: 'string', enum: ['ask', 'visit', 'lead', 'complaint'] },
+                kind: { type: 'string', enum: ['ask', 'visit', 'lead', 'complaint', 'laboratory'] },
                 name: { type: 'string' },
                 mobile: { type: 'string' },
                 email: str,
                 subject: str,
+                course_id: { type: ['integer', 'null'] },
+                course_interested: str,
                 message: str,
                 source: str,
+                enquiry_date: {
+                    type: ['string', 'null'],
+                    format: 'date',
+                    description: 'When the enquiry came in, which is not when the row was typed. Absent, `created_at` answers it.',
+                },
+                follow_up_on: {
+                    type: ['string', 'null'],
+                    format: 'date',
+                    description: 'When the next attempt is due. Also written by the follow-up endpoint, from the newest attempt.',
+                },
                 status: { type: 'string', enum: ['new', 'open', 'closed'] },
                 assigned_to: { type: ['integer', 'null'] },
                 lab_id: { type: ['integer', 'null'] },
@@ -799,13 +1079,17 @@ export const extraPaths = {
             description: 'Closing stamps `closed_at`; reopening clears it, so the column answers "when was this finished" rather than "when was it last closed".',
             parameters: [idParam],
             requestBody: body({
-                kind: { type: 'string', enum: ['ask', 'visit', 'lead', 'complaint'] },
+                kind: { type: 'string', enum: ['ask', 'visit', 'lead', 'complaint', 'laboratory'] },
                 name: { type: 'string' },
                 mobile: { type: 'string' },
                 email: str,
                 subject: str,
+                course_id: { type: ['integer', 'null'] },
+                course_interested: str,
                 message: str,
                 source: str,
+                enquiry_date: { type: ['string', 'null'], format: 'date' },
+                follow_up_on: { type: ['string', 'null'], format: 'date' },
                 status: { type: 'string', enum: ['new', 'open', 'closed'] },
                 assigned_to: { type: ['integer', 'null'] },
                 remark: str,
@@ -822,6 +1106,36 @@ export const extraPaths = {
             summary: 'Delete an enquiry',
             parameters: [idParam],
             responses: { 200: ok('Deleted.'), 404: err('Enquiry not found.'), ...guarded },
+        },
+    },
+    '/api/enquiries/{id}/followups': {
+        get: {
+            tags: ['Enquiries'],
+            summary: 'The follow-up history of one enquiry',
+            description: 'Newest first, each entry naming who made the attempt and how it went. Kept as a log rather than folded into `remark`, which every attempt used to overwrite. One log serves both enquiry books, keyed by `enquiry_type`.',
+            parameters: [idParam],
+            responses: { 200: ok('The history.'), 404: err('Enquiry not found.'), ...guarded },
+        },
+        post: {
+            tags: ['Enquiries'],
+            summary: 'Record a follow-up',
+            description: 'Writes three things in step: the log row, the enquiry\'s next follow-up date, and — when one is asked for and it differs — the enquiry\'s status. The move is recorded on the log row as well as applied, so the history says how the enquiry reached its status rather than only what that status is. Closing stamps `closed_at`.',
+            parameters: [idParam],
+            requestBody: body({
+                note: str,
+                outcome: {
+                    type: 'string',
+                    enum: ['reached', 'no_answer', 'interested', 'not_interested', 'converted'],
+                },
+                next_follow_up_on: { type: ['string', 'null'], format: 'date' },
+                status: { type: 'string', enum: ['new', 'open', 'closed'] },
+            }),
+            responses: {
+                201: ok('Recorded.'),
+                400: err('Unknown outcome, or a date that is not YYYY-MM-DD.'),
+                404: err('Enquiry not found.'),
+                ...guarded,
+            },
         },
     },
     // ------------------------------------------------------------ customers
@@ -910,9 +1224,20 @@ export const extraPaths = {
                                             type: 'object',
                                             properties: {
                                                 path: { type: 'string', examples: ['public/uploads/report/8f3c….png'] },
+                                                url: {
+                                                    type: 'string',
+                                                    description: "The object's public URL, or an empty string when no public " +
+                                                        'domain is configured. Empty means read it through /api/files.',
+                                                    examples: ['https://pub-….r2.dev/uploads/report/8f3c….png'],
+                                                },
                                                 original_name: { type: 'string' },
                                                 bytes: int,
                                                 mime: { type: 'string' },
+                                                storage: {
+                                                    type: 'string',
+                                                    enum: ['r2', 'disk'],
+                                                    description: 'Which store took the bytes.',
+                                                },
                                             },
                                         },
                                     },
@@ -1073,6 +1398,63 @@ export const extraPaths = {
         },
     },
     // -------------------------------------------------------------- accounts
+    '/api/users/laboratories/{id}/agreement': {
+        get: {
+            tags: ['Users'],
+            summary: 'The Franchise Agreement, the four pages after the form',
+            description: 'The rest of the printed pack: the equipment a franchise must hold before it opens, what is charged for and what is free, the refund position, and the order the establishment runs in with its deadlines. Only the header block is the laboratory’s — owner, contact, company, email, address, form number; the offer is the same for every franchise and lives in the template. Returns a PDF inline. `?format=html` returns the markup, `?blank=1` prints it with the header empty for handing across a counter. Administrators only.',
+            parameters: [
+                idParam,
+                { name: 'format', in: 'query', schema: { type: 'string', enum: ['html'] } },
+                {
+                    name: 'blank',
+                    in: 'query',
+                    description: 'Print the agreement with an empty header block.',
+                    schema: { type: 'string', enum: ['1', 'true'] },
+                },
+            ],
+            responses: {
+                200: { description: 'The agreement, as a PDF or as HTML.' },
+                404: err('Laboratory not found.'),
+                ...guarded,
+            },
+        },
+    },
+    '/api/users/laboratories/{id}/registration': {
+        get: {
+            tags: ['Users'],
+            summary: 'The Franchisee Form, filled from the laboratory',
+            description: 'The paper registration form head office hands a new franchisee, typeset and pre-filled: name, owner, contact, address, GST, KYC, commission, registration fee and bank details come from the account. What is decided at the counter — the sponsor and the acknowledgement stub — is deliberately left blank to be written in. Returns a PDF inline, so a browser opens it to read and print rather than filing it in a downloads folder. `?format=html` returns the markup it is rendered from, for working on the layout. `?blank=1` prints the same form with nothing filled in, for handing out at a counter — one template, so the sheet given away and the sheet printed back from the account cannot drift apart. Administrators only.',
+            parameters: [
+                idParam,
+                { name: 'format', in: 'query', schema: { type: 'string', enum: ['html'] } },
+                {
+                    name: 'blank',
+                    in: 'query',
+                    description: 'Print the empty form: every label and box, no values.',
+                    schema: { type: 'string', enum: ['1', 'true'] },
+                },
+            ],
+            responses: {
+                200: { description: 'The form, as a PDF or as HTML.' },
+                404: err('Laboratory not found.'),
+                ...guarded,
+            },
+        },
+    },
+    '/api/users/laboratories/{id}/detail': {
+        get: {
+            tags: ['Users'],
+            summary: 'One laboratory, with its payments, staff and certificates',
+            description: 'The laboratory page: the laboratory with its commission accrued, paid and due, the payments it has sent, who works there, and the certificates it has issued — three lists in one reply, because the page opens all three tabs at once. The money is computed here rather than carried from the list row, so the page stands on its own when opened from a bookmark or a reload. Each list is capped at the 50 most recent and `counts` carries the real totals, which are not the length of the lists. The full history lives on the screens that own it: Account for transactions, Employee Management for staff, Certificates for reports. Administrators only.',
+            parameters: [idParam],
+            responses: {
+                200: ok('The laboratory, its recent payments, its staff and its certificates.'),
+                404: err('Laboratory not found.'),
+                ...guarded,
+            },
+        },
+    },
     '/api/users/me': {
         patch: {
             tags: ['Users'],
@@ -1082,6 +1464,7 @@ export const extraPaths = {
                 fullname: { type: 'string' },
                 owner_name: str,
                 alt_mobile: str,
+                office_tel: str,
                 email: str,
                 address: str,
                 city: str,
@@ -1089,17 +1472,52 @@ export const extraPaths = {
                 pincode: str,
                 gst_no: str,
                 bank_name: str,
+                account_holder: str,
+                bank_branch: str,
                 ifsc_code: str,
                 account_no: str,
+                account_type: str,
                 adhar_no: str,
                 adhar_photo: str,
                 pan_no: str,
                 pan_photo: str,
+                passport_no: str,
+                passport_photo: str,
+                dl_no: str,
+                dl_photo: str,
+                voter_id: str,
+                voter_photo: str,
+                id_proof_type: {
+                    type: ['string', 'null'],
+                    description: 'The documents produced as proof of identity, comma separated — "PAN,AADHAR". The top row of tick boxes on the printed form; PAN, AADHAR and PASSPORT are what it offers.',
+                },
+                address_proof_type: {
+                    type: ['string', 'null'],
+                    description: 'The documents produced as proof of address, comma separated. The second row on the printed form — AADHAR, D.L.NO. and VOTER ID. Its own answer, not derived from `id_proof_type`: a PAN card proves identity and not an address. A card named in both rows is still one card, with one number column and one scan.',
+                },
+                documents: {
+                    type: ['array', 'null'],
+                    description: 'The attachment list. At most 25 entries; each has a `title` and a `path`, and the path must be a key inside the uploads area — anything else is refused rather than stored and rendered back as a link. `added_at` is kept when it is a valid date and stamped by the server otherwise. Sending null clears the list.',
+                    items: {
+                        type: 'object',
+                        required: ['path'],
+                        properties: {
+                            title: { type: 'string', maxLength: 191 },
+                            path: { type: 'string', examples: ['public/uploads/documentation/x.pdf'] },
+                            added_at: { type: 'string' },
+                        },
+                    },
+                },
                 profile_photo: str,
                 company_logo: str,
                 signature: str,
             }),
-            responses: { 200: ok('The updated record.'), 400: err('Nothing to update, or the name is blank.'), ...guarded },
+            responses: {
+                200: ok('The updated record.'),
+                400: err('Nothing to update, the name is blank, or a mobile change was attempted by somebody other than head office.'),
+                409: err('That mobile number or email address is on another active account.'),
+                ...guarded,
+            },
         },
     },
     '/api/users/{id}': {
@@ -1126,16 +1544,74 @@ export const extraPaths = {
                 role_id: int,
                 is_active: bool,
                 commision: { type: 'number' },
+                commission_type: { type: 'string', enum: ['percent', 'per_pc'], description: 'How `commision` reads: a percentage of what the laboratory collects, or rupees for each piece it certifies. Decides the arithmetic on every commission figure and the wording on the printed franchisee form.' },
+                registration_fee: { type: ['number', 'string', 'null'] },
                 empid: str,
                 address: str,
                 city: str,
                 state: str,
+                // The rest of the franchisee form: everything on SELF_EDITABLE is
+                // writable here too, these being the ones the laboratory screens send.
+                owner_name: str,
+                alt_mobile: str,
+                office_tel: str,
+                pincode: str,
+                country: str,
+                gst_no: str,
+                fax: str,
+                bank_name: str,
+                account_holder: str,
+                bank_branch: str,
+                ifsc_code: str,
+                account_no: str,
+                account_type: str,
+                adhar_no: str,
+                adhar_photo: str,
+                pan_no: str,
+                pan_photo: str,
+                passport_no: str,
+                passport_photo: str,
+                dl_no: str,
+                dl_photo: str,
+                voter_id: str,
+                voter_photo: str,
+                id_proof_type: str,
+                address_proof_type: str,
+                documents: {
+                    type: ['array', 'null'],
+                    description: 'The attachment list. At most 25 entries; each has a `title` and a `path`, and the path must be a key inside the uploads area — anything else is refused rather than stored and rendered back as a link. `added_at` is kept when it is a valid date and stamped by the server otherwise. Sending null clears the list.',
+                    items: {
+                        type: 'object',
+                        required: ['path'],
+                        properties: {
+                            title: { type: 'string', maxLength: 191 },
+                            path: { type: 'string', examples: ['public/uploads/documentation/x.pdf'] },
+                            added_at: { type: 'string' },
+                        },
+                    },
+                },
+                profile_photo: str,
+                signature: str,
+                documentation: str,
             }),
             responses: {
                 200: ok('Updated.'),
                 400: err('Nothing to update, or a blank mobile number.'),
                 409: err('Another account already uses that mobile number, or employments still point at this empid.'),
                 404: err('Account not found.'),
+                ...guarded,
+            },
+        },
+        delete: {
+            tags: ['Users'],
+            summary: 'Delete an account',
+            description: 'Administrators only. Refused while anybody’s work still points at the account — students or orders under a laboratory, staff employed under its empid — because this schema has no foreign keys and would leave those rows belonging to nobody. Deactivate instead: `PATCH /api/users/{id}/active` keeps the history readable. Grants in `user_permissions` go with the account.',
+            parameters: [idParam],
+            responses: {
+                200: ok('Deleted.'),
+                400: err('That is your own account.'),
+                404: err('Account not found.'),
+                409: err('Students, orders or staff still point at this account.'),
                 ...guarded,
             },
         },

@@ -1,0 +1,508 @@
+<%
+/*
+  The Franchisee Form — laboratory registration.
+
+  A typeset copy of the printed form, filled from the laboratory's record. The
+  layout follows the paper one field for field and in the same order, because
+  the two are handed over together and somebody checking one against the other
+  should not have to hunt.
+
+  Boxed characters, the KYC ticks, the photo and signature panels and the
+  acknowledgement stub are all reproduced: a form that drops them prints
+  something that no longer looks like the document it replaces.
+
+  Empty is left empty on purpose. This is a form: what the record does not
+  hold is what somebody fills in by hand, so a blank line is the feature and
+  not a gap to apologise for.
+*/
+const v = (x) => (x === null || x === undefined || x === '' ? '' : String(x));
+/* One character per box, as the printed grid expects. */
+const boxes = (value, count) => {
+  const s = v(value).replace(/\s+/g, '');
+  return Array.from({ length: count }, (_, i) => s[i] ?? '');
+};
+/*
+  A tick box. Marked when the record holds that answer, empty otherwise — never
+  pre-ticked by guesswork, since these are somebody's identity documents and
+  their bank account. Compared loosely, so "saving" and "SAVING" agree and
+  "D.L.NO." matches however the punctuation was typed.
+
+  `held` may be a list: each row of proofs is recorded as one comma-separated
+  set, because a franchise hands over two or three documents. The two rows read
+  from their own columns — a PAN card proves identity and not an address, and
+  which document proves the address is the franchisee's own answer.
+*/
+const ticked = (held, option) => {
+  const flat = (x) => v(x).toUpperCase().replace(/[^A-Z]/g, '');
+  const wanted = flat(option);
+  return v(held)
+    .split(',')
+    .some((one) => flat(one) !== '' && flat(one) === wanted);
+};
+/*
+  The number on each document produced, under the row that ticked it.
+
+  A ticked box says a PAN card was handed over and not which one; the number is
+  the half of the record that identifies it, and it is already held — one
+  column per document. So the rows print themselves: whatever was ticked, in
+  the order the row offers it, each with its own number.
+
+  A ticked document with no number recorded still prints its row, blank, the
+  way every other empty field on this form does — the paper is filled by hand
+  where the record could not fill it.
+*/
+const PROOF_COLUMN = {
+  PAN: 'pan_no',
+  AADHAR: 'adhar_no',
+  PASSPORT: 'passport_no',
+  'D.L.NO.': 'dl_no',
+  'VOTER ID': 'voter_id',
+};
+const numbersFor = (row, held, options) =>
+  options
+    .filter((o) => ticked(held, o))
+    .map((o) => ({ name: o, value: v(row[PROOF_COLUMN[o]]) }));
+/*
+  An office number arrives as one string; the paper form has two boxes for it.
+  Split on the separator: "0612-2345678" prints the STD code and the number
+  where the form expects each, and a number written without one goes whole into
+  the second box rather than being guessed at.
+*/
+const stdOf = (value) => (v(value).match(/^\s*(\(?0\d{1,4}\)?)\s*[-\s]/) || [])[1] || '';
+const telOf = (value) => {
+  const s = v(value);
+  const std = stdOf(s);
+  return std ? s.slice(s.indexOf(std) + std.length).replace(/^[\s-]+/, '') : s;
+};
+/*
+  A figure in words, Indian grouping. The paper form asks for words beside
+  every amount, and one that prints the figure and leaves the words blank has
+  done half of what a form is for.
+*/
+const ONES = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+  'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen',
+  'Nineteen'];
+const TENS = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+const under100 = (nn) =>
+  nn < 20 ? ONES[nn] : `${TENS[Math.floor(nn / 10)]}${nn % 10 ? ' ' + ONES[nn % 10] : ''}`;
+const under1000 = (nn) =>
+  `${nn >= 100 ? ONES[Math.floor(nn / 100)] + ' Hundred' + (nn % 100 ? ' ' : '') : ''}${under100(nn % 100)}`;
+const words = (amount) => {
+  const num = Number(amount);
+  if (!Number.isFinite(num) || num <= 0) return '';
+  const whole = Math.floor(num);
+  const paise = Math.round((num - whole) * 100);
+  const parts = [];
+  const crore = Math.floor(whole / 10000000);
+  if (crore) parts.push(`${under100(crore % 100)} Crore`);
+  const lakh = Math.floor(whole / 100000) % 100;
+  if (lakh) parts.push(`${under100(lakh)} Lakh`);
+  const thousand = Math.floor(whole / 1000) % 100;
+  if (thousand) parts.push(`${under100(thousand)} Thousand`);
+  if (whole % 1000) parts.push(under1000(whole % 1000));
+  const rupees = `${parts.join(' ')} Rupees`;
+  return paise ? `${rupees} and ${under100(paise)} Paise Only` : `${rupees} Only`;
+};
+%>
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Franchisee Form — <%= v(title) %></title>
+<style>
+  /* One page of A4, printed as it is drawn: the browser's own margins would
+     otherwise reflow a form whose alignment is the whole point. */
+  @page { size: A4; margin: 10mm; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+    /*
+      Set for reading at arm's length across a counter, not for fitting the
+      most words on a page. Everything below is sized from here.
+    */
+    font-size: 10.5px;
+    color: #111;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .sheet { width: 190mm; margin: 0 auto; }
+
+  header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+
+  /*
+    The letterhead lockup, as it is printed: the round mark, then IIGL set
+    large in a serif face, with the two-line description beside it and the ISO
+    line ruled under the pair. Serif on purpose — the printed letterhead is
+    not the panel, and matching the panel's sans-serif made the form look like
+    a different company's document.
+  */
+  .brand { display: flex; gap: 9px; align-items: center; }
+  .brand img { height: 58px; }
+  .lockup { font-family: "Times New Roman", Georgia, serif; }
+  .lockup .row { display: flex; align-items: center; gap: 8px; }
+  .lockup .name { font-size: 30px; font-weight: 700; letter-spacing: .5px; line-height: 1; }
+  .lockup .sub { font-size: 11.5px; line-height: 1.25; }
+  .brand .iso {
+    font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 9.5px; font-weight: 700; letter-spacing: .2px; margin-top: 3px;
+  }
+  .addr { text-align: right; font-size: 10.5px; line-height: 1.5; }
+  .addr b { font-weight: 700; }
+
+  .title { text-align: center; margin: 10px 0 6px; }
+  .title span {
+    display: inline-block; padding: 5px 30px; border-radius: 999px;
+    background: #111; color: #fff; font-weight: 700; letter-spacing: .6px; font-size: 15px;
+  }
+
+  .formno { display: flex; justify-content: space-between; font-size: 10.5px; margin-bottom: 6px; }
+  .rule { border-top: 1.2px solid #111; margin: 4px 0 8px; }
+
+  .cols { display: flex; gap: 14px; }
+  .col { flex: 1; min-width: 0; }
+  h2 { font-size: 11px; font-weight: 700; letter-spacing: .4px; margin: 0 0 6px; }
+  .req::after { content: "*"; color: #111; }
+
+  .field { margin-bottom: 7px; }
+  .label { font-size: 9.5px; letter-spacing: .3px; margin-bottom: 2px; }
+  /*
+    Tall enough to write in, and shaded so the eye finds it.
+
+    These are filled by hand as often as they are printed filled: a 15px rule
+    left no room for a pen, and an unshaded one reads as part of the page
+    rather than as somewhere to write. The grey is light enough that a
+    ballpoint over it still photocopies.
+  */
+  .line {
+    border: 1px solid #9aa1ad; background: #eaedf2; height: 26px;
+    padding: 3px 6px; font-size: 12px; line-height: 19px;
+  }
+  .line.tall { height: 46px; }
+
+  /* The character grid the printed form uses for numbers. */
+  .grid { display: flex; gap: 2px; }
+  /* The character boxes match the lines — same height, same grey — or a row
+     of them reads as a different kind of field from the one above it. A digit
+     written by hand needs more width than a printed one. */
+  .grid i { border: 1px solid #9aa1ad; width: 19px; height: 26px; font-style: normal;
+            text-align: center; font-size: 12px; line-height: 24px; background: #eaedf2; }
+
+  .inline { display: flex; gap: 6px; align-items: flex-end; }
+  .inline .field { margin-bottom: 0; }
+
+  .tick { display: inline-flex; align-items: center; gap: 4px; margin-right: 10px; font-size: 10px; }
+  /* The tick boxes stay white: they are ticked, not written in, and a shaded
+     one is harder to read a pen mark out of. */
+  .tick b { display: inline-block; width: 12px; height: 12px; border: 1px solid #666; background: #fff;
+            font-size: 10px; line-height: 11px; text-align: center; }
+
+  .panel { border: 1px solid #9aa1ad; background: #eaedf2; }
+
+  /*
+    Passport proportions, at a size somebody can paste a print into. `cover`
+    because a photograph should fill the box the way it does on a printed
+    form — white letterboxing either side of a face reads as a mistake, and
+    the panel is the right shape for a portrait anyway.
+  */
+  .photo { height: 118px; display: flex; align-items: center; justify-content: center;
+           font-size: 9px; color: #888; overflow: hidden; }
+  .photo img { width: 100%; height: 100%; object-fit: cover; }
+
+  /*
+    The signature is the exception: `contain`. One cropped to fill a box has
+    had its ends cut off, and half a signature is not a specimen.
+  */
+  .sign { height: 62px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .sign img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+  .note { font-size: 9px; }
+  .ack { margin-top: 10px; border-top: 1.2px dashed #111; padding-top: 8px; }
+  .ackrow { display: flex; gap: 10px; align-items: flex-end; margin-bottom: 6px; }
+  /* The label is as wide as it needs to be and the value takes the rest:
+     the line is the part somebody writes in. */
+  .ackrow .label { width: 108px; flex: none; }
+  .ackrow .line { flex: 1; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header>
+    <div class="brand">
+      <% if (logo) { %><img src="<%= logo %>" alt=""><% } %>
+      <div class="lockup">
+        <div class="row">
+          <div class="name">IIGL</div>
+          <div class="sub">Institute of International<br>Gemological Laboratory</div>
+        </div>
+        <div class="iso">AN ISO CERTIFIED 9001:2015 COMPANY</div>
+      </div>
+    </div>
+    <div class="addr">
+      <%= v(company.address) || 'Door No. 201, 2nd Floor, 75 Topping Road' %><br>
+      <%= [v(company.city), v(company.state), v(company.pincode)].filter(Boolean).join(' - ') || 'Kolkata - 700 071 (WB)' %><br>
+      Customer Care No. : <%= v(company.phone) || '+91 9570702777' %><br>
+      Email : <%= v(company.email) || 'support@iigl.org' %><br>
+      <b><%= v(company.website) || 'www.iigl.org' %></b>
+    </div>
+  </header>
+
+  <div class="title"><span>FRANCHISEE FORM</span></div>
+
+  <div class="formno">
+    <div>Form No. : <%= v(lab.empid) %></div>
+    <div>Date : <%= issuedOn %></div>
+  </div>
+  <div class="rule"></div>
+
+  <div class="cols">
+    <!-- ------------------------------------------------ applicant -->
+    <div class="col">
+      <h2>APPLICANT'S DETAIL</h2>
+
+      <div class="field">
+        <div class="label req">LABORATORY NAME</div>
+        <div class="line"><%= v(lab.fullname) %></div>
+      </div>
+
+      <div class="field">
+        <div class="label req">NAME OF OWNER</div>
+        <div class="line"><%= v(lab.owner_name) %></div>
+      </div>
+
+      <div class="field">
+        <div class="label req">MOBILE NO</div>
+        <div class="grid"><% boxes(lab.mobile, 10).forEach((c) => { %><i><%= c %></i><% }) %></div>
+      </div>
+
+      <div class="field">
+        <div class="label req">E-MAIL</div>
+        <div class="line"><%= v(lab.email) %></div>
+      </div>
+
+      <div class="field">
+        <div class="label req">GST NUMBER</div>
+        <div class="line"><%= v(lab.gst_no) %></div>
+      </div>
+
+      <div class="field">
+        <div class="label req">PERMANENT ADDRESS</div>
+        <div class="line tall"><%= v(lab.address) %></div>
+      </div>
+
+      <div class="field">
+        <div class="label">STATE</div>
+        <div class="line"><%= v(lab.state) %></div>
+      </div>
+
+      <div class="inline field">
+        <div class="field" style="flex:1">
+          <div class="label">TOWN / CITY</div>
+          <div class="line"><%= v(lab.city) %></div>
+        </div>
+        <div class="field" style="width:78px">
+          <div class="label">PIN CODE</div>
+          <div class="line"><%= v(lab.pincode) %></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="label">FAX NUMBER</div>
+        <div class="line"><%= v(lab.fax) %></div>
+      </div>
+
+      <%# One label over both boxes. Sitting inside the 74px STD-code box it
+           wrapped onto two lines, and the blank label beside it existed only to
+           push the second box back down level with it. %>
+      <div class="field">
+        <div class="label">OFFICE TEL NO.</div>
+        <div class="inline">
+          <div class="field" style="width:74px">
+            <div class="line"<% if (!stdOf(lab.office_tel)) { %> style="font-size:8px; color:#888"<% } %>><%= stdOf(lab.office_tel) || 'STD CODE' %></div>
+          </div>
+          <div class="field" style="flex:1">
+            <div class="line"><%= telOf(lab.office_tel) %></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ------------------------------------------------ kyc + bank -->
+    <div class="col">
+      <div style="display:flex; gap:10px">
+        <div style="flex:1">
+          <h2>KYC DOCUMENTS</h2>
+          <div class="field">
+            <div class="label req">ID PROOF</div>
+            <div>
+              <% ['PAN', 'AADHAR', 'PASSPORT'].forEach((o) => { %>
+                <span class="tick"><b><%= ticked(lab.id_proof_type, o) ? '\u2713' : '' %></b><%= o %></span>
+              <% }) %>
+            </div>
+            <% numbersFor(lab, lab.id_proof_type, ['PAN', 'AADHAR', 'PASSPORT']).forEach((p) => { %>
+              <div class="field" style="margin-top:4px; margin-bottom:0">
+                <div class="label"><%= p.name %></div>
+                <div class="line"><%= p.value %></div>
+              </div>
+            <% }) %>
+          </div>
+          <div class="field">
+            <div class="label">ADDRESS PROOF</div>
+            <div>
+              <% ['AADHAR', 'D.L.NO.', 'VOTER ID'].forEach((o) => { %>
+                <span class="tick"><b><%= ticked(lab.address_proof_type, o) ? '\u2713' : '' %></b><%= o %></span>
+              <% }) %>
+            </div>
+            <% numbersFor(lab, lab.address_proof_type, ['AADHAR', 'D.L.NO.', 'VOTER ID']).forEach((p) => { %>
+              <div class="field" style="margin-top:4px; margin-bottom:0">
+                <div class="label"><%= p.name %></div>
+                <div class="line"><%= p.value %></div>
+              </div>
+            <% }) %>
+          </div>
+        </div>
+        <div style="width:118px">
+          <div class="panel photo">
+            <% if (photo) { %><img src="<%= photo %>" alt=""><% } else { %>Photo<% } %>
+          </div>
+          <div class="label" style="margin-top:8px">SIGNATURE SAMPLE</div>
+          <div class="panel sign">
+            <% if (signature) { %><img src="<%= signature %>" alt=""><% } %>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="req" style="margin-top:8px">BANK DETAILS</h2>
+
+      <div class="field">
+        <div class="label">ACCOUNTHOLDER'S NAME</div>
+        <div class="line"><%= v(lab.account_holder) || v(lab.owner_name) || v(lab.fullname) %></div>
+      </div>
+
+      <div class="field">
+        <div class="label">A/C NO.</div>
+        <div class="grid"><% boxes(lab.account_no, 16).forEach((c) => { %><i><%= c %></i><% }) %></div>
+      </div>
+
+      <div class="field">
+        <div class="label">IFSC CODE</div>
+        <div class="grid"><% boxes(lab.ifsc_code, 11).forEach((c) => { %><i><%= c %></i><% }) %></div>
+      </div>
+
+      <div class="field">
+        <div class="label">A/C TYPE</div>
+        <div>
+          <% ['SAVING', 'CURRENT'].forEach((o) => { %>
+            <span class="tick"><b><%= ticked(lab.account_type, o) ? '\u2713' : '' %></b><%= o %></span>
+          <% }) %>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="label">BANK NAME</div>
+        <div class="line"><%= v(lab.bank_name) %></div>
+      </div>
+
+      <div class="field">
+        <div class="label">BRANCH</div>
+        <div class="line"><%= v(lab.bank_branch) %></div>
+      </div>
+
+      <div class="note" style="margin-top:6px; display:flex; justify-content:space-between">
+        <span>PLEASE ATTACH VOID CHEQUE WITH THIS FORM<br>
+          <span style="font-size:7.5px">[ Cheque must be preprinted with your name ]</span></span>
+        <span>&bull; Mandatory Fields</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="rule"></div>
+
+  <div class="cols">
+    <div class="col">
+      <%
+        /*
+          One number, two agreements. A percentage is taken off what the
+          laboratory collects; a per-piece rate is rupees for every piece it
+          certifies. The heading, the figure and the words all follow the terms
+          on the account rather than assuming the commoner of the two — a form
+          headed "IN PERCENT" over a per-piece rate is a document stating terms
+          nobody agreed to.
+        */
+        const perPiece = lab.commission_type === 'per_pc';
+        const rate = lab.commision == null ? null : Number(lab.commision);
+      %>
+      <div class="field">
+        <div class="label"><%= perPiece ? 'COMMISSION PER PC.' : 'COMMISSION IN PERCENT' %></div>
+        <div class="line"><%= rate == null ? '' : perPiece ? '\u20B9 ' + rate.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : rate + ' %' %></div>
+      </div>
+      <div class="inline">
+        <div class="label" style="width:66px">IN WORDS</div>
+        <div class="line" style="flex:1"><%= rate == null ? '' : perPiece ? words(rate).replace(/ Only$/, '') + ' Per Piece' : under100(Math.round(rate)) + ' Percent' %></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="field">
+        <div class="label">FRANCHISEE REGISTRATION FEE</div>
+        <div class="line">&#8377; <%= lab.registration_fee == null ? '' : Number(lab.registration_fee).toLocaleString('en-IN', { minimumFractionDigits: 2 }) %></div>
+      </div>
+      <div class="inline">
+        <div class="label" style="width:82px">RUPEES IN WORDS</div>
+        <div class="line" style="flex:1; font-size:8.5px"><%= words(lab.registration_fee) %></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ------------------------------------------------ acknowledgement -->
+  <div class="ack">
+    <div class="formno">
+      <div>Date : ..............................</div>
+      <div>Form No. : <%= v(lab.empid) %></div>
+    </div>
+
+    <h2>ACKNOWLEDGEMENT</h2>
+
+    <div class="cols">
+      <div class="col">
+        <div class="ackrow"><div class="label">NAME OF APPLICANT</div><div class="line"><%= v(lab.owner_name) || v(lab.fullname) %></div></div>
+        <div class="ackrow"><div class="label">NAME OF SPONSOR</div><div class="line"></div></div>
+        <div class="ackrow"><div class="label">SPONSOR ID</div>
+          <div class="grid"><% boxes('', 10).forEach(() => { %><i></i><% }) %></div>
+        </div>
+        <div class="ackrow" style="align-items:flex-start">
+          <div class="label">MODE OF PAYMENT</div>
+          <div>
+            <span class="tick"><b></b>Cash</span>
+            <span class="tick"><b></b>Cheque/DD</span>
+            <span class="tick"><b></b>Bank Transfer/NEFT</span>
+            <span class="tick"><b></b>Online Payment</span><br>
+            <span class="tick" style="margin-top:4px"><b></b>Debit Card/Credit Card</span>
+            <span class="tick" style="margin-top:4px"><b></b>Reference No</span>
+          </div>
+        </div>
+        <div class="ackrow"><div class="label">NAME (PAYMENT RECEIVED BY)</div><div class="line"></div></div>
+      </div>
+
+      <div class="col" style="max-width:190px">
+        <div class="panel" style="height:74px"></div>
+        <div class="label" style="margin-top:3px">SIGNATURE OF PAYMENT RECEIVER</div>
+        <div class="note">(Not valid without company stamp with employee ID)</div>
+      </div>
+    </div>
+
+    <div class="cols" style="margin-top:6px">
+      <div class="col">
+        <div class="label">FRANCHISEE REGISTRATION FEE</div>
+        <div class="line">&#8377;</div>
+      </div>
+      <div class="col">
+        <div class="label">RECEIVED AMOUNT</div>
+        <div class="line"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

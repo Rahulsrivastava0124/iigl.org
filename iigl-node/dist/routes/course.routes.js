@@ -5,6 +5,7 @@ import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { paged, readPage } from '../lib/paginate.js';
 import { requireAdmin } from '../middleware/auth.js';
 import { numericId } from '../middleware/params.js';
+import { feeStatementHtml, feeStatementPdf } from '../services/document.service.js';
 import { COURSE_STATUS } from './student.routes.js';
 /**
  * Courses, enrolments and the discount that sits on them.
@@ -77,28 +78,172 @@ courseRoutes.get('/', wrap(async (req, res) => {
     const p = readPage(req);
     const term = String(req.query.q ?? '').trim();
     const active = req.query.active;
+    // Table-qualified throughout: this filter is applied to a query that joins
+    // `gst_rates`, and both tables have an `is_active` and a `name`. Unqualified
+    // they are ambiguous and MySQL refuses the whole statement.
     const build = (base) => {
         let q = base;
         if (active === '1')
-            q = q.where('is_active', '=', 1);
+            q = q.where('courses.is_active', '=', 1);
         if (active === '0')
-            q = q.where('is_active', '=', 0);
+            q = q.where('courses.is_active', '=', 0);
         if (term) {
             const like = `%${term}%`;
-            q = q.where((eb) => eb.or([eb('name', 'like', like), eb('code', 'like', like)]));
+            q = q.where((eb) => eb.or([eb('courses.name', 'like', like), eb('courses.code', 'like', like)]));
         }
         return q;
     };
     const [rows, count] = await Promise.all([
-        build(db.selectFrom('courses').selectAll())
-            .orderBy('name', 'asc')
+        // How many are on each course, as a correlated count rather than a join:
+        // a join to `student_courses` would multiply the course row by its
+        // enrolments and need a group by to put it back together again.
+        build(db
+            .selectFrom('courses')
+            // The rate the fee is quoted at, whichever way it was given: a row
+            // of the master list, or a percent typed on the course. Left, so a
+            // course naming no rate is still a course.
+            .leftJoin('gst_rates', 'gst_rates.id', 'courses.gst_id')
+            .selectAll('courses')
+            .select((eb) => [
+            eb.fn.coalesce('gst_rates.percent', 'courses.gst_percent').as('gst_rate'),
+            eb
+                .selectFrom('student_courses')
+                .select(eb.fn.countAll().as('n'))
+                .whereRef('student_courses.course_id', '=', 'courses.id')
+                .as('enrolled'),
+        ]))
+            .orderBy('courses.name', 'asc')
             .limit(p.limit)
             .offset(p.offset)
             .execute(),
         build(db.selectFrom('courses').select(db.fn.countAll().as('n'))).executeTakeFirstOrThrow(),
     ]);
-    res.json(paged(rows, Number(count.n), p));
+    res.json(paged(rows.map((r) => {
+        const rate = r.gst_rate == null ? null : Number(r.gst_rate);
+        const fee = Number(r.fee ?? 0);
+        const round = (n) => Math.round(n * 100) / 100;
+        return {
+            ...r,
+            gst_rate: rate,
+            // The fee with its GST on it. Rounded, not truncated: the
+            // truncation in money.ts is the ported rule for what an order is
+            // billed, and a course fee is not an order.
+            gst_amount: rate == null ? null : round(fee * (rate / 100)),
+            fee_with_gst: rate == null ? null : round(fee * (1 + rate / 100)),
+        };
+    }), Number(count.n), p));
 }));
+/**
+ * The GST rate a course is quoted at, as a percent, or 0 where it names none.
+ *
+ * Resolved from whichever way the rate was given — a row of the master list or
+ * a percent typed on the course itself.
+ */
+async function courseGstPercent(course) {
+    if (course.gst_id) {
+        const rate = await db
+            .selectFrom('gst_rates')
+            .select('percent')
+            .where('id', '=', Number(course.gst_id))
+            .executeTakeFirst();
+        return rate ? Number(rate.percent) : 0;
+    }
+    return course.gst_percent == null ? 0 : Number(course.gst_percent);
+}
+/** GST on an amount, to the paisa. */
+const gstOn = (amount, percent) => Math.round(amount * (percent / 100) * 100) / 100;
+/**
+ * Who is on one course, and what it has brought in.
+ *
+ * The list and the totals together, because the screen asks both questions at
+ * once and they have to agree: a total that does not add up to the rows under
+ * it is worse than no total.
+ *
+ * Not paged. A course holds a class, not a database — and a caller that wants
+ * to page through enrolments has `/courses/enrolments` for that.
+ */
+courseRoutes.get('/:id/students', numericId, wrap(async (req, res) => {
+    const courseId = Number(req.params.id);
+    const course = await db
+        .selectFrom('courses')
+        .select(['id', 'name', 'fee'])
+        .where('id', '=', courseId)
+        .executeTakeFirst();
+    if (!course)
+        throw notFound('Course not found.');
+    const rows = await db
+        .selectFrom('student_courses')
+        .innerJoin('students', 'students.id', 'student_courses.student_id')
+        .select([
+        'student_courses.id',
+        'student_courses.student_id',
+        'students.name as student_name',
+        'students.registration_no',
+        'students.mobile',
+        'student_courses.batch',
+        'student_courses.start_date',
+        'student_courses.status',
+        'student_courses.fee',
+        'student_courses.discount_amount',
+        'student_courses.final_fee',
+        'student_courses.gst_percent',
+        'student_courses.gst_amount',
+        'student_courses.fee_paid',
+    ])
+        .where('student_courses.course_id', '=', courseId)
+        .orderBy('student_courses.id', 'desc')
+        .execute();
+    // Totalled from the rows just read, so the figures and the list cannot
+    // disagree. `final_fee` is the fee after any discount, falling back to
+    // `fee` on a row written before discounts existed.
+    let billed = 0;
+    let paid = 0;
+    for (const r of rows) {
+        billed += Number(r.final_fee ?? r.fee ?? 0) + Number(r.gst_amount ?? 0);
+        paid += Number(r.fee_paid ?? 0);
+    }
+    const round = (n) => Math.round(n * 100) / 100;
+    res.json({
+        data: {
+            course: { id: Number(course.id), name: course.name, fee: course.fee },
+            students: rows.map((r) => ({
+                ...r,
+                // What this student still owes: the fee after discount, plus its
+                // tax, less what has come in.
+                payable: round(Number(r.final_fee ?? r.fee ?? 0) + Number(r.gst_amount ?? 0)),
+                due: Math.max(0, round(Number(r.final_fee ?? r.fee ?? 0) +
+                    Number(r.gst_amount ?? 0) -
+                    Number(r.fee_paid ?? 0))),
+            })),
+            totals: {
+                enrolments: rows.length,
+                billed: round(billed),
+                paid: round(paid),
+                due: Math.max(0, round(billed - paid)),
+            },
+        },
+    });
+}));
+/**
+ * The GST a course fee or a price band is quoted at.
+ *
+ * One of two, never both: a row from the master list, or a percent typed on
+ * the record itself. Choosing either clears the other, so nothing downstream
+ * has to decide which of two answers is the real one.
+ */
+function gstChoice(b) {
+    const id = b.gst_id ? Number(b.gst_id) : null;
+    if (id)
+        return { gst_id: id, gst_percent: null };
+    const raw = b.gst_percent;
+    if (raw == null || raw === '')
+        return { gst_id: null, gst_percent: null };
+    const percent = Number(raw);
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+        throw badRequest('GST percent must be a number between 0 and 100.');
+    }
+    return { gst_id: null, gst_percent: String(percent) };
+}
 courseRoutes.post('/', wrap(async (req, res) => {
     const b = req.body ?? {};
     const name = requireText(b.name, 'Course name');
@@ -116,6 +261,7 @@ courseRoutes.post('/', wrap(async (req, res) => {
         code: text(b.code),
         duration: text(b.duration),
         fee: String(money(b.fee, 'Fee')),
+        ...gstChoice(b),
         description: text(b.description),
         is_active: b.is_active === false ? 0 : 1,
         added_by: req.user.id,
@@ -144,6 +290,9 @@ courseRoutes.patch('/:id', numericId, wrap(async (req, res) => {
         patch.duration = text(b.duration);
     if (b.fee !== undefined)
         patch.fee = String(money(b.fee, 'Fee'));
+    if (b.gst_id !== undefined || b.gst_percent !== undefined) {
+        Object.assign(patch, gstChoice(b));
+    }
     if (b.description !== undefined)
         patch.description = text(b.description);
     if (b.is_active !== undefined)
@@ -179,6 +328,10 @@ function enrolmentQuery() {
         .selectFrom('student_courses as sc')
         .leftJoin('students as s', 's.id', 'sc.student_id')
         .leftJoin('courses as c', 'c.id', 'sc.course_id')
+        // Whether a certificate has been issued against this enrolment, and where
+        // the file is. The enrolments list offers it once the course is finished
+        // and the fee is settled, and it cannot offer what it cannot see.
+        .leftJoin('student_certificates as cert', 'cert.student_course_id', 'sc.id')
         .select([
         'sc.id',
         'sc.student_id',
@@ -194,6 +347,8 @@ function enrolmentQuery() {
         'sc.discount_applied_on',
         'sc.discount_approved_by',
         'sc.final_fee',
+        'sc.gst_percent',
+        'sc.gst_amount',
         'sc.fee_paid',
         'sc.status',
         'sc.completed_on',
@@ -204,8 +359,51 @@ function enrolmentQuery() {
         's.mobile',
         'c.name as course_name',
         'c.duration',
+        'cert.id as certificate_id',
+        'cert.certificate_no',
+        'cert.file as certificate_file',
+        'cert.issued_on as certificate_issued_on',
     ]);
 }
+/**
+ * What the courses screen shows above the list: billed, paid and outstanding
+ * across every enrolment.
+ *
+ * Summed here rather than added up in the panel, which only ever holds one page
+ * of enrolments and would therefore total that page rather than the business.
+ *
+ * `final_fee` is the fee after any discount — what somebody was actually asked
+ * for — so the three figures reconcile: billed minus paid is what is owed. A
+ * row that was never given a final fee falls back to `fee`, which is what the
+ * enrolment form wrote before a discount existed.
+ */
+courseRoutes.get('/enrolments/summary', wrap(async (_req, res) => {
+    const row = await db
+        .selectFrom('student_courses')
+        .select(({ fn, eb }) => [
+        fn.count('id').as('enrolments'),
+        // Billed is the fee after discount plus its tax: what somebody was
+        // actually asked for. Zero tax on every row written before 020, so
+        // those total exactly as they did.
+        fn
+            .coalesce(fn.sum(eb(eb.fn.coalesce('final_fee', 'fee'), '+', eb.fn.coalesce('gst_amount', eb.lit(0)))), eb.lit(0))
+            .as('billed'),
+        fn.coalesce(fn.sum('fee_paid'), eb.lit(0)).as('paid'),
+    ])
+        .executeTakeFirstOrThrow();
+    const billed = Number(row.billed);
+    const paid = Number(row.paid);
+    res.json({
+        data: {
+            enrolments: Number(row.enrolments),
+            billed,
+            paid,
+            // Never negative: an overpayment is a credit to sort out on the
+            // enrolment, not a negative amount owed across the business.
+            due: Math.max(0, Math.round((billed - paid) * 100) / 100),
+        },
+    });
+}));
 courseRoutes.get('/enrolments', wrap(async (req, res) => {
     const p = readPage(req);
     const status = req.query.status ? oneOf(COURSE_STATUS, req.query.status) : null;
@@ -268,6 +466,11 @@ courseRoutes.post('/enrolments', wrap(async (req, res) => {
     // The fee is copied from the catalogue rather than read through it, so a
     // price change next year cannot restate what this student was billed.
     const fee = b.fee !== undefined ? money(b.fee, 'Fee') : Number(course.fee);
+    // The rate as it stands now, copied onto the enrolment for the same reason
+    // the fee is: a master rate somebody edits or retires next year must not
+    // restate what this student was asked for. No discount exists at this
+    // point, so the tax is on the whole fee; applying one recalculates it.
+    const gstPercent = await courseGstPercent(course);
     const result = await db
         .insertInto('student_courses')
         .values({
@@ -278,6 +481,8 @@ courseRoutes.post('/enrolments', wrap(async (req, res) => {
         end_date: date(b.end_date),
         fee: String(fee),
         final_fee: String(fee),
+        gst_percent: String(gstPercent),
+        gst_amount: String(gstOn(fee, gstPercent)),
         fee_paid: String(money(b.fee_paid, 'Fee paid')),
         status: oneOf(COURSE_STATUS, b.status, 'upcoming'),
         remark: text(b.remark),
@@ -328,6 +533,10 @@ courseRoutes.patch('/enrolments/:id', numericId, wrap(async (req, res) => {
         const cut = discountOf(fee, existing.discount_type, Number(existing.discount_value));
         patch.discount_amount = String(cut);
         patch.final_fee = String(fee - cut);
+        // The tax is on the fee after discount, so it moves with it. The rate
+        // itself does not: it is the one snapshotted when this enrolment was
+        // made, whatever the course says today.
+        patch.gst_amount = String(gstOn(fee - cut, Number(existing.gst_percent ?? 0)));
     }
     if (b.status !== undefined) {
         const status = oneOf(COURSE_STATUS, b.status);
@@ -383,6 +592,7 @@ courseRoutes.patch('/enrolments/:id/discount', numericId, wrap(async (req, res) 
             discount_approved_by: null,
             discount_applied_on: null,
             final_fee: String(fee),
+            gst_amount: String(gstOn(fee, Number(existing.gst_percent ?? 0))),
             updated_at: new Date(),
         })
             .where('id', '=', enrolmentId)
@@ -412,6 +622,7 @@ courseRoutes.patch('/enrolments/:id/discount', numericId, wrap(async (req, res) 
         discount_approved_by: req.user.id,
         discount_applied_on: date(b.applied_on) ?? new Date(),
         final_fee: String(finalFee),
+        gst_amount: String(gstOn(finalFee, Number(existing.gst_percent ?? 0))),
         updated_at: new Date(),
     })
         .where('id', '=', enrolmentId)
@@ -426,20 +637,45 @@ courseRoutes.post('/enrolments/:id/payment', numericId, wrap(async (req, res) =>
         throw badRequest('Enter an amount greater than zero.');
     const row = await db
         .selectFrom('student_courses')
-        .select(['final_fee', 'fee_paid'])
+        .select(['final_fee', 'gst_amount', 'fee_paid'])
         .where('id', '=', enrolmentId)
         .executeTakeFirst();
     if (!row)
         throw notFound('Enrolment not found.');
+    // What is owed is the fee after discount plus its tax. On an enrolment
+    // made before GST was recorded that second part is zero, so the cap is
+    // exactly what it always was.
+    const payable = Number(row.final_fee) + Number(row.gst_amount ?? 0);
     const next = Number(row.fee_paid) + paid;
-    if (next > Number(row.final_fee))
+    if (next > payable)
         throw badRequest('That is more than the fee still due.');
     await db
         .updateTable('student_courses')
         .set({ fee_paid: String(next), updated_at: new Date() })
         .where('id', '=', enrolmentId)
         .execute();
-    res.json({ data: { fee_paid: next, due: Number(row.final_fee) - next } });
+    res.json({ data: { fee_paid: next, due: Math.round((payable - next) * 100) / 100 } });
+}));
+/**
+ * The fee on one enrolment, as a sheet to hand over.
+ *
+ * A statement, not a numbered receipt: nothing in the schema issues fee
+ * receipt numbers, so the enrolment id is the reference. `?format=html`
+ * returns the markup the PDF is rendered from, which is how the layout is
+ * worked on without a render round trip.
+ */
+courseRoutes.get('/enrolments/:id/statement', numericId, wrap(async (req, res) => {
+    const enrolmentId = Number(req.params.id);
+    const issuedBy = req.user?.fullname ?? 'IIGL';
+    if (req.query.format === 'html') {
+        res.type('html').send(await feeStatementHtml(enrolmentId, issuedBy));
+        return;
+    }
+    const pdf = await feeStatementPdf(enrolmentId, issuedBy);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="fee-statement-${enrolmentId}.pdf"`);
+    res.setHeader('Content-Length', String(pdf.length));
+    res.end(pdf);
 }));
 courseRoutes.delete('/enrolments/:id', numericId, wrap(async (req, res) => {
     const enrolmentId = Number(req.params.id);

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  Box,
   MenuItem,
   Table,
   TableBody,
@@ -95,11 +96,14 @@ export default function Orders() {
           <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>
+                <TableCell>Date</TableCell>
                 <TableCell>Order</TableCell>
                 <TableCell>Customer</TableCell>
                 <TableCell>Mobile</TableCell>
-                <TableCell>Date</TableCell>
                 <TableCell>Status</TableCell>
+                <TableCell align="right">Items</TableCell>
+                <TableCell align="right">Reports</TableCell>
+                <TableCell>Assigned to</TableCell>
                 <TableCell align="right">Billed</TableCell>
                 <TableCell align="right">Paid</TableCell>
                 <TableCell align="right">Dues</TableCell>
@@ -109,14 +113,48 @@ export default function Orders() {
             <TableBody>
               {rows.map((o) => (
                 <TableRow key={o.id} hover>
+                  <TableCell>{o.order_date}</TableCell>
                   <TableCell className="mono">{o.order_no}</TableCell>
                   <TableCell sx={{ whiteSpace: 'normal', minWidth: 160 }}>
                     {o.customer_name}
                   </TableCell>
                   <TableCell className="mono">{o.mobile}</TableCell>
-                  <TableCell>{o.order_date}</TableCell>
                   <TableCell>
                     <OrderChip status={o.status} />
+                  </TableCell>
+                  <TableCell align="right" className="tabular">
+                    {o.total_items}
+                  </TableCell>
+                  {/*
+                    Two figures, one column: written of owed. The Laravel list
+                    gave each its own column and left the reader to compare them
+                    across a table nine columns wide, when what is being asked is
+                    how far along the order is.
+                  */}
+                  <TableCell align="right" className="tabular">
+                    <Box
+                      component="span"
+                      sx={{
+                        color:
+                          o.reports_generated >= o.total_reports && o.total_reports > 0
+                            ? 'success.main'
+                            : 'text.primary',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {o.reports_generated}
+                    </Box>
+                    <Box component="span" sx={{ color: 'text.secondary' }}>
+                      {' / '}
+                      {o.total_reports}
+                    </Box>
+                  </TableCell>
+                  <TableCell sx={{ whiteSpace: 'normal', minWidth: 120 }}>
+                    {o.assigned_to_name ?? (
+                      <Box component="span" sx={{ color: 'text.secondary' }}>
+                        Unassigned
+                      </Box>
+                    )}
                   </TableCell>
                   <TableCell align="right" className="tabular">
                     {money(o.total_amount)}

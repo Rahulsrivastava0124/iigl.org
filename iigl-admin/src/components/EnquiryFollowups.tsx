@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@mui/material';
 import {
   Box,
   MenuItem,
@@ -213,11 +215,23 @@ export function FollowupDialog({
   onSaved,
 }: {
   book?: Book;
-  enquiry: { id: number; name: string; status: string };
+  enquiry: {
+    id: number;
+    name: string;
+    status: string;
+    /* Carried only by the course book, and only so a conversion can hand the
+       registration form what the enquiry already knows. */
+    mobile?: string;
+    email?: string | null;
+    course_id?: number | null;
+    course_interested?: string | null;
+    remarks?: string | null;
+  };
   onClose: () => void;
   onSaved: () => void;
 }) {
   const toast = useToast();
+  const navigate = useNavigate();
   const { rows, loading } = useFollowups(book, enquiry.id);
 
   const [outcome, setOutcome] = useState('reached');
@@ -231,7 +245,15 @@ export function FollowupDialog({
   const suggested = (outcomeOf(outcome) as { moves?: Record<Book, string | undefined> }).moves?.[book] ?? '';
   const effective = touched ? status : suggested;
 
-  const save = async () => {
+  /*
+    A conversion is two things: the attempt that ended in one, and the student
+    the enquiry becomes. Recorded together — the follow-up is written first, so
+    the book is right whether or not somebody finishes the registration, and
+    the form opens carrying what the enquiry already knows.
+  */
+  const converting = book === 'student' && effective === 'converted';
+
+  const save = async (thenRegister = false) => {
     setBusy(true);
     try {
       await api.post(BOOKS[book].path(enquiry.id), {
@@ -240,9 +262,28 @@ export function FollowupDialog({
         next_follow_up_on: next || null,
         status: effective || undefined,
       });
-      toast.ok(`Follow-up recorded for ${enquiry.name}.`);
+      toast.ok(
+        converting
+          ? `${enquiry.name} marked converted.`
+          : `Follow-up recorded for ${enquiry.name}.`,
+      );
       onSaved();
       onClose();
+
+      if (thenRegister) {
+        navigate('/students/create', {
+          state: {
+            fromEnquiry: {
+              id: enquiry.id,
+              name: enquiry.name,
+              mobile: enquiry.mobile ?? '',
+              email: enquiry.email ?? '',
+              course_id: enquiry.course_id ?? null,
+              remark: enquiry.remarks ?? '',
+            },
+          },
+        });
+      }
     } catch (e) {
       toast.error(messageOf(e));
     } finally {
@@ -254,8 +295,15 @@ export function FollowupDialog({
     <Dialog
       title={`Follow up — ${enquiry.name}`}
       onClose={onClose}
-      onSubmit={save}
-      submitLabel="Record follow-up"
+      onSubmit={() => save()}
+      submitLabel={converting ? 'Record & convert' : 'Record follow-up'}
+      secondary={
+        converting ? (
+          <Button variant="outlined" disabled={busy} onClick={() => save(true)}>
+            Convert &amp; register student
+          </Button>
+        ) : undefined
+      }
       busy={busy}
       maxWidth="md"
     >

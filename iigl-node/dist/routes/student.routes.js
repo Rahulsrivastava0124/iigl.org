@@ -5,6 +5,7 @@ import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { paged, readPage } from '../lib/paginate.js';
 import { requireAdmin } from '../middleware/auth.js';
 import { numericId } from '../middleware/params.js';
+import { followupCounts, followupsFor, recordFollowup } from '../services/followup.service.js';
 /**
  * The student pipeline.
  *
@@ -82,10 +83,16 @@ studentRoutes.get('/enquiries', wrap(async (req, res) => {
     const p = readPage(req);
     const status = req.query.status ? oneOf(ENQUIRY_STATUS, req.query.status) : null;
     const term = String(req.query.q ?? '').trim();
+    // Which laboratory took the enquiry. Only head office reaches this router,
+    // so this narrows a view rather than enforcing one: nobody is kept out of
+    // another laboratory's enquiries by leaving it off.
+    const labId = id(req.query.lab_id);
     const build = (base) => {
         let q = base;
         if (status)
             q = q.where('status', '=', status);
+        if (labId)
+            q = q.where('lab_id', '=', labId);
         return search(q, term, ['name', 'mobile', 'email', 'course_interested']);
     };
     const [rows, count] = await Promise.all([
@@ -96,7 +103,16 @@ studentRoutes.get('/enquiries', wrap(async (req, res) => {
             .execute(),
         build(db.selectFrom('student_enquiries').select(db.fn.countAll().as('n'))).executeTakeFirstOrThrow(),
     ]);
-    res.json(paged(rows, Number(count.n), p));
+    // How many times each has been tried, and when last. The list is a
+    // worklist: those two decide whether to call again, and they should not
+    // take a click to find out.
+    const enquiryRows = rows;
+    const tries = await followupCounts('student', enquiryRows.map((r) => Number(r.id)));
+    res.json(paged(enquiryRows.map((r) => ({
+        ...r,
+        followups: tries.get(Number(r.id))?.n ?? 0,
+        last_followup_at: tries.get(Number(r.id))?.last_at ?? null,
+    })), Number(count.n), p));
 }));
 studentRoutes.post('/enquiries', wrap(async (req, res) => {
     const b = req.body ?? {};
@@ -163,6 +179,18 @@ studentRoutes.patch('/enquiries/:id', numericId, wrap(async (req, res) => {
     patch.updated_at = new Date();
     await db.updateTable('student_enquiries').set(patch).where('id', '=', enquiryId).execute();
     res.json({ ok: true });
+}));
+/**
+ * The follow-up history of one course enquiry, newest first, and how to add to
+ * it. The same log and the same code as the general enquiry book — see
+ * `followup.service`.
+ */
+studentRoutes.get('/enquiries/:id/followups', numericId, wrap(async (req, res) => {
+    res.json({ data: await followupsFor('student', Number(req.params.id)) });
+}));
+studentRoutes.post('/enquiries/:id/followups', numericId, wrap(async (req, res) => {
+    const data = await recordFollowup('student', Number(req.params.id), req.body ?? {}, req.user.id);
+    res.status(201).json({ data });
 }));
 /**
  * Convert: the enquiry becomes a registration.

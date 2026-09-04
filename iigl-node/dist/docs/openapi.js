@@ -530,6 +530,10 @@ const document = {
                             active: { type: 'integer', description: 'Status "preparing".' },
                             delivered: { type: 'integer' },
                             today: { type: 'integer' },
+                            active_today: {
+                                type: 'integer',
+                                description: 'Ordered today and still preparing.',
+                            },
                         },
                     },
                     reports: {
@@ -543,6 +547,35 @@ const document = {
                             paid: { type: 'number' },
                             dues: { type: 'number' },
                             sale_today: { type: 'number' },
+                            paid_today: { type: 'number' },
+                            dues_today: { type: 'number' },
+                        },
+                    },
+                    lab: {
+                        type: 'object',
+                        nullable: true,
+                        description: 'The figures the Laravel laboratory dashboard showed. Null for head office, whose dashboard is a different screen with different quantities on it: a laboratory counts cards rather than orders, and its money is its own ledger — what its staff have taken in, what has reached its wallet, and head office\u2019s share of that.',
+                        properties: {
+                            cards_ordered: { type: 'integer', description: 'Smart and classic together.' },
+                            cards_generated: { type: 'integer' },
+                            smart_generated: { type: 'integer' },
+                            classic_generated: { type: 'integer' },
+                            collected: {
+                                type: 'number',
+                                description: 'Everything this laboratory\u2019s staff have taken in. Carried over from Laravel without a status filter, so a collection nobody has approved counts the same as an approved one.',
+                            },
+                            employee_wallet: { type: 'number' },
+                            my_wallet: { type: 'number' },
+                            admin_commission: { type: 'number' },
+                            today: {
+                                type: 'object',
+                                properties: {
+                                    cards_ordered: { type: 'integer' },
+                                    sale: { type: 'number' },
+                                    paid: { type: 'number' },
+                                    dues: { type: 'number' },
+                                },
+                            },
                         },
                     },
                 },
@@ -683,11 +716,17 @@ const document = {
             post: {
                 tags: ['Auth'],
                 summary: 'Ask for a password reset link',
-                description: 'Public. Answers identically whether or not the address is on an account, so it ' +
-                    'cannot be used to test addresses. Sends a link valid for one hour, storing the ' +
-                    'token hashed in `password_resets`. Refuses when the address is on more than one ' +
-                    'active account, silently — the reply does not change. Rate limited to 5 an hour ' +
-                    'per address.',
+                description: 'Public. Takes `identifier`: a **mobile number or an email address**, since people ' +
+                    'sign in with their mobile and that is the identifier they are sure of. `email` is ' +
+                    'still accepted as the field name. ' +
+                    '**Says whether the account exists**, by decision: a 400 for no match, for an ' +
+                    'account with no email address, and for one identifier on two active accounts. ' +
+                    'That makes the page usable by somebody who mistyped their own number, at the ' +
+                    'cost of letting it be used to test which numbers are registered — the rate ' +
+                    'limit of 5 an hour is what stands in the way of that. On success the reply names ' +
+                    'the destination masked, `rah•••@gmail.com`, so somebody with two mailboxes knows ' +
+                    'which to open. The link is valid for one hour and its token is stored hashed in ' +
+                    '`password_resets`.',
                 security: [],
                 requestBody: {
                     required: true,
@@ -695,8 +734,13 @@ const document = {
                         'application/json': {
                             schema: {
                                 type: 'object',
-                                required: ['email'],
-                                properties: { email: { type: 'string', format: 'email' } },
+                                properties: {
+                                    identifier: {
+                                        type: 'string',
+                                        description: 'A mobile number or an email address.',
+                                    },
+                                    email: { type: 'string', description: 'The older name for `identifier`.' },
+                                },
                             },
                         },
                     },
@@ -1098,7 +1142,7 @@ const document = {
             get: {
                 tags: ['Orders'],
                 summary: 'List orders',
-                description: 'Scoped to the caller’s laboratory. Administrators see every lab.',
+                description: 'Scoped to the caller’s laboratory. Administrators see every lab.\n\nEach row carries four figures the order table itself does not hold, resolved here rather than one query per row as `common/order/index.blade.php` did: `total_items` (`order_details.qty` summed), `total_reports` (what the order is owed — a line carrying both card kinds counts its quantity once for each, so this is not `total_items`), `reports_generated` (how many of those are written, weighted the same way) and `assigned_to_name`, null when the order is with nobody.',
                 parameters: [
                     ...pageParams,
                     {
@@ -1510,7 +1554,7 @@ const document = {
             post: {
                 tags: ['Transactions'],
                 summary: 'Pay commission to the administrator',
-                description: 'Laboratory accounts only. Supply the collected amount the commission is calculated on; the amount owed is derived from the rate held in users.commision for that laboratory. The Laravel version accepts both the base and the amount from the browser, so a laboratory can post whatever commission it likes.',
+                description: 'Laboratory accounts only. Supply the collected amount the commission is calculated on; the amount owed is derived from the rate held in users.commision for that laboratory, read according to its users.commission_type — a percentage of the base, or a flat amount for each piece, in which case `pieces` is required and the base is recorded as context only. The Laravel version accepts both the base and the amount from the browser, so a laboratory can post whatever commission it likes.',
                 requestBody: {
                     required: true,
                     content: {
@@ -1520,6 +1564,7 @@ const document = {
                                 required: ['commission_on'],
                                 properties: {
                                     commission_on: { type: 'number', minimum: 0.01, examples: [100], description: 'The collected amount the commission is calculated on.' },
+                                    pieces: { type: 'integer', minimum: 1, examples: [12], description: 'Pieces certified. Required for a laboratory on per-piece terms and ignored for one on a percentage.' },
                                     pay_mode: { type: 'string', default: 'cash' },
                                     transaction_no: { type: ['string', 'null'] },
                                     remark: { type: ['string', 'null'] },
@@ -1539,14 +1584,15 @@ const document = {
                                     properties: {
                                         id: { type: 'integer' },
                                         commission_on: { type: 'number', examples: [100] },
-                                        rate_percent: { type: 'number', examples: [10] },
+                                        rate: { type: 'number', examples: [10] },
+                                        commission_type: { type: 'string', examples: ['percent'] },
                                         amount: { type: 'number', examples: [10] },
                                     },
                                 }),
                             },
                         },
                     },
-                    400: errorResponse('Not a laboratory account, no rate configured, or the base is not above zero.'),
+                    400: errorResponse('Not a laboratory account, no rate configured, the base is not above zero, or a per-piece laboratory sent no piece count.'),
                     ...guarded,
                 },
             },
@@ -1623,7 +1669,7 @@ const document = {
             get: {
                 tags: ['Users'],
                 summary: 'List staff',
-                description: 'Joined through `employements`, filtered to people currently working. Each row carries the person’s own `empid` and `lab_empid` — the `employements.parent_id` as stored, the employer’s **`empid`** — alongside `lab_id`, that employer resolved to a **user id**, with `lab_name` and `employer_role_id`, so the caller can name the employer without a second request. An `employer_role_id` of 1 means they work for head office rather than for a laboratory. `lab_id`, `lab_name` and `employer_role_id` are null when no account holds the stored `empid`; `npm run check:parents` names those rows.',
+                description: 'Joined through `employements`, filtered to people currently working. Each row carries the person’s own `empid` and `lab_empid` — the `employements.parent_id` as stored, the employer’s **`empid`** — alongside `lab_id`, that employer resolved to a **user id**, with `lab_name` and `employer_role_id`, so the caller can name the employer without a second request. An `employer_role_id` of 1 means they work for head office rather than for a laboratory. `lab_id`, `lab_name` and `employer_role_id` are null when no account holds the stored `empid`; `npm run check:parents` names those rows.\n\n`profile_photo` is the stored path as Laravel wrote it — `public/uploads/…` — not a URL; it is served under `/uploads/`.',
                 parameters: [
                     ...pageParams,
                     {
@@ -1725,7 +1771,7 @@ const document = {
             get: {
                 tags: ['Dashboard'],
                 summary: 'Counts and totals',
-                description: 'Scoped to the caller’s laboratory, or every lab for an administrator. Today is matched against order_date, which is dd-mm-yyyy text rather than a date column.',
+                description: 'Scoped to the caller’s laboratory, or every lab for an administrator. Today is matched against order_date, which is dd-mm-yyyy text rather than a date column.\n\nThe three `_today` money figures are the same three columns over the same set of orders — delivered, dated today — so `sale_today` less `paid_today` is `dues_today`. The Laravel dashboard read its today’s-paid from `transactions` and its today’s-sale from `delivery_date`, and the two never reconciled against each other.',
                 responses: {
                     200: {
                         description: 'Summary.',

@@ -16,6 +16,8 @@ import EditIcon from '@mui/icons-material/EditOutlined';
 import ViewIcon from '@mui/icons-material/VisibilityOutlined';
 import FollowIcon from '@mui/icons-material/PhoneInTalkOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
+import ConvertIcon from '@mui/icons-material/HowToRegOutlined';
+import UndoIcon from '@mui/icons-material/UndoOutlined';
 import { useDebounced, useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
@@ -74,6 +76,8 @@ interface Course {
 
 const BLANK = {
   id: undefined as number | undefined,
+  /** The registration this enquiry became, when it has become one. */
+  student_id: null as number | null,
   name: '',
   mobile: '',
   email: '',
@@ -116,6 +120,8 @@ export default function StudentEnquiries() {
   const [following, setFollowing] = useState<Enquiry | null>(null);
   const [viewing, setViewing] = useState<Enquiry | null>(null);
   const [deleting, setDeleting] = useState<Enquiry | null>(null);
+  /** The converted enquiry whose registration is about to be undone. */
+  const [undoing, setUndoing] = useState<typeof BLANK | null>(null);
   const [busy, setBusy] = useState(false);
 
   const go = (next: { status?: string; lab?: string; page?: number }) => {
@@ -158,6 +164,62 @@ export default function StudentEnquiries() {
         await api.post('/students/enquiries', body);
         toast.ok(`Enquiry from ${form.name} recorded.`);
       }
+      setForm(null);
+      source.reload();
+    } catch (e) {
+      toast.error(messageOf(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /*
+    Convert: the enquiry becomes a registration.
+
+    Sent from the form rather than from a row, because what is registered is
+    what is on screen — a name corrected while somebody was on the phone should
+    be the name on the registration, not the one the row was loaded with. The
+    API writes the student and marks the enquiry converted in one transaction,
+    so there is no state where one exists without the other.
+  */
+  const convert = async () => {
+    if (!form?.id) return;
+    setBusy(true);
+    try {
+      const { data } = await api.post<{ data: { id: number; registration_no: string } }>(
+        `/students/enquiries/${form.id}/convert`,
+        {
+          name: form.name,
+          mobile: form.mobile,
+          email: form.email,
+          course_id: form.course_id ? Number(form.course_id) : null,
+          registration_date: today(),
+        },
+      );
+      toast.ok(`${form.name} registered as ${data.registration_no}.`);
+      setForm(null);
+      source.reload();
+    } catch (e) {
+      toast.error(messageOf(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /*
+    Undo: the registration is deleted and the enquiry goes back to the book.
+
+    The API refuses while the student is enrolled on a course — undoing then
+    would leave an enrolment against nobody — and says so, which is the message
+    that reaches the toast.
+  */
+  const undoConvert = async () => {
+    if (!undoing?.student_id) return;
+    setBusy(true);
+    try {
+      await api.del(`/students/${undoing.student_id}`);
+      toast.ok('Registration undone. The enquiry is back in the book.');
+      setUndoing(null);
       setForm(null);
       source.reload();
     } catch (e) {
@@ -217,6 +279,38 @@ export default function StudentEnquiries() {
           onClose={() => setForm(null)}
           onSubmit={save}
           busy={busy}
+          actions={
+            /*
+              Only on a saved enquiry, and only one of the two: an enquiry that
+              has not been converted can be, and one that has can be undone.
+              A new enquiry has nothing to register yet.
+            */
+            form.id ? (
+              form.student_id ? (
+                <Button
+                  type="button"
+                  variant="outlined"
+                  color="error"
+                  startIcon={<UndoIcon />}
+                  disabled={busy}
+                  onClick={() => setUndoing(form)}
+                >
+                  Undo registration
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="contained"
+                  color="success"
+                  startIcon={<ConvertIcon />}
+                  disabled={busy}
+                  onClick={convert}
+                >
+                  Convert &amp; register
+                </Button>
+              )
+            ) : undefined
+          }
         >
           <TextField
             label="Student name"
@@ -425,6 +519,10 @@ export default function StudentEnquiries() {
                         onClick={() =>
                           setForm({
                             id: e.id,
+                            // Which of the two footer actions the form offers
+                            // turns on this: a registration to undo, or one to
+                            // create.
+                            student_id: e.student_id,
                             name: e.name,
                             mobile: e.mobile,
                             email: e.email ?? '',
@@ -466,6 +564,8 @@ export default function StudentEnquiries() {
       {following && (
         <FollowupDialog
           book="student"
+          // The whole row: a conversion started here fills the registration
+          // form from it rather than making somebody retype the enquiry.
           enquiry={following}
           onClose={() => setFollowing(null)}
           onSaved={() => source.reload()}
@@ -498,6 +598,27 @@ export default function StudentEnquiries() {
         onConfirm={remove}
         confirmLabel="Delete"
         confirmIcon={DeleteIcon}
+        busy={busy}
+      />
+
+      {/*
+        Undoing a conversion deletes the registration it created, so it is
+        confirmed like any other destructive act. The registration number and
+        anything recorded against it go with it; the enquiry itself stays.
+      */}
+      <ConfirmDialog
+        open={Boolean(undoing)}
+        title="Undo registration"
+        message={
+          <>
+            Delete the registration created from <strong>{undoing?.name}</strong>'s enquiry?
+          </>
+        }
+        warning="The registration and its number are deleted; the enquiry returns to the book as interested. A student already enrolled on a course cannot be undone — remove the enrolment first."
+        onClose={() => setUndoing(null)}
+        onConfirm={undoConvert}
+        confirmLabel="Undo registration"
+        confirmIcon={UndoIcon}
         busy={busy}
       />
     </>

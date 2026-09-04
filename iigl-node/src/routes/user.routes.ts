@@ -511,6 +511,9 @@ userRoutes.get(
           'users.mobile as mobile',
           'users.role_id as role_id',
           'users.is_active as is_active',
+          // The list shows a face beside each name; without this column every
+          // row fell back to initials.
+          'users.profile_photo as profile_photo',
           // `lab_empid` is what the employment actually stores; `lab_id` is
           // that employer's user id, resolved here because every other id in
           // this API is a user id and the panel moves an employment by one.

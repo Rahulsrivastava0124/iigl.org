@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IIGL Classic Card</title>
+<style>
+  /*
+    Ported from resources/views/common/card/classic2.blade.php.
+    A single A4 portrait certificate rather than the pocket card: more
+    attributes, the item photograph at size, and the verification QR.
+  */
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #1c1c1c;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .certificate {
+    position: relative;
+    border: 2px solid #bc8f53;
+    padding: 10mm;
+    min-height: 265mm;
+    page-break-after: always;
+  }
+  .certificate:last-child { page-break-after: auto; }
+
+  .watermark {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 90mm;
+    transform: translate(-50%, -50%);
+    opacity: 0.06;
+    pointer-events: none;
+  }
+
+  header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    border-bottom: 1px solid #bc8f53;
+    padding-bottom: 5mm;
+  }
+
+  header img { height: 22mm; }
+
+  .title {
+    text-align: right;
+  }
+  .title h1 {
+    margin: 0;
+    font-size: 16pt;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #bc8f53;
+  }
+  .title p {
+    margin: 2mm 0 0;
+    font-size: 9pt;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #555;
+  }
+
+  .report-no {
+    margin-top: 4mm;
+    font-size: 11pt;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+  .report-no span {
+    font-weight: 400;
+    text-transform: uppercase;
+    font-size: 8pt;
+    letter-spacing: 0.12em;
+    color: #666;
+    display: block;
+  }
+
+  .content {
+    display: flex;
+    gap: 8mm;
+    margin-top: 6mm;
+  }
+
+  .details { flex: 1 1 auto; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  th, td {
+    font-size: 9.5pt;
+    text-align: left;
+    padding: 1.6mm 2mm;
+    border-bottom: 1px solid #eceae5;
+    vertical-align: top;
+  }
+
+  th {
+    width: 42%;
+    font-weight: 400;
+    text-transform: uppercase;
+    font-size: 8pt;
+    letter-spacing: 0.06em;
+    color: #666;
+  }
+
+  td { font-weight: 500; }
+  td small { display: block; font-weight: 400; color: #777; font-size: 7.5pt; }
+
+  .media {
+    flex: 0 0 42mm;
+    text-align: center;
+  }
+  .media img.item {
+    width: 42mm;
+    height: 42mm;
+    object-fit: cover;
+    border: 1px solid #e3ded4;
+  }
+  .media img.qr {
+    width: 26mm;
+    height: 26mm;
+    margin-top: 5mm;
+  }
+  .media p {
+    margin: 2mm 0 0;
+    font-size: 7pt;
+    color: #777;
+    word-break: break-all;
+  }
+
+  .comments {
+    margin-top: 6mm;
+    padding: 4mm;
+    background: #faf8f4;
+    border-left: 3px solid #bc8f53;
+    font-size: 9.5pt;
+  }
+  .comments strong {
+    display: block;
+    font-size: 8pt;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #666;
+    margin-bottom: 1mm;
+    font-weight: 400;
+  }
+
+  footer {
+    position: absolute;
+    left: 10mm;
+    right: 10mm;
+    bottom: 10mm;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    border-top: 1px solid #bc8f53;
+    padding-top: 4mm;
+  }
+
+  .disclaimer {
+    font-size: 7pt;
+    color: #777;
+    max-width: 110mm;
+    line-height: 1.5;
+  }
+
+  .signature { text-align: center; }
+  .signature img { height: 14mm; }
+  .signature p {
+    margin: 1mm 0 0;
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #666;
+    border-top: 1px solid #ccc;
+    padding-top: 1mm;
+  }
+</style>
+</head>
+<body>
+<% for (const card of cards) { %>
+  <div class="certificate">
+    <% if (chrome.watermark) { %><img class="watermark" src="<%= chrome.watermark %>" alt=""><% } %>
+
+    <header>
+      <% if (chrome.cardLogo) { %><img src="<%= chrome.cardLogo %>" alt="IIGL"><% } %>
+      <div class="title">
+        <h1>Identification Report</h1>
+        <p>International Institute of Gemology &amp; Laboratory</p>
+      </div>
+    </header>
+
+    <div class="report-no">
+      <span>Report number</span>
+      <%= card.report_no %>
+    </div>
+
+    <div class="content">
+      <div class="details">
+        <table>
+          <tbody>
+            <tr><th>Date of issue</th><td><%= card.issued_on %></td></tr>
+            <% if (card.subcategory) { %><tr><th>Identification</th><td><%= card.subcategory %></td></tr><% } %>
+            <tr>
+              <th>Gross weight</th>
+              <td><%= card.is_approx ? 'approx. ' : '' %><%= card.gross_weight %><%= card.gross_wt_unit ? ' ' + card.gross_wt_unit : '' %></td>
+            </tr>
+            <tr>
+              <th>Stone weight</th>
+              <td><%= card.carat_weight %><%= card.stone_wt_unit ? ' ' + card.stone_wt_unit : '' %></td>
+            </tr>
+            <% if (card.size) { %><tr><th>Dimensions</th><td><%= card.size %></td></tr><% } %>
+            <% for (const attr of card.classic_attributes) { %>
+              <tr>
+                <th><%= attr.name %></th>
+                <td>
+                  <%= attr.value %>
+                  <% if (attr.description) { %><small><%= attr.description %></small><% } %>
+                </td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="media">
+        <% if (card.item_image) { %><img class="item" src="<%= card.item_image %>" alt=""><% } %>
+        <img class="qr" src="<%= card.qr %>" alt="Verify <%= card.report_no %>">
+        <p><%= card.verify_url %></p>
+      </div>
+    </div>
+
+    <% if (card.comments) { %>
+      <div class="comments">
+        <strong>Comments</strong>
+        <%= card.comments %>
+      </div>
+    <% } %>
+
+    <footer>
+      <div class="disclaimer">
+        IIGL examines each gem, jewellery item and diamond using advanced equipment, and grades
+        characteristics according to the international system. This report describes the item at
+        the date of issue and does not determine its price. Verify this certificate at
+        <%= card.verify_url %>
+      </div>
+      <div class="signature">
+        <% if (card.signature) { %><img src="<%= card.signature %>" alt=""><% } %>
+        <p>Authorised gemologist</p>
+      </div>
+    </footer>
+  </div>
+<% } %>
+</body>
+</html>
