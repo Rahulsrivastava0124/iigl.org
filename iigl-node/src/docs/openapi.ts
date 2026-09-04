@@ -1271,6 +1271,21 @@ const document = {
     },
 
     '/api/orders/{id}': {
+      delete: {
+        tags: ['Orders'],
+        summary: 'Delete an order',
+        description:
+          'Scoped to the caller’s laboratory. New rather than ported: the Laravel panel could delete an order *line* (`DeleteDetail`) and never the order, so its rules are set here rather than recovered.\n\nRefused once anything real points at the order. The schema carries no foreign keys, so nothing else would stop the rows being orphaned: a certificate is a document already in a customer’s hands whose number the public verification page must go on resolving, and a transaction is money that was counted. A delivered order is refused for the same reason — it has been billed and settled, and its figures are in the day’s takings. The order’s own lines go with it, describing nothing else.',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        responses: {
+          200: { description: 'Deleted.' },
+          409: errorResponse(
+            'Delivered, or certificates or payments still point at this order.',
+          ),
+          404: errorResponse('Order not found.'),
+          ...guarded,
+        },
+      },
       patch: {
         tags: ['Orders'],
         summary: 'Amend an order',
@@ -1366,21 +1381,6 @@ const document = {
         responses: {
           200: { description: 'Removed.' },
           404: errorResponse('Order item not found.'),
-          ...guarded,
-        },
-      },
-    },
-
-    '/api/orders/{id}': {
-      delete: {
-        tags: ['Orders'],
-        summary: 'Delete an order',
-        description:
-          'Scoped to the caller’s laboratory. New rather than ported: the Laravel panel could delete an order *line* (`DeleteDetail`) and never the order.\n\nRefused once anything real points at the order, because the schema has no foreign keys and nothing else would stop the rows being orphaned: a certificate is a document already in a customer’s hands whose number the public verification page must go on resolving, and a transaction is money that was counted. A delivered order is refused for the same reason — it has been billed and settled. The order’s own lines go with it.',
-        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
-        responses: {
-          200: ok('Deleted.'),
-          409: err('Delivered, or certificates or payments still point at this order.'),
           ...guarded,
         },
       },
@@ -1812,7 +1812,7 @@ const document = {
         tags: ['Users'],
         summary: 'Create an account',
         description:
-          'Administrators only. Hashes at bcrypt cost 10, matching the existing rows.\n\nThe account arrives usable rather than half-made. It is given an `empid` — `LAB0001` for a laboratory, `EMP0007` for anybody else, the next free number for that prefix — because `employements.parent_id` and `users.parent_id` name an employer by empid, and an account without one can neither employ anybody nor be found by the staff list.\n\nSend `empid` to choose it instead; one another account already holds is refused.\n\nA staff account is employed in the same request: an employment row is written and `users.parent_id` set. The employer is `lab_id` when given, otherwise whoever asked — head office creating staff gets head office employees, a laboratory gets its own. A laboratory is nobody’s employee, so none is written for one and `employment` comes back null.',
+          'Head office, or a laboratory creating its own staff. A laboratory may not create another laboratory or a head office account, and the employment is always under itself — a `lab_id` it sends is ignored. Hashes at bcrypt cost 10, matching the existing rows.\n\nThe account arrives usable rather than half-made. It is given an `empid` — `LAB0001` for a laboratory, `EMP0007` for anybody else, the next free number for that prefix — because `employements.parent_id` and `users.parent_id` name an employer by empid, and an account without one can neither employ anybody nor be found by the staff list.\n\nSend `empid` to choose it instead; one another account already holds is refused.\n\nA staff account is employed in the same request: an employment row is written and `users.parent_id` set. The employer is `lab_id` when given, otherwise whoever asked — head office creating staff gets head office employees, a laboratory gets its own. A laboratory is nobody’s employee, so none is written for one and `employment` comes back null.',
         requestBody: {
           required: true,
           content: {

@@ -3,7 +3,7 @@ import { sql } from 'kysely';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
 import { empidOf, requireLabScope, ROLE } from '../middleware/auth.js';
-import { ddmmyyyy } from '../services/order.service.js';
+import { ddmmyyyy, live, liveJoined } from '../services/order.service.js';
 import { TRANSACTION_TYPE } from '../services/commission.service.js';
 export const dashboardRoutes = Router();
 dashboardRoutes.use(requireLabScope);
@@ -25,7 +25,14 @@ dashboardRoutes.get('/summary', wrap(async (req, res) => {
     const isoToday = new Date().toISOString().slice(0, 10);
     const startOfToday = new Date(isoToday);
     const startOfTomorrow = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000);
-    const scopeOrders = (q) => isAdmin ? q : q.where('lab_id', '=', labId);
+    // Scoped to the laboratory, and never counting a deleted order. The
+    // deleted filter rides with the lab filter because every count and sum
+    // on this screen already goes through here, so neither can be forgotten
+    // at a single site.
+    const scopeOrders = (q) => {
+        const q2 = live(q);
+        return isAdmin ? q2 : q2.where('lab_id', '=', labId);
+    };
     const count = async (build) => {
         const row = await build(scopeOrders(db.selectFrom('orders').select(db.fn.countAll().as('n')))).executeTakeFirstOrThrow();
         return Number(row.n);
@@ -57,9 +64,9 @@ dashboardRoutes.get('/summary', wrap(async (req, res) => {
      * lines that set its flag, not a count of lines.
      */
     const cardsOfKind = async (flag) => {
-        let q = db
+        let q = liveJoined(db
             .selectFrom('order_details')
-            .innerJoin('orders', 'orders.id', 'order_details.order_id')
+            .innerJoin('orders', 'orders.id', 'order_details.order_id'))
             .select(db.fn.sum('order_details.qty').as('total'))
             .where(`order_details.${flag}`, '=', 1);
         if (!isAdmin)
@@ -73,7 +80,7 @@ dashboardRoutes.get('/summary', wrap(async (req, res) => {
      * rules match the customer list, so the tile and the list agree.
      */
     const customers = async (registered) => {
-        let q = db.selectFrom('orders').select(db.fn.count('mobile').distinct().as('n'));
+        let q = live(db.selectFrom('orders')).select(db.fn.count('mobile').distinct().as('n'));
         if (!isAdmin)
             q = q.where('lab_id', '=', labId);
         q = registered
@@ -89,9 +96,7 @@ dashboardRoutes.get('/summary', wrap(async (req, res) => {
      * collection.
      */
     const commissionAccrued = async () => {
-        let q = db
-            .selectFrom('orders')
-            .innerJoin('users', 'users.id', 'orders.lab_id')
+        let q = liveJoined(db.selectFrom('orders').innerJoin('users', 'users.id', 'orders.lab_id'))
             .select([
             'users.commision as rate',
             db.fn.sum('orders.paid_amount').as('collected'),
@@ -235,9 +240,9 @@ dashboardRoutes.get('/summary', wrap(async (req, res) => {
         };
         /** Cards ordered, by kind, over this laboratory's orders. */
         const ordered = async (flag, todayOnly = false) => {
-            let q = db
+            let q = liveJoined(db
                 .selectFrom('order_details')
-                .innerJoin('orders', 'orders.id', 'order_details.order_id')
+                .innerJoin('orders', 'orders.id', 'order_details.order_id'))
                 .select(db.fn.sum('order_details.qty').as('total'))
                 .where(`order_details.${flag}`, '=', 1)
                 .where('orders.lab_id', '=', labId);
@@ -255,8 +260,7 @@ dashboardRoutes.get('/summary', wrap(async (req, res) => {
          * and never were.
          */
         const saleToday = async () => {
-            const row = await db
-                .selectFrom('orders')
+            const row = await live(db.selectFrom('orders'))
                 .select(db.fn.sum('payable_amt').as('total'))
                 .where('lab_id', '=', labId)
                 .where('delivery_date', 'like', `${isoToday}%`)
@@ -270,9 +274,9 @@ dashboardRoutes.get('/summary', wrap(async (req, res) => {
          * yesterday and paid this morning appears on neither day's tile.
          */
         const paidToday = async () => {
-            const row = await db
+            const row = await liveJoined(db
                 .selectFrom('transactions')
-                .innerJoin('orders', 'orders.id', 'transactions.order_id')
+                .innerJoin('orders', 'orders.id', 'transactions.order_id'))
                 .select(db.fn.sum('transactions.amount').as('total'))
                 .where('orders.lab_id', '=', labId)
                 .where('orders.delivery_date', 'like', `${isoToday}%`)

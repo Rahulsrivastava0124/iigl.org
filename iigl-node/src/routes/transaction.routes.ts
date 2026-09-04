@@ -182,6 +182,7 @@ transactionRoutes.post(
     await db.transaction().execute(async (trx) => {
       const order = await trx
         .selectFrom('orders')
+        .where('deleted_at', 'is', null)
         .select(['id', 'lab_id', 'paid_amount', 'dues_amount'])
         .where('id', '=', Number(req.params.orderId))
         .executeTakeFirst();

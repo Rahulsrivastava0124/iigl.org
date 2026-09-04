@@ -157,6 +157,7 @@ cardRoutes.get(
     const id = Number(req.params.id);
     const order = await db
       .selectFrom('orders')
+      .where('deleted_at', 'is', null)
       .select(['id', 'lab_id', 'order_no'])
       .where('id', '=', id)
       .executeTakeFirst();

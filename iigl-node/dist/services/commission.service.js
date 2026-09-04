@@ -140,6 +140,7 @@ export async function accruedByLab(labId, exec = db) {
         ratesQuery = ratesQuery.where('id', '=', labId);
     let collectedQuery = exec
         .selectFrom('orders')
+        .where('orders.deleted_at', 'is', null)
         .select(({ fn }) => [
         'orders.lab_id as lab_id',
         fn.sum('orders.paid_amount').as('total'),
@@ -151,6 +152,7 @@ export async function accruedByLab(labId, exec = db) {
     let piecesQuery = exec
         .selectFrom('order_details')
         .innerJoin('orders', 'orders.id', 'order_details.order_id')
+        .where('orders.deleted_at', 'is', null)
         .select(({ fn }) => [
         'orders.lab_id as lab_id',
         fn.sum('order_details.qty').as('total'),

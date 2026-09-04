@@ -21,7 +21,7 @@ import { messageOf, useAuth } from '../lib/auth';
 import { hint, DateField, IconAction, Pager, Panel, PasswordField, RowActions, SearchField, TableFrame, YesNo } from '../components/ui';
 import FileField from '../components/FileField';
 import type { Paged } from '../lib/api';
-import { isSuper, ROLE } from '../lib/portal';
+import { isLab, isSuper, ROLE } from '../lib/portal';
 import AddIcon from '@mui/icons-material/AddOutlined';
 import EditIcon from '@mui/icons-material/EditOutlined';
 import ViewIcon from '@mui/icons-material/VisibilityOutlined';
@@ -130,8 +130,20 @@ export default function Staff() {
   const { user } = useAuth();
   const { can } = usePermissions();
   const admin = isSuper(user);
-  const mayAdd = admin && can('employee_management', 'create');
-  const mayEdit = admin && can('employee_management', 'update');
+  /**
+   * Who employs the people on this screen.
+   *
+   * Head office and a laboratory both do. It used to be `isSuper` alone, which
+   * left a laboratory looking at its own employee list with no way to add
+   * anybody to it — the Laravel panel had the same gap, giving a laboratory
+   * `lab_emp_list` and no create route, so this is new rather than restored.
+   *
+   * The API is the boundary, not this: `requireEmployer` admits the two roles
+   * and `assertEmploys` narrows a laboratory to its own staff.
+   */
+  const employer = admin || isLab(user);
+  const mayAdd = employer && can('employee_management', 'create');
+  const mayEdit = employer && can('employee_management', 'update');
   const [page, setPage] = useState(1);
 
   const [search, setSearch] = useState('');
@@ -504,7 +516,13 @@ export default function Staff() {
       <Panel
         footer={<Pager meta={data?.meta} onPage={setPage} />}
         title="Employee"
-        count={data ? `${filteredRows.length} head office employees` : 'Loading…'}
+        count={
+          data
+            ? `${filteredRows.length} ${admin ? 'head office' : 'laboratory'} employee${
+                filteredRows.length === 1 ? '' : 's'
+              }`
+            : 'Loading…'
+        }
         actions={
           <>
             <SearchField

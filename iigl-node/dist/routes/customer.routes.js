@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
+import { live } from '../services/order.service.js';
 import { wrap } from '../lib/async.js';
 import { paged, readPage, readSearch } from '../lib/paginate.js';
 import { requireLabScope, ROLE } from '../middleware/auth.js';
@@ -27,7 +28,7 @@ async function scope(user) {
 async function customerList(user, registered, limit, offset, search = null) {
     const s = await scope(user);
     const base = () => {
-        let q = db.selectFrom('orders');
+        let q = live(db.selectFrom('orders'));
         if (s.kind === 'lab')
             q = q.where('lab_id', '=', s.id);
         if (s.kind === 'own')

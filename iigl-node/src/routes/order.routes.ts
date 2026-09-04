@@ -5,12 +5,7 @@ import { wrap } from '../lib/async.js';
 import { conflict, notFound } from '../lib/errors.js';
 import { paged, readPage, readSearch } from '../lib/paginate.js';
 import { assertLabOwnership, requireLabScope, ROLE } from '../middleware/auth.js';
-import {
-  createOrder,
-  updateOrder,
-  validateOrderInput,
-  validateUpdateOrderInput,
-} from '../services/order.service.js';
+import { createOrder, live, liveJoined, updateOrder, validateOrderInput, validateUpdateOrderInput } from '../services/order.service.js';
 import { quoteOrder, settleAndDeliver, validateSettleInput } from '../services/pricing.service.js';
 import { orderVisibility } from '../services/permission.service.js';
 import { numericId, numericParams } from '../middleware/params.js';
@@ -33,8 +28,8 @@ orderRoutes.get(
     // EmpOrderDuesList and it is its own screen; here it is a filter.
     const duesOnly = req.query.dues === '1';
 
-    let q = db.selectFrom('orders').selectAll();
-    let c = db.selectFrom('orders').select(db.fn.countAll().as('n'));
+    let q = live(db.selectFrom('orders').selectAll());
+    let c = live(db.selectFrom('orders').select(db.fn.countAll().as('n')));
 
     q = scopeToLab(q, req.user);
     c = scopeToLab(c, req.user);
@@ -171,9 +166,7 @@ orderRoutes.get(
   '/:id',
   numericId,
   wrap(async (req, res) => {
-    const order = await db
-      .selectFrom('orders')
-      .selectAll()
+    const order = await live(db.selectFrom('orders').selectAll())
       .where('id', '=', Number(req.params.id))
       .executeTakeFirst();
     if (!order) throw notFound('Order not found.');
@@ -215,8 +208,7 @@ orderRoutes.get(
     const mobile = String(req.query.mobile ?? '');
     if (!mobile) throw notFound('Provide a mobile number.');
 
-    let q = db
-      .selectFrom('orders')
+    let q = live(db.selectFrom('orders'))
       .select(['customer_name', 'mobile', 'alt_mobile', 'email', 'gst', 'address'])
       .where((eb) => eb.or([eb('mobile', '=', mobile), eb('alt_mobile', '=', mobile)]));
 
@@ -242,21 +234,32 @@ orderRoutes.post(
  * and never the order, so this has no ported behaviour to match and its rules
  * are set below rather than recovered.
  *
- * **Refused once anything real points at it.** The schema carries no foreign
- * keys, so nothing at the database level stops this from leaving rows behind:
+ * **Nothing is removed.** `deleted_at` is stamped and the row stays where it
+ * is, with its customer, its date and its lines — see migration 030. Every read
+ * of `orders` goes through `live()` or `liveJoined()`, so the order is gone from
+ * every list, count and sum, and the record of it having existed is not.
+ *
+ * That matters here more than in most tables: order numbers are sequential
+ * within a month, so a removed row leaves a hole in the sequence that nobody
+ * can account for afterwards. A stamped one is still there to be looked at.
+ *
+ * **Still refused once anything real points at it.** The schema carries no
+ * foreign keys, and hiding a row does not make what points at it agree:
  *
  *   - A certificate is a document already in a customer's hands, with a number
- *     the public verification page must go on resolving. Deleting the order it
- *     was issued against leaves a certificate belonging to nothing.
- *   - A transaction is money that was counted. Removing the order it was
+ *     the public verification page must go on resolving. Hiding the order it
+ *     was issued against leaves a live certificate against an order no screen
+ *     will show.
+ *   - A transaction is money that was counted. Hiding the order it was
  *     collected against takes the sale out of every total while leaving the
  *     collection in the wallet.
  *
  * A delivered order is refused for the same reason: it has been billed and
- * settled, and its figures are in the day's takings. Cancel it before it is
- * delivered, or leave it.
+ * settled, and its figures are in the day's takings.
  *
- * What does go with the order is its own lines, which describe nothing else.
+ * There is no undelete on any screen. Clearing `deleted_at` restores the order
+ * exactly, which is deliberate — the reversal exists, and it is a decision
+ * somebody makes at the database rather than a button beside the list.
  */
 orderRoutes.delete(
   '/:id',
@@ -264,8 +267,7 @@ orderRoutes.delete(
   wrap(async (req, res) => {
     const orderId = Number(req.params.id);
 
-    const order = await db
-      .selectFrom('orders')
+    const order = await live(db.selectFrom('orders'))
       .select(['id', 'lab_id', 'status', 'order_no'])
       .where('id', '=', orderId)
       .executeTakeFirst();
@@ -313,10 +315,13 @@ orderRoutes.delete(
       throw conflict('Money has been collected against this order, so it cannot be deleted.');
     }
 
-    await db.transaction().execute(async (trx) => {
-      await trx.deleteFrom('order_details').where('order_id', '=', orderId).execute();
-      await trx.deleteFrom('orders').where('id', '=', orderId).execute();
-    });
+    // The lines stay with the order. They describe nothing else, and an order
+    // restored without them would be an order whose items had vanished.
+    await db
+      .updateTable('orders')
+      .set({ deleted_at: new Date(), updated_at: new Date() })
+      .where('id', '=', orderId)
+      .execute();
 
     res.json({ ok: true });
   }),
@@ -326,9 +331,11 @@ orderRoutes.delete(
   '/items/:id',
   numericId,
   wrap(async (req, res) => {
-    const item = await db
-      .selectFrom('order_details')
-      .innerJoin('orders', 'orders.id', 'order_details.order_id')
+    const item = await liveJoined(
+      db
+        .selectFrom('order_details')
+        .innerJoin('orders', 'orders.id', 'order_details.order_id'),
+    )
       .select(['order_details.id as id', 'orders.lab_id as lab_id'])
       .where('order_details.id', '=', Number(req.params.id))
       .executeTakeFirst();
@@ -345,8 +352,7 @@ orderRoutes.get(
   '/:id/quote',
   numericId,
   wrap(async (req, res) => {
-    const order = await db
-      .selectFrom('orders')
+    const order = await live(db.selectFrom('orders'))
       .select(['id', 'lab_id'])
       .where('id', '=', Number(req.params.id))
       .executeTakeFirst();
@@ -367,8 +373,7 @@ orderRoutes.post(
   '/:id/deliver',
   numericId,
   wrap(async (req, res) => {
-    const order = await db
-      .selectFrom('orders')
+    const order = await live(db.selectFrom('orders'))
       .select(['id', 'lab_id', 'status'])
       .where('id', '=', Number(req.params.id))
       .executeTakeFirst();
@@ -390,8 +395,7 @@ orderRoutes.patch(
   '/:id',
   numericId,
   wrap(async (req, res) => {
-    const order = await db
-      .selectFrom('orders')
+    const order = await live(db.selectFrom('orders'))
       .select(['id', 'lab_id', 'status'])
       .where('id', '=', Number(req.params.id))
       .executeTakeFirst();
@@ -400,9 +404,7 @@ orderRoutes.patch(
 
     await updateOrder(Number(order.id), validateUpdateOrderInput(req.body));
 
-    const updated = await db
-      .selectFrom('orders')
-      .selectAll()
+    const updated = await live(db.selectFrom('orders').selectAll())
       .where('id', '=', Number(order.id))
       .executeTakeFirstOrThrow();
     // The category by name, not by id. The Laravel detail screen resolved it

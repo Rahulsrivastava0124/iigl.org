@@ -26,6 +26,7 @@ const money = (v) => v == null || v === '' ? '—' : Number(v).toLocaleString('e
 export async function orderDocumentHtml(orderId, kind) {
     const order = await db
         .selectFrom('orders')
+        .where('deleted_at', 'is', null)
         .selectAll()
         .where('id', '=', orderId)
         .executeTakeFirst();

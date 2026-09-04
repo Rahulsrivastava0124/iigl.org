@@ -82,6 +82,7 @@ async function resolveBand(labId: number, categoryId: number, caratWeight: numbe
 export async function quoteOrder(orderId: number, discount = 0): Promise<Quote> {
   const order = await db
     .selectFrom('orders')
+    .where('deleted_at', 'is', null)
     .select(['id', 'order_no', 'lab_id'])
     .where('id', '=', orderId)
     .executeTakeFirst();

@@ -37,6 +37,7 @@ const money = (v: number | string | null | undefined) =>
 export async function orderDocumentHtml(orderId: number, kind: DocumentKind): Promise<string> {
   const order = await db
     .selectFrom('orders')
+    .where('deleted_at', 'is', null)
     .selectAll()
     .where('id', '=', orderId)
     .executeTakeFirst();

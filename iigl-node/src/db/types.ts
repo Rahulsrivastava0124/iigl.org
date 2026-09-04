@@ -275,6 +275,7 @@ export interface Orders {
   assigned_to: number | null;
   created_at: Date | null;
   customer_name: string;
+  deleted_at: Date | null;
   deliver_by: number | null;
   delivery_date: string | null;
   discount: number | null;

@@ -2,6 +2,11 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Box,
+  Button,
+  Dialog as MuiDialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   MenuItem,
   Table,
   TableBody,
@@ -9,8 +14,12 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Typography,
 } from '@mui/material';
+import { useToast } from '../components/Toast';
 import { useFetch, useDebounced } from '../lib/useFetch';
+import { api } from '../lib/api';
+import { messageOf } from '../lib/auth';
 import {
   IconAction,
   OrderChip,
@@ -21,8 +30,11 @@ import {
   TableFrame,
   money,
 } from '../components/ui';
+import { apiUrl } from '../lib/config';
 import type { Order, Paged } from '../lib/api';
-import OpenIcon from '@mui/icons-material/ChevronRightOutlined';
+import OpenIcon from '@mui/icons-material/VisibilityOutlined';
+import ReceiptIcon from '@mui/icons-material/ReceiptLongOutlined';
+import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
 
 export default function Orders() {
   // The laboratory menu points here four ways — in progress, paid and
@@ -54,8 +66,34 @@ export default function Orders() {
     setParams(next ? { status: next } : {});
   };
 
-  const { data, loading, error } = useFetch<Paged<Order>>(`/orders?${query}`);
+  const { data, loading, error, reload } = useFetch<Paged<Order>>(`/orders?${query}`);
   const rows = data?.data ?? [];
+
+  const toast = useToast();
+  // The order to delete, held by id and looked up on render rather than kept as
+  // an object: the list refetches while the dialog is open, and a row held from
+  // a previous page is a record that may no longer be there.
+  const [deleting, setDeleting] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const target = rows.find((r) => r.id === deleting) ?? null;
+
+  const confirmDelete = async () => {
+    if (!target) return;
+    setBusy(true);
+    try {
+      await api.del(`/orders/${target.id}`);
+      toast.ok(`Order ${target.order_no} deleted.`);
+      setDeleting(null);
+      reload();
+    } catch (err) {
+      // The API refuses an order that has certificates, payments, or has been
+      // delivered, and says which. That sentence is the whole of the answer, so
+      // it is shown rather than replaced with a generic failure.
+      toast.error(messageOf(err));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <>
@@ -166,8 +204,37 @@ export default function Orders() {
                     {money(o.dues_amount)}
                   </TableCell>
                   <TableCell>
+                    {/*
+                      View stays on the row; the receipt and the delete go
+                      behind the ⋯, which `RowActions` does on its own for
+                      anything marked `overflow` or `danger`.
+                    */}
                     <RowActions>
-                      <IconAction label="Open order" icon={OpenIcon} to={`/orders/${o.id}`} />
+                      <IconAction label="View order" icon={OpenIcon} to={`/orders/${o.id}`} />
+                      <IconAction
+                        label="Receipt"
+                        icon={ReceiptIcon}
+                        overflow
+                        onClick={() =>
+                          window.open(
+                            apiUrl(`/cards/order/receipt/${o.id}`),
+                            '_blank',
+                            'noopener',
+                          )
+                        }
+                      />
+                      <IconAction
+                        label="Delete order"
+                        icon={DeleteIcon}
+                        danger
+                        disabled={o.status === 'delivered'}
+                        hint={
+                          o.status === 'delivered'
+                            ? 'A delivered order has been billed and settled, and cannot be deleted.'
+                            : undefined
+                        }
+                        onClick={() => setDeleting(o.id)}
+                      />
                     </RowActions>
                   </TableCell>
                 </TableRow>
@@ -176,6 +243,38 @@ export default function Orders() {
           </Table>
         </TableFrame>
       </Panel>
+
+      {target && (
+        <MuiDialog open onClose={() => setDeleting(null)} maxWidth="xs" fullWidth>
+          <DialogTitle sx={{ bgcolor: '#d32f2f', color: '#fff', fontSize: '1rem', fontWeight: 600 }}>
+            Delete Order
+          </DialogTitle>
+          <DialogContent sx={{ pt: 3, pb: 2 }}>
+            <Typography variant="body1" sx={{ mb: 2 }}>
+              Are you sure you want to delete <strong>{target.order_no}</strong> for{' '}
+              <strong>{target.customer_name}</strong>?
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              This action cannot be undone. The order and its {target.total_items} item
+              {target.total_items === 1 ? '' : 's'} are removed. An order with certificates issued
+              or money collected against it is refused.
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button onClick={() => setDeleting(null)} color="inherit">
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              sx={{ bgcolor: '#d32f2f', '&:hover': { bgcolor: '#b71c1c' } }}
+              onClick={confirmDelete}
+              disabled={busy}
+            >
+              {busy ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogActions>
+        </MuiDialog>
+      )}
     </>
   );
 }

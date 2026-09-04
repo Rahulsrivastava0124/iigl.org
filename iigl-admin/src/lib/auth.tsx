@@ -86,7 +86,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Correct credentials, wrong entrance. Drop the session so a refused
       // sign-in does not silently leave one behind.
       await api.post('/auth/logout').catch(() => undefined);
-      throw new ApiError(403, config.wrongDoor, 'wrong_portal');
+      // The same sentence a wrong password gets. Saying "these are the right
+      // details, for another door" is the one thing a refusal here must not
+      // reveal — see `REFUSED` in portal.ts.
+      throw new ApiError(401, config.wrongDoor, 'unauthorized');
     }
 
     setUser(r.user);

@@ -106,6 +106,54 @@ export const requireAdmin = requireSuper;
 export const requireLab = requireRole((r) => r === ROLE.LAB, 'laboratory');
 export const requireStaff = requireRole((r) => r !== null && r > ROLE.LAB, 'employee');
 /**
+ * Somebody who employs people: head office, or a laboratory.
+ *
+ * A laboratory hires and manages its own staff — the Laravel panel did not let
+ * it, and this does. `requireAdmin` is what guarded these routes before, which
+ * is head office alone, so a laboratory could see its employee list and add
+ * nobody to it.
+ *
+ * This admits the two roles. It does **not** say whose staff they may touch:
+ * `assertEmploys` is that check, and every route here runs both.
+ */
+export const requireEmployer = requireRole(
+  (r) => r === ROLE.SUPER || r === ROLE.LAB,
+  'laboratory or administrator',
+);
+
+/**
+ * Throws unless the caller may act on this account.
+ *
+ * Head office may act on anybody. A laboratory may act only on somebody
+ * currently employed under its own `empid` — its staff, and nobody else's, and
+ * never another laboratory or head office.
+ *
+ * The employment is what decides it rather than any column on the account,
+ * because `employements.parent_id` is the only place the relationship is
+ * recorded, and it holds the employer's **empid** rather than their id.
+ *
+ * Deliberately the same answer for "not your employee" and "no such account":
+ * a laboratory that can tell the two apart can walk the id range and learn how
+ * many accounts exist and where the gaps are.
+ */
+export async function assertEmploys(user: SessionUser, targetId: number): Promise<void> {
+  if (user.roleId === ROLE.SUPER) return;
+
+  const empid = await empidOf(user.id);
+  if (!empid) throw forbidden('This account employs nobody.');
+
+  const employment = await db
+    .selectFrom('employements')
+    .select('id')
+    .where('user_id', '=', targetId)
+    .where('parent_id', '=', empid)
+    .where('is_working', '=', '1')
+    .executeTakeFirst();
+
+  if (!employment) throw forbidden('That account is not one of your employees.');
+}
+
+/**
  * Anyone who operates laboratory data: a laboratory, its staff, or head office.
  * Written as an explicit `SUPER` test beside the `>= LAB` one so the guard says
  * what it admits rather than relying on the numbers happening to line up. The

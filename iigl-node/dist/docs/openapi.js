@@ -1189,6 +1189,18 @@ const document = {
             },
         },
         '/api/orders/{id}': {
+            delete: {
+                tags: ['Orders'],
+                summary: 'Delete an order',
+                description: 'Scoped to the caller’s laboratory. New rather than ported: the Laravel panel could delete an order *line* (`DeleteDetail`) and never the order, so its rules are set here rather than recovered.\n\nRefused once anything real points at the order. The schema carries no foreign keys, so nothing else would stop the rows being orphaned: a certificate is a document already in a customer’s hands whose number the public verification page must go on resolving, and a transaction is money that was counted. A delivered order is refused for the same reason — it has been billed and settled, and its figures are in the day’s takings. The order’s own lines go with it, describing nothing else.',
+                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+                responses: {
+                    200: { description: 'Deleted.' },
+                    409: errorResponse('Delivered, or certificates or payments still point at this order.'),
+                    404: errorResponse('Order not found.'),
+                    ...guarded,
+                },
+            },
             patch: {
                 tags: ['Orders'],
                 summary: 'Amend an order',

@@ -869,6 +869,7 @@ userRoutes.delete('/:id', numericId, requireAdmin, wrap(async (req, res) => {
             .executeTakeFirst()),
         count(db
             .selectFrom('orders')
+            .where('deleted_at', 'is', null)
             .select(({ fn }) => fn.countAll().as('n'))
             .where('lab_id', '=', id)
             .executeTakeFirst()),

@@ -27,7 +27,13 @@ import {
 /** Approved is 1; a pending row has not moved any money. */
 const TX_STATUS = { PENDING: 0, APPROVED: 1 } as const;
 import { paged, readPage, readSearch } from '../lib/paginate.js';
-import { requireAdmin, requireLabScope, ROLE } from '../middleware/auth.js';
+import {
+  assertEmploys,
+  requireAdmin,
+  requireEmployer,
+  requireLabScope,
+  ROLE,
+} from '../middleware/auth.js';
 import { empidTaken, nextEmpid, prefixFor } from '../lib/empid.js';
 import {
   effectivePermissionsFor,
@@ -548,9 +554,18 @@ userRoutes.get(
 /** Creating accounts is administrator-only. */
 userRoutes.post(
   '/',
-  requireAdmin,
+  requireEmployer,
   wrap(async (req, res) => {
     const { fullname, mobile, password, role_id, email } = req.body ?? {};
+    const employerIsLab = req.user.roleId === ROLE.LAB;
+
+    // A laboratory hires staff and nothing else. Head office is the only
+    // account that can create another laboratory or another head office, and
+    // this is the check that keeps it that way — without it a laboratory could
+    // post `role_id: 2` and mint itself a franchise.
+    if (employerIsLab && isSenior(role_id)) {
+      throw forbidden('A laboratory can create staff accounts only.');
+    }
     // role_id 0 is "no role": this person's permissions are their own, granted
     // one by one. It is a real choice rather than a missing field, so it is
     // checked against undefined rather than for truthiness.
@@ -618,9 +633,14 @@ userRoutes.post(
       const id = Number(result.insertId);
       if (isSenior(role)) return { id, employment: null as number | null };
 
-      const employerId = req.body?.lab_id
-        ? Number(req.body.lab_id)
-        : Number(req.user.labId ?? req.user.id);
+      // Head office may name the employer; a laboratory is always the employer
+      // itself. Honouring a `lab_id` from a laboratory would let it put an
+      // account on somebody else's books.
+      const employerId = employerIsLab
+        ? Number(req.user.id)
+        : req.body?.lab_id
+          ? Number(req.body.lab_id)
+          : Number(req.user.labId ?? req.user.id);
 
       return {
         id,
@@ -644,8 +664,10 @@ userRoutes.post(
 userRoutes.patch(
   '/:id/active',
   numericId,
-  requireAdmin,
+  requireEmployer,
   wrap(async (req, res) => {
+    // A laboratory may act on its own staff and on nobody else.
+    await assertEmploys(req.user, Number(req.params.id));
     const active = req.body?.is_active ? 1 : 0;
     const row = await db
       .selectFrom('users')
@@ -873,8 +895,10 @@ userRoutes.get(
 userRoutes.patch(
   '/:id',
   numericId,
-  requireAdmin,
+  requireEmployer,
   wrap(async (req, res) => {
+    // A laboratory may act on its own staff and on nobody else.
+    await assertEmploys(req.user, Number(req.params.id));
     const id = Number(req.params.id);
     const row = await db
       .selectFrom('users')
@@ -1015,6 +1039,7 @@ userRoutes.delete(
       count(
         db
           .selectFrom('orders')
+          .where('deleted_at', 'is', null)
           .select(({ fn }) => fn.countAll().as('n'))
           .where('lab_id', '=', id)
           .executeTakeFirst(),
@@ -1054,8 +1079,10 @@ userRoutes.delete(
 userRoutes.post(
   '/:id/password',
   numericId,
-  requireAdmin,
+  requireEmployer,
   wrap(async (req, res) => {
+    // A laboratory may act on its own staff and on nobody else.
+    await assertEmploys(req.user, Number(req.params.id));
     const password = String(req.body?.password ?? '');
     if (password.length < 8) throw badRequest('Password must be at least 8 characters.');
 
@@ -1190,8 +1217,10 @@ async function employ(
 userRoutes.post(
   '/:id/employment',
   numericId,
-  requireAdmin,
+  requireEmployer,
   wrap(async (req, res) => {
+    // A laboratory may act on its own staff and on nobody else.
+    await assertEmploys(req.user, Number(req.params.id));
     const id = await employ(Number(req.params.id), Number(req.body?.lab_id), {
       joining_date: req.body?.joining_date,
       salary: req.body?.salary,
@@ -1214,8 +1243,10 @@ userRoutes.post(
 userRoutes.patch(
   '/:id/employment',
   numericId,
-  requireAdmin,
+  requireEmployer,
   wrap(async (req, res) => {
+    // A laboratory may act on its own staff and on nobody else.
+    await assertEmploys(req.user, Number(req.params.id));
     const row = await db
       .selectFrom('employements')
       .select('id')
@@ -1257,8 +1288,10 @@ userRoutes.patch(
 userRoutes.post(
   '/:id/employment/end',
   numericId,
-  requireAdmin,
+  requireEmployer,
   wrap(async (req, res) => {
+    // A laboratory may act on its own staff and on nobody else.
+    await assertEmploys(req.user, Number(req.params.id));
     const row = await db
       .selectFrom('employements')
       .select('id')

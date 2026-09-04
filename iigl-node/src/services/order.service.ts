@@ -15,6 +15,29 @@ export function ddmmyyyy(d = new Date()): string {
   return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()}`;
 }
 
+/**
+ * The filter that keeps deleted orders out of everything.
+ *
+ * Deleting an order sets `orders.deleted_at` rather than removing the row — see
+ * migration 030 — so every read has to say it wants the live ones. There are
+ * thirty query sites across ten files and the schema has no foreign keys, so a
+ * read that forgets does not fail: it quietly puts a deleted order back into a
+ * list, a count or a sum, and nothing says so.
+ *
+ * Written once here, applied at each of those sites, and `npm run
+ * check:soft-delete` fails the build if a query goes round it.
+ *
+ * Two shapes, because a query reaches `orders` two ways:
+ *
+ *   `live(q)`        when `orders` is what the query selects from
+ *   `liveJoined(q)`  when `orders` arrived through a join, and the column has
+ *                    to be named `orders.deleted_at` to be unambiguous
+ */
+export const live = <Q extends { where: any }>(q: Q): Q => q.where('deleted_at', 'is', null) as Q;
+
+export const liveJoined = <Q extends { where: any }>(q: Q): Q =>
+  q.where('orders.deleted_at', 'is', null) as Q;
+
 export interface OrderItemInput {
   category_id: number;
   qty: number;
@@ -96,6 +119,10 @@ export async function createOrder(user: SessionUser, input: CreateOrderInput) {
     // returning a duplicate number to the customer.
     for (let attempt = 0; attempt < 5 && orderId === null; attempt++) {
       const orderNo = makeOrderNo();
+      // soft-delete-exempt: reads deleted orders too, on purpose. A number
+      // belonging to a deleted order is still spent — the row is there, its
+      // certificates may be there — and handing the same number to a new
+      // customer would leave two orders answering to it.
       const clash = await trx
         .selectFrom('orders')
         .select('id')
