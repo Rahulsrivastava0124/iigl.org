@@ -11,22 +11,36 @@ import { apiUrl } from '../lib/config';
  * about to reprint the form, and sending them back to the view page to do it
  * is a round trip for no reason.
  *
- * **Blank** prints the form with nothing filled in — the letterhead, the
- * labels, the boxes, no values. It is the sheet handed across a counter or
- * taken to a fair, and it is the same template as the filled one, so the two
- * cannot drift apart. It is off by default: from a screen showing one
- * laboratory, the form for that laboratory is what somebody means.
+ * Two documents, because the paper pack is two: the one-page **registration
+ * form** somebody fills in, and the four-page **agreement** they are accepting
+ * — the equipment list, what is charged for and what is free, the refund
+ * position and the establishment order. They are printed together at a
+ * counter, so they are printed from one place.
+ *
+ * **Blank** prints either with nothing filled in — the letterhead, the labels,
+ * the boxes, no values. It is the sheet handed across a counter or taken to a
+ * fair, and it is the same template as the filled one, so the two cannot drift
+ * apart. It is off by default: from a screen showing one laboratory, that
+ * laboratory's papers are what somebody means.
  */
 
 interface Options {
   blank?: boolean;
   /** The HTML the PDF is rendered from — printable from the browser as-is. */
   html?: boolean;
+  /** Which document: the one-page form, or the four-page agreement. */
+  paper?: 'registration' | 'agreement';
 }
 
-export function openFranchiseeForm(labId: number, { blank, html }: Options = {}) {
+export function openFranchiseeForm(
+  labId: number,
+  { blank, html, paper = 'registration' }: Options = {},
+) {
   const query = [html ? 'format=html' : '', blank ? 'blank=1' : ''].filter(Boolean).join('&');
-  window.open(apiUrl(`/users/laboratories/${labId}/registration${query ? `?${query}` : ''}`), '_blank');
+  window.open(
+    apiUrl(`/users/laboratories/${labId}/${paper}${query ? `?${query}` : ''}`),
+    '_blank',
+  );
 }
 
 interface Props {
@@ -64,6 +78,14 @@ export default function FranchiseeFormActions({ labId, compact }: Props) {
         onClick={() => openFranchiseeForm(labId, { blank })}
       >
         {blank ? 'Blank Registration Form' : 'Registration Form'}
+      </Button>
+      <Button
+        variant="contained"
+        size={compact ? 'small' : 'medium'}
+        startIcon={<PrintIcon />}
+        onClick={() => openFranchiseeForm(labId, { blank, paper: 'agreement' })}
+      >
+        {blank ? 'Blank Agreement' : 'Agreement'}
       </Button>
       {!compact && (
         <Button color="inherit" onClick={() => openFranchiseeForm(labId, { blank, html: true })}>

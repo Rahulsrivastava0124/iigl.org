@@ -1621,6 +1621,30 @@ export const extraPaths: Record<string, unknown> = {
   },
 
   // -------------------------------------------------------------- accounts
+  '/api/users/laboratories/{id}/agreement': {
+    get: {
+      tags: ['Users'],
+      summary: 'The Franchise Agreement, the four pages after the form',
+      description:
+        'The rest of the printed pack: the equipment a franchise must hold before it opens, what is charged for and what is free, the refund position, and the order the establishment runs in with its deadlines. Only the header block is the laboratory’s — owner, contact, company, email, address, form number; the offer is the same for every franchise and lives in the template. Returns a PDF inline. `?format=html` returns the markup, `?blank=1` prints it with the header empty for handing across a counter. Administrators only.',
+      parameters: [
+        idParam,
+        { name: 'format', in: 'query', schema: { type: 'string', enum: ['html'] } },
+        {
+          name: 'blank',
+          in: 'query',
+          description: 'Print the agreement with an empty header block.',
+          schema: { type: 'string', enum: ['1', 'true'] },
+        },
+      ],
+      responses: {
+        200: { description: 'The agreement, as a PDF or as HTML.' },
+        404: err('Laboratory not found.'),
+        ...guarded,
+      },
+    },
+  },
+
   '/api/users/laboratories/{id}/registration': {
     get: {
       tags: ['Users'],

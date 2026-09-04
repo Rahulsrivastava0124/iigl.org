@@ -18,6 +18,8 @@ import { wrap } from '../lib/async.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import { accruedByLab, TRANSACTION_TYPE } from '../services/commission.service.js';
 import {
+  franchiseAgreementHtml,
+  franchiseAgreementPdf,
   franchiseeFormHtml,
   franchiseeFormPdf,
 } from '../services/document.service.js';
@@ -394,6 +396,44 @@ userRoutes.get(
  * same template, so the sheet handed over at a counter and the sheet printed
  * back from the account cannot drift apart.
  */
+/**
+ * The Franchise Agreement: the four pages that follow the registration form.
+ *
+ * Same shape as the form above — a PDF inline, `?format=html` for the markup,
+ * `?blank=1` for an empty one to hand across a counter.
+ */
+userRoutes.get(
+  '/laboratories/:id/agreement',
+  numericId,
+  requireAdmin,
+  wrap(async (req, res) => {
+    const labId = Number(req.params.id);
+
+    const lab = await db
+      .selectFrom('users')
+      .select(['id', 'empid'])
+      .where('id', '=', labId)
+      .where('role_id', '=', ROLE.LAB)
+      .executeTakeFirst();
+    if (!lab) throw notFound('Laboratory not found.');
+
+    const blank = req.query.blank === '1' || req.query.blank === 'true';
+
+    if (req.query.format === 'html') {
+      res.type('html').send(await franchiseAgreementHtml(labId, { blank }));
+      return;
+    }
+
+    const pdf = await franchiseAgreementPdf(labId, { blank });
+    res.type('application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="franchise-agreement-${blank ? 'blank' : (lab.empid ?? labId)}.pdf"`,
+    );
+    res.send(pdf);
+  }),
+);
+
 userRoutes.get(
   '/laboratories/:id/registration',
   numericId,

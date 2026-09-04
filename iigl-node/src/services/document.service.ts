@@ -251,6 +251,133 @@ export async function franchiseeFormPdf(
   return renderHtmlToPdf(html, { format: 'A4' });
 }
 
+/* ----------------------------------------------------- franchise agreement */
+
+const AGREEMENT_TEMPLATE = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../templates/franchise-agreement.ejs',
+);
+
+/**
+ * The Franchise Agreement — the four pages that follow the registration form.
+ *
+ * The paper pack is five sheets: the form somebody fills in, then the offer
+ * they are accepting — the equipment a franchise must hold, what is charged
+ * for and what is not, the refund position, and the order the establishment
+ * runs in. This is those four.
+ *
+ * Only the header block comes from the record: owner, contact, company, email,
+ * address, form number. The rest is the offer, and the offer is the same for
+ * every franchise — a laboratory does not get its own equipment list, so it is
+ * written in the template rather than kept in a table nobody would ever vary.
+ *
+ * `blank` prints it with the header empty, for handing across a counter.
+ */
+/**
+ * The band of five stones the agreement prints above its closing line.
+ *
+ * Lifted from the signed pack itself rather than drawn: it is a photograph,
+ * the paper prints it, and an approximation of somebody's letterhead art is
+ * the kind of difference a franchise notices when they lay the two sheets
+ * side by side.
+ *
+ * Read once and cached, like the mark: it is on one page of one document.
+ */
+let diamondBandCache: string | null = null;
+
+/**
+ * A picture kept beside the templates, if it is there.
+ *
+ * Returns null when the file is missing rather than throwing, so a document
+ * that wants artwork still prints without it. The alternative — a template
+ * that refuses to render because one decorative image was never supplied — is
+ * a laboratory unable to print its agreement.
+ */
+async function templateImage(name: string): Promise<string | null> {
+  try {
+    const file = path.resolve(path.dirname(fileURLToPath(import.meta.url)), `../templates/${name}`);
+    return `data:image/png;base64,${(await readFile(file)).toString('base64')}`;
+  } catch {
+    return null;
+  }
+}
+
+async function diamondBand(): Promise<string> {
+  if (diamondBandCache) return diamondBandCache;
+  const file = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../templates/diamond-band.png',
+  );
+  const bytes = await readFile(file);
+  diamondBandCache = `data:image/png;base64,${bytes.toString('base64')}`;
+  return diamondBandCache;
+}
+
+export async function franchiseAgreementHtml(
+  labId: number,
+  options: FranchiseeFormOptions = {},
+): Promise<string> {
+  const lab = await db
+    .selectFrom('users')
+    .select(['id', 'empid', 'fullname', 'owner_name', 'mobile', 'email', 'address', 'city', 'state', 'pincode'])
+    .where('id', '=', labId)
+    .executeTakeFirst();
+  if (!lab) throw notFound('Laboratory not found.');
+
+  const company = await Promise.all(
+    ['name', 'address', 'city', 'state', 'pincode', 'phone', 'email', 'website'].map((k) =>
+      setting(`company.${k}`),
+    ),
+  ).then(([name, address, city, state, pincode, phone, email, website]) => ({
+    name,
+    address,
+    city,
+    state,
+    pincode,
+    phone,
+    email,
+    website,
+  }));
+
+  // The same record with the laboratory's own answers removed, as the form
+  // does it: one template, so the copy handed over and the copy printed from
+  // an account cannot drift apart.
+  const printed = options.blank ? ({ id: lab.id } as typeof lab) : lab;
+
+  return ejs.renderFile(
+    AGREEMENT_TEMPLATE,
+    {
+      lab: printed,
+      title: lab.fullname ?? '',
+      company,
+      logo: await brandMark(),
+      band: await diamondBand(),
+      /*
+        The two hands fitting a puzzle together, which the paper prints under
+        the establishment diagram. Optional: drop the artwork in as
+        `templates/puzzle-hands.png` and it appears; leave it out and the page
+        prints without it rather than failing.
+      */
+      puzzle: await templateImage('puzzle-hands.png'),
+      issuedOn: new Date().toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      }),
+    },
+    { async: true },
+  );
+}
+
+export async function franchiseAgreementPdf(
+  labId: number,
+  options: FranchiseeFormOptions = {},
+): Promise<Buffer> {
+  const html = await franchiseAgreementHtml(labId, options);
+  const { renderHtmlToPdf } = await import('./pdf.service.js');
+  return renderHtmlToPdf(html, { format: 'A4' });
+}
+
 /* ------------------------------------------------------------ fee statement */
 
 const FEE_TEMPLATE = path.resolve(
