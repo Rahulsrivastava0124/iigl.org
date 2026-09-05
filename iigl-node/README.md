@@ -352,8 +352,13 @@ Every one of the 32 differences is accounted for:
 
 - **31** are orders placed before their laboratory was given custom price rows.
   Laboratory 4 got its own rates in July 2022 and laboratory 14 in April 2023.
-  Orders carry no price snapshot, so recomputing an old order applies today's
+  Those orders carry no price snapshot, so recomputing one applies today's
   rates. Laboratories whose rates never changed match 100%.
+
+  Certificates written since migration 031 do carry one — the price is stamped
+  on the certificate when it is issued and the quote reads that in preference to
+  the bands — so this drift stops with the rows already in the table. It is not
+  backfilled onto them; `npm run check:price-snapshot` covers the behaviour.
 - **1** is order 64, where the stored total of 110 covers one certificate but
   three were issued twelve days before delivery. The original figure is simply
   wrong — which is what a client-supplied total permits.

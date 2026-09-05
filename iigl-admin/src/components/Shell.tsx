@@ -51,6 +51,7 @@ import LogoutIcon from '@mui/icons-material/LogoutOutlined';
 import { alpha } from '@mui/material/styles';
 import { BRAND, TONE } from '../lib/theme';
 import { useAuth } from '../lib/auth';
+import { CrumbSlotContext } from '../lib/crumbActions';
 import { useFetch } from '../lib/useFetch';
 import { ROLE, ROLE_NAMES } from '../lib/portal';
 import { api } from '../lib/api';
@@ -183,8 +184,12 @@ const ADMIN_GROUPS: Group[] = [
     items: [
       { to: '/wallet', label: 'Wallet' },
       { to: '/transactions?status=0', label: 'Commission Approval' },
-      { to: '/transactions', label: 'Commission History' },
-      { to: '/transactions?view=ledger', label: 'Ledger' },
+      // No Commission History here. That screen is a franchise's own account —
+      // what it has earned, what it has remitted and what it still owes — and
+      // head office reads the same thing per laboratory on the laboratory's
+      // page. What head office does with commission is decide it, which is the
+      // approval queue above.
+      { to: '/transactions', label: 'Transaction History' },
     ],
   },
   {
@@ -290,9 +295,10 @@ const ADMIN_GROUPS: Group[] = [
  *   - **Message is not here.** Both its entries, Send Message and Message
  *     History, are `href="#"` in the old application — the feature was never
  *     built, and listing it would promise a screen that has never existed;
- *   - **Wallet is not a separate entry.** The old Wallet screen shows the
- *     balance that now heads the Ledger, so it would be the same figures under
- *     a second name.
+ *   - **there is no separate Ledger entry.** Wallet is the running account —
+ *     the same balance over the same movements, read from the same
+ *     `/transactions/ledger` — so a Ledger beside it was one screen under two
+ *     names.
  *
  * `Report New` in the old sidebar sits under Customer and opens the certificate
  * list split by card type. It is the certificate list, so that is where it is.
@@ -304,7 +310,7 @@ const FIELD_GROUPS: Group[] = [
     icon: OrdersIcon,
     items: [
       { to: '/orders?status=preparing', label: 'In Progress' },
-      { to: '/orders?status=delivered', label: 'Paid & Delivered' },
+      { to: '/orders?status=delivered', label: 'Delivered' },
       { to: '/orders?dues=1', label: 'Dues Order' },
       { to: '/orders/new', label: 'Collect New', needs: 'order-create' },
     ],
@@ -312,10 +318,11 @@ const FIELD_GROUPS: Group[] = [
   {
     label: 'Report',
     icon: CertificatesIcon,
-    items: [
-      { to: '/reports', label: 'All Reports List' },
-      { to: '/reports/new', label: 'Issue a Certificate', needs: 'report-create' },
-    ],
+    // No "Issue a Certificate" entry. A certificate belongs to an order item —
+    // the wizard's first two steps are choosing them — so it is written from
+    // the order that is waiting for it, where the arrow on the row goes. A menu
+    // entry started the same job with nothing chosen.
+    items: [{ to: '/reports', label: 'All Reports List' }],
   },
   {
     label: 'Customer',
@@ -331,7 +338,11 @@ const FIELD_GROUPS: Group[] = [
     items: [
       { to: '/wallet', label: 'Wallet' },
       { to: '/transactions', label: 'Transfer History' },
-      { to: '/transactions?view=ledger', label: 'Ledger' },
+      // What this laboratory has remitted to head office, and where each
+      // remittance stands. It is the same screen as the transfer history with
+      // the commission rows kept, because "have they taken my payment yet" is
+      // the question a franchise opens this menu to answer.
+      { to: '/transactions?type=commision', label: 'Commission History', labOnly: true },
     ],
   },
   {
@@ -441,6 +452,11 @@ export default function Shell() {
 
   const crumbs = useBreadcrumbs(portal);
   const here = `${location.pathname}${location.search}`;
+
+  // The node at the right-hand end of the trail, handed to the page below so it
+  // can put its own control on that line. State rather than a ref because the
+  // page renders into it, and a ref would not tell it when the node arrived.
+  const [crumbSlot, setCrumbSlot] = useState<HTMLDivElement | null>(null);
 
   const today = new Date().toLocaleDateString('en-GB', {
     weekday: 'long',
@@ -1007,7 +1023,17 @@ export default function Shell() {
           The bar appears as soon as there is somewhere to go back to.
         */}
         {crumbs.length > 1 && (
-        <Box sx={{ px: { xs: 2, md: 3 }, pt: 2 }}>
+        <Box
+          sx={{
+            px: { xs: 2, md: 3 },
+            pt: 2,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 1,
+            minHeight: 34,
+          }}
+        >
           <Breadcrumbs
             aria-label="breadcrumb"
             separator={<NextIcon fontSize="inherit" sx={{ color: 'text.disabled' }} />}
@@ -1044,11 +1070,15 @@ export default function Shell() {
               ),
             )}
           </Breadcrumbs>
+          {/* Filled by the page through `CrumbActions`, empty on the rest. */}
+          <Box ref={setCrumbSlot} sx={{ display: 'flex', alignItems: 'center', gap: 1 }} />
         </Box>
         )}
 
         <Box component="main" sx={{ flex: 1, px: { xs: 2, md: 3 }, pt: 2.5, pb: 8, minWidth: 0 }}>
-          <Outlet />
+          <CrumbSlotContext.Provider value={crumbSlot}>
+            <Outlet />
+          </CrumbSlotContext.Provider>
         </Box>
       </Box>
     </Box>

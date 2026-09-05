@@ -1,0 +1,61 @@
+-- ---------------------------------------------------------------------------
+-- 031 — a certificate keeps the price it was issued at
+--
+-- An order is priced per certificate, and every price came from the `prices`
+-- bands as they stand *right now*. Nothing was recorded at the moment the
+-- certificate was written, so the bill for an order is recomputed from live
+-- rates every time anybody opens it. Change a band — or add one, or give a
+-- laboratory its own — and orders taken months ago quietly re-price themselves:
+-- the panel shows a total the customer never agreed to, and a due or a credit
+-- appears against an account that was square.
+--
+-- This is not hypothetical here. PARITY.md records 31 orders that already fail
+-- to recompute to their stored total for exactly this reason — they were placed
+-- before their laboratory was given its own rates, and today's rates are what
+-- gets applied when they are read back.
+--
+-- `reports.smart_card_price` and `reports.classic_card_price` already exist and
+-- look like the answer. They are not: Laravel wrote the constants 200 and 400
+-- into every row, and so did this API until now. All 22,144 existing rows carry
+-- those two numbers whatever the stone weighs and whatever it was billed at, so
+-- they cannot be read as prices.
+--
+-- Hence `priced_at`. It is the flag that says those two columns mean something:
+--
+--   priced_at IS NULL   the two price columns are the old placeholders. The
+--                       certificate is priced from the bands, exactly as it is
+--                       today — every existing row, unchanged.
+--   priced_at IS NOT NULL
+--                       the two price columns are the prices this certificate
+--                       was issued at, and they are what it is billed at, band
+--                       changes afterwards notwithstanding.
+--
+-- `price_band_id` records which band those prices came from, so a figure can be
+-- traced back to the row that produced it. It is not read to price anything —
+-- the price is in the certificate — and a band that is later edited or deleted
+-- does not disturb it.
+--
+-- No existing row changes value and nothing is backfilled. Backfilling would
+-- mean stamping 22,144 historical certificates with today's rates, which is the
+-- very thing this exists to stop; those orders stay as they are billed. The
+-- change takes effect for certificates written from here on, and for one whose
+-- weight is amended — the weight is what chooses the band, so correcting it
+-- prices the certificate afresh.
+--
+-- Additive. Nothing is dropped and no existing value changes.
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE `reports`
+  ADD COLUMN `priced_at` DATETIME NULL DEFAULT NULL AFTER `classic_card_price`,
+  ADD COLUMN `price_band_id` INT NULL DEFAULT NULL AFTER `priced_at`;
+
+-- ---------------------------------------------------------------------------
+-- Rollback
+--
+-- ALTER TABLE `reports` DROP COLUMN `price_band_id`;
+-- ALTER TABLE `reports` DROP COLUMN `priced_at`;
+--
+-- Dropping these does not lose money already collected — orders keep their own
+-- stored totals — but every certificate written since goes back to being priced
+-- from whatever the bands say at the time it is read.
+-- ---------------------------------------------------------------------------

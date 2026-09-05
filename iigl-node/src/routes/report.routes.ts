@@ -48,8 +48,56 @@ reportRoutes.get(
       c.executeTakeFirstOrThrow(),
     ]);
 
+    /*
+      Which cards this certificate is for.
+
+      The kind is on the order line, not the certificate — a line asks for a
+      smart card, a classic one, or both — and the list offered a print button
+      for each kind on every row regardless. Half of them printed a card nobody
+      ordered. One query over the lines on the page, folded onto the rows.
+    */
+    /*
+      The order this certificate is on, by its number.
+
+      `reports.order_no` is misnamed: it holds the order *id*, which is why the
+      list read "#9616" while every other screen calls that order 202608-484662.
+      The real number is resolved here and the id is kept beside it, so the cell
+      can say what the order is called and still link to it.
+    */
+    const orderIds = [...new Set(rows.map((r) => Number(r.order_no)).filter(Boolean))];
+    const orders = orderIds.length
+      ? await db
+          .selectFrom('orders')
+          .select(['id', 'order_no'])
+          .where('id', 'in', orderIds)
+          .execute()
+      : [];
+    const orderNumberOf = new Map(orders.map((o) => [Number(o.id), o.order_no]));
+
+    const detailIds = [...new Set(rows.map((r) => Number(r.order_detail_id)).filter(Boolean))];
+    const lines = detailIds.length
+      ? await db
+          .selectFrom('order_details')
+          .select(['id', 'smart_card', 'classic_card'])
+          .where('id', 'in', detailIds)
+          .execute()
+      : [];
+    const kindOf = new Map(lines.map((l) => [Number(l.id), l]));
+
     const expanded = await expandAttributes(rows.map((r) => r.description));
-    const data = rows.map((r, i) => ({ ...r, attributes: expanded[i] }));
+    const data = rows.map((r, i) => {
+      const line = kindOf.get(Number(r.order_detail_id));
+      return {
+        ...r,
+        attributes: expanded[i],
+        order_id: Number(r.order_no) || null,
+        order_number: orderNumberOf.get(Number(r.order_no)) ?? null,
+        // A certificate whose line has gone offers both rather than neither:
+        // the card exists and somebody may still need to reprint it.
+        smart_card: line ? Number(line.smart_card) === 1 : true,
+        classic_card: line ? Number(line.classic_card) === 1 : true,
+      };
+    });
 
     res.json(paged(data, Number(count.n), p));
   }),

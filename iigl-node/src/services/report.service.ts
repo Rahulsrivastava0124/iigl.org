@@ -1,5 +1,9 @@
 import { db } from '../db/index.js';
+import type { Kysely } from 'kysely';
+import type { DB } from '../db/types.js';
 import { setting, settingNumber } from './settings.service.js';
+import { agreedPriceFor } from './pricing.service.js';
+import { caratOf } from '../lib/money.js';
 import { badRequest, conflict } from '../lib/errors.js';
 import type { SessionUser } from '../middleware/auth.js';
 
@@ -167,13 +171,22 @@ async function resolveAttributes(
   return resolved;
 }
 
-export async function createReport(user: SessionUser, input: CreateReportInput) {
+/**
+ * `exec` is the pool unless a caller hands it a transaction — which the price
+ * snapshot check does, to issue a certificate against a fixture it has not
+ * committed. Given one, the work runs inside it rather than opening a second.
+ */
+export async function createReport(
+  user: SessionUser,
+  input: CreateReportInput,
+  exec?: Kysely<DB>,
+) {
   if (user.labId === null) {
     throw badRequest('Your account is not linked to a laboratory, so it cannot issue reports.');
   }
   const labId = user.labId;
 
-  return db.transaction().execute(async (trx) => {
+  const work = async (trx: Kysely<DB>) => {
     // A report per item, capped by the quantity ordered.
     const detail = await trx
       .selectFrom('order_details')
@@ -227,6 +240,22 @@ export async function createReport(user: SessionUser, input: CreateReportInput) 
       reportNo = buildReportNo(labId, count, new Date(), numbering);
     }
 
+    /*
+      The price this certificate is issued at, kept on the certificate.
+
+      The bands are read once, here, and the answer is written down. Reading
+      them again every time the order is opened is what made a bill move under
+      a customer who had already agreed to it — see migration 031. A weight no
+      band covers is left unstamped rather than stamped at zero, so adding the
+      missing band afterwards still prices it.
+    */
+    const price = await agreedPriceFor(
+      labId,
+      Number(detail.category_id),
+      caratOf(input.carat_weight ?? ''),
+      trx as unknown as typeof db,
+    );
+
     const result = await trx
       .insertInto('reports')
       .values({
@@ -243,8 +272,12 @@ export async function createReport(user: SessionUser, input: CreateReportInput) 
         is_approx: input.is_approx ?? 0,
         item_image: input.item_image ?? '',
         description: JSON.stringify(resolved),
-        smart_card_price: '200',
-        classic_card_price: '400',
+        // Laravel wrote the constants 200 and 400 into every row and read them
+        // back nowhere; `priced_at` is what says these two are prices.
+        smart_card_price: String(price?.smart ?? 0),
+        classic_card_price: String(price?.classic ?? 0),
+        priced_at: price ? new Date() : null,
+        price_band_id: price?.bandId ?? null,
         user_id: user.id,
         lab_id: labId,
         created_at: new Date(),
@@ -253,7 +286,9 @@ export async function createReport(user: SessionUser, input: CreateReportInput) 
       .executeTakeFirst();
 
     return Number(result.insertId);
-  });
+  };
+
+  return exec ? work(exec) : db.transaction().execute(work);
 }
 
 /**
@@ -370,11 +405,15 @@ export function validateUpdateReportInput(body: unknown): UpdateReportInput {
  * and re-issuing it under a different number would orphan the original.
  * Attributes, when supplied, replace the whole set, matching the PHP.
  */
-export async function updateReport(reportId: number, input: UpdateReportInput) {
-  return db.transaction().execute(async (trx) => {
+export async function updateReport(
+  reportId: number,
+  input: UpdateReportInput,
+  exec?: Kysely<DB>,
+) {
+  const work = async (trx: Kysely<DB>) => {
     const report = await trx
       .selectFrom('reports')
-      .select(['id', 'order_detail_id', 'subcategory_id'])
+      .select(['id', 'order_detail_id', 'subcategory_id', 'carat_weight', 'priced_at', 'lab_id'])
       .where('id', '=', reportId)
       .executeTakeFirst();
     if (!report) throw badRequest('Report not found.');
@@ -390,6 +429,48 @@ export async function updateReport(reportId: number, input: UpdateReportInput) {
     if (input.size !== undefined) patch.size = input.size;
     if (input.comments !== undefined) patch.comments = input.comments;
     if (input.is_approx !== undefined) patch.is_approx = input.is_approx;
+
+    /*
+      The weight chooses the band, so a weight that changes re-prices the
+      certificate — and a certificate that has never been priced is priced now,
+      which is how one written when its category had no band is put right once
+      the band exists.
+
+      Nothing else re-prices it. Fixing a typo in the comments on a certificate
+      issued last year must not quietly restamp it at this year's rates, which
+      is the whole complaint migration 031 answers.
+    */
+    const weightChanged =
+      input.carat_weight !== undefined && (input.carat_weight ?? '') !== report.carat_weight;
+    if (weightChanged || report.priced_at === null) {
+      const detail = await trx
+        .selectFrom('order_details')
+        .select('category_id')
+        .where('id', '=', Number(report.order_detail_id))
+        .executeTakeFirst();
+
+      const price = await agreedPriceFor(
+        Number(report.lab_id),
+        Number(detail?.category_id ?? 0),
+        caratOf(input.carat_weight ?? report.carat_weight),
+        trx as unknown as typeof db,
+      );
+
+      if (price) {
+        patch.smart_card_price = String(price.smart);
+        patch.classic_card_price = String(price.classic);
+        patch.priced_at = new Date();
+        patch.price_band_id = price.bandId;
+      } else if (weightChanged) {
+        // Moved to a weight nothing covers. The old price described the old
+        // weight, so it is cleared rather than left describing a stone that is
+        // no longer this one; the order reports it unpriced until a band exists.
+        patch.smart_card_price = '0';
+        patch.classic_card_price = '0';
+        patch.priced_at = null;
+        patch.price_band_id = null;
+      }
+    }
 
     if (input.attributes) {
       const detail = await trx
@@ -414,5 +495,7 @@ export async function updateReport(reportId: number, input: UpdateReportInput) {
       .execute();
 
     return reportId;
-  });
+  };
+
+  return exec ? work(exec) : db.transaction().execute(work);
 }

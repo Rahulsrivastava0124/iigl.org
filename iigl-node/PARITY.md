@@ -106,9 +106,19 @@ Unchanged from the pricing analysis, and fully explained:
   three were issued twelve days before delivery. The original figure is simply
   wrong.
 
-Worth deciding: whether historical orders should be left as billed — which is
-almost certainly right, since that is what the customer paid — or whether a
-price snapshot should be stored on future orders so this cannot recur.
+**Decided, in migration 031.** Historical orders are left as billed — that is
+what the customer paid — and a certificate written from now on records the price
+it was issued at, in `reports.smart_card_price` / `classic_card_price` with
+`priced_at` set. The quote reads that snapshot in preference to the bands, so a
+rate changed today cannot re-price an order taken last month, and the drift
+above cannot recur.
+
+The 22,144 certificates already in the table are **not** backfilled: stamping
+them would mean writing today's rates onto orders billed at yesterday's, which
+is the thing being prevented. They carry `priced_at` NULL and are priced from
+the live bands exactly as they were. `npm run check:price-snapshot` proves both
+halves — a band that moves under a stamped certificate does not move its order,
+and an unstamped one still follows the band.
 
 ### 3. Three mobile numbers each have two accounts
 

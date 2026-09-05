@@ -68,13 +68,13 @@ const VIEWS: Record<string, Record<string, string>> = {
   },
   orders: {
     'status=preparing': 'In Progress',
-    'status=delivered': 'Paid & Delivered',
+    'status=delivered': 'Delivered',
     'dues=1': 'Dues Order',
   },
   categories: { 'tab=sub': 'Sub Categories' },
   attributes: { 'tab=values': 'Attribute Values' },
   pricing: { 'scope=laboratory': 'Laboratory Prices' },
-  transactions: { 'status=0': 'Commission Approval', 'view=ledger': 'Ledger' },
+  transactions: { 'status=0': 'Commission Approval', 'type=commision': 'Commission History' },
   customers: { 'tab=unregistered': 'Not Registered', 'tab=verifiers': 'Verifiers' },
   content: {
     'tab=pages': 'Pages',

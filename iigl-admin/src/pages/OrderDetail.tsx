@@ -1,5 +1,11 @@
 import { useState } from 'react';
-import { useParams, useSearchParams, Link as RouterLink } from 'react-router-dom';
+import {
+  useParams,
+  useSearchParams,
+  useNavigate,
+  useLocation,
+  Link as RouterLink,
+} from 'react-router-dom';
 import {
   Box,
   Button,
@@ -21,15 +27,34 @@ import { useToast } from '../components/Toast';
 import { useDebounced, useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { hint, money, toneColour, Dialog, Notice, OrderChip, Panel, Tile } from '../components/ui';
+import {
+  hint,
+  money,
+  toneColour,
+  ConfirmDialog,
+  Dialog,
+  IconAction,
+  Notice,
+  OrderChip,
+  Panel,
+  RowActions,
+  Tile,
+  TILE_CELL,
+} from '../components/ui';
 import { apiUrl } from '../lib/config';
+import { CrumbActions } from '../lib/crumbActions';
 import PrintIcon from '@mui/icons-material/PrintOutlined';
+import BackIcon from '@mui/icons-material/ArrowBackOutlined';
+import EditIcon from '@mui/icons-material/EditOutlined';
 
 interface QuoteLine {
   report_id: number;
   report_no: string;
   carat_weight: string;
+  category_name: string | null;
   price_source: string;
+  /** Why nothing priced it. Null unless `price_source` is 'unpriced'. */
+  unpriced_reason: 'no_category_bands' | 'weight_outside' | null;
   smart_price: number;
   classic_price: number;
   line_total: number;
@@ -58,6 +83,19 @@ interface Payment {
 
 export default function OrderDetail() {
   const toast = useToast();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  /*
+    Back to the list that led here. Three lists open this page — In Progress,
+    Dues Order, Delivered — so the way back is the history entry rather
+    than one hardcoded list, which would send two of the three somewhere they
+    had not been. A page reached by its own URL has no such entry (`key` is
+    'default' on the first navigation of a session), and that case goes to the
+    order list rather than out of the panel.
+  */
+  const goBack = () =>
+    location.key === 'default' ? navigate('/orders') : navigate(-1);
   const { id } = useParams();
   const order = useFetch<{ data: any }>(`/orders/${id}`);
   /*
@@ -81,6 +119,7 @@ export default function OrderDetail() {
      the control they already asked for. */
   const [params] = useSearchParams();
   const [settling, setSettling] = useState(params.get('settle') === '1');
+  const [confirmingDelivery, setConfirmingDelivery] = useState(false);
   const [paid, setPaid] = useState('');
   const [payMode, setPayMode] = useState('cash');
   const [busy, setBusy] = useState(false);
@@ -147,6 +186,7 @@ export default function OrderDetail() {
     setBusy(true);
     try {
       await api.post(`/orders/${id}/deliver`, {});
+      setConfirmingDelivery(false);
       toast.ok('Order delivered.');
       order.reload();
       quote.reload();
@@ -169,6 +209,13 @@ export default function OrderDetail() {
 
   return (
     <>
+      {/* On the trail's own line, at the right-hand end: it says where this
+          page came from, which is what the rest of that line says too. */}
+      <CrumbActions>
+        <Button color="error" size="small" startIcon={<BackIcon />} onClick={goBack}>
+          Back
+        </Button>
+      </CrumbActions>
 
       {/*
         The money, at the head of the page.
@@ -186,13 +233,13 @@ export default function OrderDetail() {
       */}
       {q && q.certificates.length > 0 && (
         <Grid container spacing={1.5} sx={{ mb: 2 }}>
-          <Grid size={{ xs: 12, sm: 4, md: 3 }}>
+          <Grid size={TILE_CELL}>
             <Tile label="Billed with GST" value={money(q.amount_with_gst)} fill="brand" />
           </Grid>
-          <Grid size={{ xs: 6, sm: 4, md: 3 }}>
+          <Grid size={TILE_CELL}>
             <Tile label="Paid" value={money(q.paid_amount)} fill="settled" />
           </Grid>
-          <Grid size={{ xs: 6, sm: 4, md: 3 }}>
+          <Grid size={TILE_CELL}>
             <Tile
               label="Due"
               value={money(q.balance_due)}
@@ -230,35 +277,35 @@ export default function OrderDetail() {
             >
               Invoice
             </Button>
+            {/*
+              Money owed is the whole of the test: there is something to take,
+              so there is a button to take it with. That covers the order
+              nobody has certified yet — priced at zero, it owes nothing and
+              the button stays away rather than standing there live, ready to
+              write that zero to the order as its bill — and it keeps the
+              button on a delivered order that still owes, which is what the
+              dues list sends anybody here to do.
+            */}
+            {q && q.balance_due > 0 && (
+              <Button variant="contained" onClick={() => setSettling(true)}>
+                Pay
+              </Button>
+            )}
+            {/*
+              Handing it over is its own act, and the one that closes the
+              order — so it waits until every certificate it was taken for is
+              written. The money may still be owing: an order delivered with
+              dues is what the dues list is for.
+            */}
             {o.status !== 'delivered' && (
-              <>
-                {/*
-                  Not payable until something has been certified. Without this
-                  the button was live on an order priced at zero, and settling
-                  it writes that zero to the order as its bill.
-                */}
-                <Button
-                  variant="contained"
-                  onClick={() => setSettling(true)}
-                  disabled={!q || written === 0}
-                >
-                  Pay
-                </Button>
-                {/*
-                  Handing it over is its own act, and the one that closes the
-                  order — so it waits until every certificate it was taken for
-                  is written. The money may still be owing: an order delivered
-                  with dues is what the dues list is for.
-                */}
-                <Button
-                  variant="contained"
-                  color="success"
-                  onClick={deliver}
-                  disabled={busy || owed === 0 || written < owed}
-                >
-                  Deliver Order
-                </Button>
-              </>
+              <Button
+                variant="contained"
+                color="success"
+                onClick={() => setConfirmingDelivery(true)}
+                disabled={busy || owed === 0 || written < owed}
+              >
+                Deliver Order
+              </Button>
             )}
           </Stack>
         }
@@ -352,6 +399,7 @@ export default function OrderDetail() {
                   <TableCell align="right">Smart</TableCell>
                   <TableCell align="right">Classic</TableCell>
                   <TableCell align="right">Line</TableCell>
+                  <TableCell />
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -360,7 +408,7 @@ export default function OrderDetail() {
                     {/* Table cells are nowrap by theme, which ran this sentence
                         off the right edge of the panel. */}
                     <TableCell
-                      colSpan={6}
+                      colSpan={7}
                       sx={{ py: 3, color: 'text.secondary', whiteSpace: 'normal' }}
                     >
                       Nothing to price yet: an order is billed per certificate, and the weight band
@@ -391,6 +439,22 @@ export default function OrderDetail() {
                     <TableCell align="right" className="tabular">
                       {money(c.line_total)}
                     </TableCell>
+                    {/*
+                      The way to fix an unpriced line. The band is read from the
+                      carat weight, so a certificate that fell outside every one
+                      is corrected on the certificate — this row is where anyone
+                      finds out about it, so it is where the way to amend it
+                      belongs.
+                    */}
+                    <TableCell>
+                      <RowActions>
+                        <IconAction
+                          label="Edit certificate"
+                          icon={EditIcon}
+                          to={`/reports/${c.report_id}/edit`}
+                        />
+                      </RowActions>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -398,10 +462,41 @@ export default function OrderDetail() {
 
             {q.unpriced_count > 0 && (
               <Box sx={{ px: 2, pb: 2 }}>
+                {/*
+                  Named, and with the reason.
+
+                  This said every unpriced certificate had "fallen outside every
+                  price band" and to widen one. That is only one of the two ways
+                  it happens: a category nobody has priced at all has no band to
+                  widen, and being told to widen one sends whoever reads it
+                  looking for something that was never there. So each line says
+                  which certificate, what it is, what it weighs, and which of the
+                  two jobs it is.
+                */}
                 <Notice kind="error" sx={{ mb: 0 }}>
-                  {q.unpriced_count} certificate{q.unpriced_count === 1 ? '' : 's'} fell outside
-                  every price band and were billed as zero. Add a band covering that weight before
-                  settling.
+                  <Box component="span" sx={{ display: 'block', mb: 0.5 }}>
+                    {q.unpriced_count} certificate{q.unpriced_count === 1 ? ' was' : 's were'}{' '}
+                    billed as zero, and the order cannot be settled at a price that leaves{' '}
+                    {q.unpriced_count === 1 ? 'it' : 'them'} out:
+                  </Box>
+                  {q.certificates
+                    .filter((c) => c.price_source === 'unpriced')
+                    .map((c) => (
+                      <Box component="span" key={c.report_id} sx={{ display: 'block' }}>
+                        <strong>{c.report_no}</strong> — {c.category_name ?? 'unknown category'} at{' '}
+                        {c.carat_weight || '—'} ct.{' '}
+                        {c.unpriced_reason === 'no_category_bands'
+                          ? `${c.category_name ?? 'This category'} has no price bands at all.`
+                          : 'No band covers that weight.'}
+                      </Box>
+                    ))}
+                  <Box component="span" sx={{ display: 'block', mt: 0.5 }}>
+                    Set the prices in{' '}
+                    <Link component={RouterLink} to="/pricing" underline="hover">
+                      Price Setup
+                    </Link>
+                    , or correct the weight on the certificate.
+                  </Box>
                 </Notice>
               </Box>
             )}
@@ -455,6 +550,37 @@ export default function OrderDetail() {
           Back to orders
         </Link>
       </Typography>
+
+      {/*
+        Asked before, not undone after. Handing an order over closes it: the
+        status is what the lists sort on, the delivery date is stamped from it,
+        the order can no longer be deleted, and there is no button anywhere that
+        puts it back. The dues line is in the question because the commonest
+        reason to stop is money still owed on an order about to walk out.
+      */}
+      <ConfirmDialog
+        open={confirmingDelivery}
+        danger={false}
+        title="Deliver this order?"
+        confirmLabel="Deliver"
+        busy={busy}
+        onClose={() => setConfirmingDelivery(false)}
+        onConfirm={deliver}
+        message={
+          <>
+            Hand order <strong>{o.order_no}</strong> to {o.customer_name}, with all {owed}{' '}
+            certificate{owed === 1 ? '' : 's'} written.
+            {q && q.balance_due > 0 && (
+              <>
+                {' '}
+                <strong>{money(q.balance_due)}</strong> is still owed and stays owed — the order
+                moves to the dues list.
+              </>
+            )}
+          </>
+        }
+        warning="Delivering is not reversible, and a delivered order cannot be deleted."
+      />
 
       {settling && q && (
         <Dialog

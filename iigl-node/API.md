@@ -1,6 +1,6 @@
 # IIGL API
 
-199 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
+202 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
 
 The interactive version is at `/docs` when the server is running, and the raw
 document at `/openapi.json`.
@@ -174,8 +174,11 @@ Remittances, approvals, dues collection and wallet balance.
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/transactions` | session | `page`, `per_page`, `direction`, `status` | — | 401, 403 | List transactions |
 | POST | `/api/transactions` | session | — | **amount**, **pay_mode**, transaction_no, transaction_type, remark, attachment | 400, 401, 403 | Send a remittance |
+| PATCH | `/api/transactions/{id}` | session | — | amount, pay_mode, transaction_no, remark | 400, 401, 403, 404 | Amend a transaction |
 | POST | `/api/transactions/{id}/status` | session | — | **status** | 400, 401, 403, 404 | Approve or decline a remittance |
 | POST | `/api/transactions/commission` | session | — | **commission_on**, pieces, pay_mode, transaction_no, remark, attachment | 400, 401, 403 | Pay commission to the administrator |
+| GET | `/api/transactions/commission/earnings` | session | `page`, `per_page` | — | 401, 403 | What the commission is made of, order by order |
+| GET | `/api/transactions/commission/summary` | session | — | — | 401, 403 | Commission earned, paid and due |
 | POST | `/api/transactions/dues/{orderId}` | session | — | **amount**, pay_mode, transaction_no, remark | 400, 401, 403, 404 | Collect dues against an order |
 | GET | `/api/transactions/ledger` | session | `user_id` | — | 401, 403 | Running account |
 | GET | `/api/transactions/wallet` | session | — | — | 401, 403 | Your balance |
@@ -435,4 +438,4 @@ The general enquiry book: questions, visits, leads and complaints.
 
 Bold body fields are required.
 
-199 endpoints: 16 public, 183 requiring a session.
+202 endpoints: 16 public, 186 requiring a session.

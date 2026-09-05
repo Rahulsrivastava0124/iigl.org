@@ -1,6 +1,6 @@
 import { Box, CircularProgress, Grid, Typography } from '@mui/material';
 import { useFetch } from '../lib/useFetch';
-import { Notice, Panel, Tile, money } from '../components/ui';
+import { Notice, Panel, Tile, TILE_CELL, money } from '../components/ui';
 import TrendChart from '../components/TrendChart';
 import { BRAND } from '../lib/theme';
 import type { Tone } from '../components/ui';
@@ -24,19 +24,16 @@ import TodayIcon from '@mui/icons-material/TodayOutlined';
 import CertificateIcon from '@mui/icons-material/WorkspacePremiumOutlined';
 
 /**
- * How wide a card is: four to a row on a wide screen, two on a tablet, one on
- * a phone. The groups are counts of four and eight, so four to a row is the
- * width that leaves no card stranded at the end of a row.
+ * One width for every card here, shared with the rest of the panel: a quarter
+ * of the row on a wide screen. `TILE_CELL` carries the reasoning.
+ *
+ * The today row is five cards and used to be sized `grow`, five across, on the
+ * argument that twelve columns do not divide by five. That made the one row a
+ * person reads first the one row built on a different grid from everything
+ * under it; it now wraps four and one like any other group of five.
  */
-const CELL = { xs: 12, sm: 6, md: 3 } as const;
-
-/**
- * The today row is five cards, so it gets its own width: five across on a wide
- * screen, and the same two and one as everything else below that. Grid's
- * twelve columns do not divide by five, so the size is given as a fraction of
- * the container rather than in columns.
- */
-const TODAY_CELL = { xs: 12, sm: 6, md: 'grow' } as const;
+const CELL = TILE_CELL;
+const TODAY_CELL = TILE_CELL;
 
 /**
  * Dashboard cards are tinted rather than outlined, and the colour says what

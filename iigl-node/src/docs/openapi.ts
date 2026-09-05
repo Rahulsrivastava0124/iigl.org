@@ -375,6 +375,10 @@ const document = {
           lab_id: { type: 'integer' },
           user_id: { type: 'integer' },
           attributes: { type: 'array', items: { $ref: '#/components/schemas/ReportAttribute' } },
+          smart_card: { type: 'boolean', description: 'The order line asked for a smart card. List only.' },
+          classic_card: { type: 'boolean', description: 'The order line asked for a classic card. List only.' },
+          order_id: { type: ['integer', 'null'], description: 'List only. What `order_no` actually holds — the column is misnamed.' },
+          order_number: { type: ['string', 'null'], examples: ['202608-484662'], description: 'List only. What the order is called on every other screen.' },
         },
       },
 
@@ -449,11 +453,17 @@ const document = {
                 report_no: { type: 'string' },
                 carat_weight: { type: 'string' },
                 category_id: { type: 'integer' },
+                category_name: { type: ['string', 'null'], examples: ['RUDRAKSHA'] },
                 price_id: { type: ['integer', 'null'] },
                 price_source: {
                   type: 'string',
-                  enum: ['laboratory', 'standard', 'unpriced'],
-                  description: 'Which band priced it: the ordering laboratory’s own, the standard table, or none matched.',
+                  enum: ['agreed', 'laboratory', 'standard', 'unpriced'],
+                  description: '`agreed`: the price the certificate was issued at, held on the certificate itself and unaffected by later band changes — migration 031. The others are a band read live, which is what a certificate written before that migration still gets: the ordering laboratory’s own band, the standard table, or nothing matched.',
+                },
+                unpriced_reason: {
+                  type: ['string', 'null'],
+                  enum: ['no_category_bands', 'weight_outside', null],
+                  description: 'Null unless nothing priced it. `no_category_bands`: the category has no price bands at all. `weight_outside`: it has bands and none covers this weight. The two are different jobs — write a price list, or extend a range.',
                 },
                 smart_price: { type: 'number' },
                 classic_price: { type: 'number' },
@@ -1502,7 +1512,7 @@ const document = {
         tags: ['Reports'],
         summary: 'List certificates',
         description:
-          'Attribute blobs are expanded to names and values in a batch, so a page costs two extra queries rather than two per row.',
+          'Attribute blobs are expanded to names and values in a batch, so a page costs two extra queries rather than two per row. Each row also carries `smart_card` and `classic_card`, read from the order line: the kind of card is what the line asked for, not a property of the certificate, and a list that offers both prints on every row offers a card nobody ordered. Both are true when the line has gone, so an orphaned certificate can still be reprinted.',
         parameters: [
           ...pageParams,
           { name: 'order_id', in: 'query', schema: { type: 'integer' }, description: 'Filter to one order, by its id.' },
@@ -1688,6 +1698,39 @@ const document = {
       },
     },
 
+    '/api/transactions/{id}': {
+      patch: {
+        tags: ['Transactions'],
+        summary: 'Amend a transaction',
+        description:
+          'Laboratory accounts only, and only a row the laboratory sent — head office is the receiver on every one of them, and a receiver rewriting what it was sent is not an amendment. `pay_mode`, `transaction_no` and `remark` describe the payment and may always change. `amount` may change only while the row is pending and stands on its own: once approved the figure is in a balance both sides have seen, and a collection against an order carries the same figure in the order paid and dues columns, so that one is changed on the order. Amending a pending row marks it unseen for the receiver, because what they are being asked to approve has moved.',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  amount: { type: 'number', minimum: 0.01 },
+                  pay_mode: { type: 'string', examples: ['cash'] },
+                  transaction_no: { type: ['string', 'null'] },
+                  remark: { type: ['string', 'null'] },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Amended.' },
+          400: errorResponse('Nothing to change, the amount is not above zero, or the amount cannot be changed on a decided row or an order collection.'),
+          403: errorResponse('Not a laboratory account, or not the sender of this transaction.'),
+          404: errorResponse('Transaction not found.'),
+          401: guarded[401],
+        },
+      },
+    },
+
     '/api/transactions/dues/{orderId}': {
       post: {
         tags: ['Transactions'],
@@ -1765,6 +1808,85 @@ const document = {
             },
           },
           400: errorResponse('Not a laboratory account, no rate configured, the base is not above zero, or a per-piece laboratory sent no piece count.'),
+          ...guarded,
+        },
+      },
+    },
+
+    '/api/transactions/commission/summary': {
+      get: {
+        tags: ['Transactions'],
+        summary: 'Commission earned, paid and due',
+        description:
+          'A laboratory sees its own figures; head office sees every laboratory summed. `accrued` is the rate applied to the orders the laboratory has delivered or taken money on — the same helper the dashboard and the laboratory list read, so the four screens cannot quote a franchise different figures. `due` is accrued less approved, floored at zero, because an overpayment is a wallet balance and not a debt. `rate`, `commission_type` and `per_piece` describe the caller own terms and are null for head office, which is on none.',
+        responses: {
+          200: {
+            description: 'Commission position.',
+            content: {
+              'application/json': {
+                schema: dataOf({
+                  type: 'object',
+                  properties: {
+                    accrued: { type: 'number', examples: [20] },
+                    paid: { type: 'number', examples: [0] },
+                    pending: { type: 'number', examples: [0], description: 'Sent, awaiting the administrator decision.' },
+                    due: { type: 'number', examples: [20] },
+                    rate: { type: ['number', 'null'], examples: [10] },
+                    commission_type: { type: ['string', 'null'], examples: ['percent'] },
+                    per_piece: { type: 'boolean' },
+                  },
+                }),
+              },
+            },
+          },
+          ...guarded,
+        },
+      },
+    },
+
+    '/api/transactions/commission/earnings': {
+      get: {
+        tags: ['Transactions'],
+        summary: 'What the commission is made of, order by order',
+        description:
+          'The accrual behind the total: every order that has been delivered or taken money on, with what was collected on it, the pieces certified, the rate, and what that comes to. Same orders, gate and rate as the summary, so the rows add up to it — each row is rounded for display and the summary rounds the sum, so a long list can differ by a paisa. A laboratory sees its own orders; head office sees every laboratory, named.',
+        parameters: [
+          { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+          { name: 'per_page', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 500 } },
+        ],
+        responses: {
+          200: {
+            description: 'Accrual lines, newest order first.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          order_id: { type: 'integer' },
+                          order_no: { type: 'string' },
+                          order_date: { type: ['string', 'null'] },
+                          status: { type: 'string' },
+                          lab_id: { type: 'integer' },
+                          lab_name: { type: ['string', 'null'] },
+                          collected: { type: 'number', description: 'The base on percentage terms.' },
+                          pieces: { type: 'integer', description: 'The base on per-piece terms.' },
+                          rate: { type: 'number' },
+                          commission_type: { type: 'string', enum: ['percent', 'per_pc'] },
+                          commission: { type: 'number' },
+                        },
+                      },
+                    },
+                    meta: { $ref: '#/components/schemas/PageMeta' },
+                  },
+                },
+              },
+            },
+          },
           ...guarded,
         },
       },

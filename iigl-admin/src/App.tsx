@@ -29,6 +29,7 @@ import Coupons from './pages/Coupons';
 import Profile from './pages/Profile';
 import Content from './pages/Content';
 import NewReport from './pages/NewReport';
+import ReportEdit from './pages/ReportEdit';
 import NewOrder from './pages/NewOrder';
 import Customers from './pages/Customers';
 import Students from './pages/Students';
@@ -129,6 +130,10 @@ function Routed() {
         <Route path="/orders/:id" element={<OrderDetail />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/reports/new" element={<NewReport />} />
+        {/* Amending an issued certificate. Its own screen rather than the
+            issuing wizard in a second mode: the order and the item are settled
+            by then, and only the stone can still change. */}
+        <Route path="/reports/:id/edit" element={<ReportEdit />} />
         <Route path="/transactions" element={<Transactions />} />
         {/* Both roles have a wallet, and the dashboard's "My wallet" tile sends
             a laboratory here. The endpoint behind it scopes to whoever asks. */}

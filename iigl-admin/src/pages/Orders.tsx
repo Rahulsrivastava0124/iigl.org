@@ -22,6 +22,7 @@ import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
 import {
   IconAction,
+  money,
   OrderChip,
   Pager,
   Panel,
@@ -142,6 +143,8 @@ export default function Orders() {
                 <TableCell>Status</TableCell>
                 <TableCell align="right">Items</TableCell>
                 <TableCell align="right">Reports</TableCell>
+                <TableCell align="right">Paid</TableCell>
+                <TableCell align="right">Due</TableCell>
                 <TableCell>Assigned to</TableCell>
                 <TableCell />
               </TableRow>
@@ -154,6 +157,11 @@ export default function Orders() {
                   o.status === 'preparing' &&
                   o.total_reports > 0 &&
                   o.reports_generated >= o.total_reports;
+                /* Money still owed on the order, as the order itself records
+                   it. `dues_amount` is a varchar and is null until the order
+                   has been settled once, so it is read as a number rather than
+                   tested for truth: the string '0.00' is not nothing. */
+                const owing = Number(o.dues_amount ?? 0) > 0;
                 return (
                 <TableRow key={o.id} hover>
                   <TableCell>{o.order_date}</TableCell>
@@ -192,6 +200,27 @@ export default function Orders() {
                       {o.total_reports}
                     </Box>
                   </TableCell>
+                  {/*
+                    What has been taken and what is left, which is the whole
+                    question on the dues list and worth knowing on the rest.
+                    Owed money reads red, as it does on the order's own page;
+                    an order square with the house is not coloured at all,
+                    because nothing is outstanding to notice.
+                  */}
+                  <TableCell align="right" className="tabular">
+                    {money(o.paid_amount)}
+                  </TableCell>
+                  <TableCell align="right" className="tabular">
+                    <Box
+                      component="span"
+                      sx={{
+                        color: owing ? 'error.main' : 'text.secondary',
+                        fontWeight: owing ? 600 : 400,
+                      }}
+                    >
+                      {money(o.dues_amount)}
+                    </Box>
+                  </TableCell>
                   <TableCell sx={{ whiteSpace: 'normal', minWidth: 120 }}>
                     {o.assigned_to_name ?? (
                       <Box component="span" sx={{ color: 'text.secondary' }}>
@@ -215,10 +244,15 @@ export default function Orders() {
                         arrow beside a finished order is a control that exists
                         to say no.
 
+                        A delivered order that still owes gets the same button.
+                        It is the whole of the dues list, and the row there used
+                        to carry nothing but that dead arrow: the one thing
+                        anybody opens that screen to do had no control on it.
+
                         Settling happens on the order's own page, where the
                         amount payable is in front of whoever takes the money.
                       */}
-                      {ready ? (
+                      {ready || owing ? (
                         <Button
                           size="small"
                           variant="contained"

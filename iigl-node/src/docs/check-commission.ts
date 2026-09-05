@@ -96,16 +96,22 @@ try {
       .execute();
     check('per piece, 7 pieces at 15', (await accruedByLab(labId, trx)).get(labId) ?? 0, 105);
 
-    // An undelivered order is not earned yet, on either set of terms.
+    // Paying and delivering are separate acts, so money taken on an order that
+    // has not been handed over is still earnings — the laboratory is holding
+    // the customer's money either way.
     await trx.updateTable('orders').set({ status: 'pending' }).where('id', '=', orderId).execute();
-    check('per piece, nothing delivered', (await accruedByLab(labId, trx)).get(labId) ?? 0, 0);
+    check('per piece, paid but undelivered', (await accruedByLab(labId, trx)).get(labId) ?? 0, 105);
+
+    // Neither delivered nor collected on: nothing has happened yet.
+    await trx.updateTable('orders').set({ paid_amount: '0' }).where('id', '=', orderId).execute();
+    check('per piece, nothing taken yet', (await accruedByLab(labId, trx)).get(labId) ?? 0, 0);
 
     // Nor is a deleted one. The dashboard filtered these out and the shared
     // helper did not, so the two screens disagreed by exactly the orders
     // somebody had cancelled.
     await trx
       .updateTable('orders')
-      .set({ status: 'delivered', deleted_at: new Date() })
+      .set({ status: 'delivered', paid_amount: '1000', deleted_at: new Date() })
       .where('id', '=', orderId)
       .execute();
     check('per piece, order deleted', (await accruedByLab(labId, trx)).get(labId) ?? 0, 0);

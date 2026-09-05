@@ -39,7 +39,7 @@ import { messageOf } from '../lib/auth';
 import { apiUrl, fileUrl } from '../lib/config';
 import GstField, { type GstRate } from '../components/GstField';
 import { useToast } from '../components/Toast';
-import { hint, money, ConfirmDialog, Dialog, FormPanel, IconAction, Pager, Panel, RowActions, SearchField, StateChip, TableFrame, Tile, ToneAction, YesNo } from '../components/ui';
+import { hint, money, ConfirmDialog, Dialog, FormPanel, IconAction, Pager, Panel, RowActions, SearchField, StateChip, TableFrame, Tile, TILE_CELL, ToneAction, YesNo } from '../components/ui';
 import type { Tone } from '../components/ui';
 import ViewIcon from '@mui/icons-material/VisibilityOutlined';
 import BilledIcon from '@mui/icons-material/ReceiptLongOutlined';
@@ -99,8 +99,8 @@ interface CourseStudents {
   totals: EnrolmentMoney;
 }
 
-/** Three to a row on a wide screen, one on a phone. */
-const MONEY_CELL = { xs: 12, sm: 4 } as const;
+/** The panel's one card width, so these read as the tiles elsewhere do. */
+const MONEY_CELL = TILE_CELL;
 
 /** Billed, paid and outstanding across every enrolment. */
 interface EnrolmentMoney {

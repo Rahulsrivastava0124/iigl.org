@@ -339,6 +339,14 @@ export interface Reports {
   carat_weight: string;
   classic_card_price: string;
   comments: string | null;
+  /**
+   * When the two price columns above stopped being Laravel's placeholder 200
+   * and 400 and became this certificate's own agreed prices. NULL on every row
+   * written before migration 031, which is priced from the live bands instead.
+   */
+  priced_at: Date | null;
+  /** The `prices` row those figures came from. Recorded, never read back. */
+  price_band_id: number | null;
   created_at: Date | null;
   description: string;
   gross_weight: string;

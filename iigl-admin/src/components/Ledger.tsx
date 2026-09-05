@@ -3,15 +3,15 @@ import BalanceIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
 import ReceivedIcon from '@mui/icons-material/SouthWestOutlined';
 import SentIcon from '@mui/icons-material/NorthEastOutlined';
 import AwaitingIcon from '@mui/icons-material/HourglassEmptyOutlined';
-import { Panel, StatusChip, TableFrame, Tile, money } from './ui';
+import { Panel, StatusChip, TableFrame, Tile, TILE_CELL, money } from './ui';
 
 /**
  * The running account: what came in, what went out, and the balance after each.
  *
- * One component because two screens show it — the Wallet, which is the account
- * itself, and the Ledger tab of Transactions, which is the same account reached
- * from the money that made it. Two renderings of one statement is two chances
- * for a column to say something different about the same rupee.
+ * Wallet's screen. It was on Transactions too, as a Ledger tab, which was the
+ * same statement over the same movements under a second name; the tab is gone
+ * and the pieces stay here, because a second rendering of one statement is a
+ * second chance for a column to say something different about the same rupee.
  */
 
 /** One line of the running account, as `/transactions/ledger` returns it. */
@@ -38,8 +38,8 @@ export interface LedgerPage {
   total: number;
 }
 
-/** Four to a row on a wide screen, two on a tablet — as the dashboard sets them. */
-const CELL = { xs: 12, sm: 6, md: 3 } as const;
+/** The panel's one card width. */
+const CELL = TILE_CELL;
 
 /**
  * The four figures that describe the account.

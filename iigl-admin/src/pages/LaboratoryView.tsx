@@ -28,6 +28,7 @@ import {
   Tile,
   commissionRate,
   money,
+  TILE_CELL,
 } from '../components/ui';
 
 /**
@@ -153,16 +154,16 @@ export default function LaboratoryView() {
       )}
 
       <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid size={{ xs: 12, sm: 4 }}>
+        <Grid size={TILE_CELL}>
             <Tile
               label="Commission"
               value={money(lab?.commission_accrued ?? 0)}
-              note="on delivered orders"
+              note="on collections"
               fill="brand"
               icon={CommissionIcon}
             />
         </Grid>
-        <Grid size={{ xs: 12, sm: 4 }}>
+        <Grid size={TILE_CELL}>
             <Tile
               label="Paid"
               value={money(lab?.commission_paid ?? 0)}
@@ -170,7 +171,7 @@ export default function LaboratoryView() {
               icon={PaidIcon}
             />
         </Grid>
-        <Grid size={{ xs: 12, sm: 4 }}>
+        <Grid size={TILE_CELL}>
             <Tile
               label="Due"
               value={money(lab?.commission_due ?? 0)}

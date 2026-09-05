@@ -21,7 +21,8 @@
     "check:nulls": "tsx src/docs/check-nulls.ts",
     "check:roles": "tsx src/docs/check-role-scope.ts",
     "dev:dist": "nodemon --watch src --ext ts,ejs,json --exec \"npm run build && npm start\"",
-    "check:soft-delete": "tsx src/docs/check-soft-delete.ts"
+    "check:soft-delete": "tsx src/docs/check-soft-delete.ts",
+    "check:price-snapshot": "tsx src/docs/check-price-snapshot.ts"
   },
   "keywords": [],
   "author": "",

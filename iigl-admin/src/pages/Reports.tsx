@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import {
   Button,
   Checkbox,
+  Link,
   Table,
   TableBody,
   TableCell,
@@ -113,7 +115,7 @@ export default function Reports() {
                 <TableCell align="right">Gross</TableCell>
                 <TableCell align="right">Carat</TableCell>
                 <TableCell>Issued</TableCell>
-                <TableCell>Print</TableCell>
+                <TableCell align="right">Print</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -128,7 +130,19 @@ export default function Reports() {
                     />
                   </TableCell>
                   <TableCell className="mono">{r.report_no}</TableCell>
-                  <TableCell className="mono">#{r.order_no}</TableCell>
+                  {/* The order by the number it is called everywhere else.
+                      `order_no` on a certificate holds the order id, so this
+                      column used to read "#9616" for an order the rest of the
+                      panel calls 202608-484662. */}
+                  <TableCell className="mono">
+                    {r.order_id ? (
+                      <Link component={RouterLink} to={`/orders/${r.order_id}`} underline="hover">
+                        {r.order_number ?? `#${r.order_no}`}
+                      </Link>
+                    ) : (
+                      '—'
+                    )}
+                  </TableCell>
                   <TableCell align="right" className="tabular">
                     {r.gross_weight}
                   </TableCell>
@@ -136,18 +150,25 @@ export default function Reports() {
                     {r.carat_weight}
                   </TableCell>
                   <TableCell>{r.created_at?.slice(0, 10) ?? '—'}</TableCell>
-                  <TableCell>
+                  {/* The cards the order asked for, and only those. Every row
+                      used to offer both, so half the buttons on this screen
+                      printed a card nobody had ordered. */}
+                  <TableCell align="right">
                     <RowActions>
-                      <IconAction
-                        label="Print smart card"
-                        icon={SmartIcon}
-                        onClick={() => printCard(r.id, 'smart')}
-                      />
-                      <IconAction
-                        label="Print classic card"
-                        icon={ClassicIcon}
-                        onClick={() => printCard(r.id, 'classic')}
-                      />
+                      {r.smart_card && (
+                        <IconAction
+                          label="Print smart card"
+                          icon={SmartIcon}
+                          onClick={() => printCard(r.id, 'smart')}
+                        />
+                      )}
+                      {r.classic_card && (
+                        <IconAction
+                          label="Print classic card"
+                          icon={ClassicIcon}
+                          onClick={() => printCard(r.id, 'classic')}
+                        />
+                      )}
                     </RowActions>
                   </TableCell>
                 </TableRow>

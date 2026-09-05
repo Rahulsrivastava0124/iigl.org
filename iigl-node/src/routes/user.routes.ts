@@ -226,9 +226,9 @@ userRoutes.get(
       The same three figures the dashboard reports, per laboratory rather than
       for one account, and read the same way so the two cannot disagree:
 
-        accrued  the laboratory's rate against its delivered orders — a
-                 percentage of what it actually collected, or a flat amount per
-                 piece, depending on the terms it is on
+        accrued  the laboratory's rate against the orders it has delivered or
+                 taken money on — a percentage of what it actually collected,
+                 or a flat amount per piece, depending on its terms
         paid     commission rows that have been approved
         due      the difference, floored at zero, because an overpayment is a
                  wallet balance and not a debt

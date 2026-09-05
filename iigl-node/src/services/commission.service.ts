@@ -1,5 +1,5 @@
 import { db } from '../db/index.js';
-import type { Kysely } from 'kysely';
+import { sql, type Kysely, type SqlBool } from 'kysely';
 import type { DB } from '../db/types.js';
 import { badRequest } from '../lib/errors.js';
 import { ROLE, type SessionUser } from '../middleware/auth.js';
@@ -163,9 +163,17 @@ export const COMMISSION_TYPE = { PERCENT: 'percent', PER_PIECE: 'per_pc' } as co
  *
  * The rate is read two ways, and which one applies is on the laboratory:
  *
- *   percent  what it collected on delivered orders, times the rate, over 100
- *   per_pc   the pieces on those orders, times the rate — the money the order
- *            was worth does not enter into it
+ *   percent  what it has collected, times the rate, over 100
+ *   per_pc   the pieces on the orders it collected on, times the rate — the
+ *            money the order was worth does not enter into it
+ *
+ * An order enters the commission books once it has been delivered *or* once
+ * money has been taken on it. Paying and delivering became separate acts, and
+ * gating this on delivery alone meant a laboratory could hold a counter full of
+ * customers' money with the commission tiles reading zero — while its own
+ * dashboard, which reads the wallet rather than this, already showed the
+ * administrator's share. The old Laravel figure applies the rate to what was
+ * received too, so this is the collection that has always been billed.
  *
  * Collected and pieces are counted in two queries rather than one join: joining
  * `order_details` to `orders` repeats each order's `paid_amount` once per line
@@ -183,6 +191,18 @@ export async function accruedByLab(
   let ratesQuery = exec.selectFrom('users').select(['id', 'commision', 'commission_type']);
   if (labId) ratesQuery = ratesQuery.where('id', '=', labId);
 
+  /*
+    Delivered, or paid on. `paid_amount` is a varchar, so it is compared as a
+    number rather than as text — as text, '50' sorts above '0' for the same
+    reason '5' does, and an order with nothing on it but an empty string would
+    read as money taken.
+  */
+  const earning = (eb: any) =>
+    eb.or([
+      eb('orders.status', '=', 'delivered'),
+      sql<SqlBool>`coalesce(orders.paid_amount, 0) + 0 > 0`,
+    ]);
+
   // A deleted order is not earnings, on either set of terms. Qualified as
   // `orders.deleted_at` because the second query reaches the table through a
   // join, where the bare column name is ambiguous.
@@ -193,7 +213,7 @@ export async function accruedByLab(
       'orders.lab_id as lab_id',
       fn.sum<number>('orders.paid_amount').as('total'),
     ])
-    .where('orders.status', '=', 'delivered')
+    .where(earning)
     .groupBy('orders.lab_id');
   if (labId) collectedQuery = collectedQuery.where('orders.lab_id', '=', labId);
 
@@ -205,7 +225,7 @@ export async function accruedByLab(
       'orders.lab_id as lab_id',
       fn.sum<number>('order_details.qty').as('total'),
     ])
-    .where('orders.status', '=', 'delivered')
+    .where(earning)
     .groupBy('orders.lab_id');
   if (labId) piecesQuery = piecesQuery.where('orders.lab_id', '=', labId);
 
@@ -230,6 +250,114 @@ export async function accruedByLab(
       return [Number(lab.id), round2(earned)] as const;
     }),
   );
+}
+
+/** One order's contribution to what a laboratory owes. */
+export interface CommissionEarning {
+  order_id: number;
+  order_no: string;
+  order_date: string | null;
+  status: string;
+  lab_id: number;
+  lab_name: string | null;
+  /** Taken on the order. The base on percentage terms. */
+  collected: number;
+  /** Pieces on it. The base on per-piece terms. */
+  pieces: number;
+  rate: number;
+  commission_type: string;
+  commission: number;
+}
+
+/**
+ * Where the accrued figure comes from, order by order.
+ *
+ * The commission screen could say a laboratory owed 30 and show an empty table
+ * underneath it, because the only list it had was of remittances — and a
+ * franchise that has never remitted has none. The number and the evidence for
+ * it were on the same screen with nothing joining them.
+ *
+ * Same orders, same gate and same rate as `accruedByLab`, so these rows add up
+ * to the tile above them: an order counts once it has been delivered or once
+ * money has been taken on it, and it is worth a share of what was collected or
+ * a flat amount per piece, on the laboratory's own terms.
+ *
+ * Rounded per order for display. The tile rounds the sum instead, so a hundred
+ * orders can leave the two a paisa apart; the tile is the figure that is owed.
+ */
+export async function commissionEarnings(
+  labId?: number,
+  limit = 100,
+  offset = 0,
+): Promise<{ entries: CommissionEarning[]; total: number }> {
+  let ratesQuery = db.selectFrom('users').select(['id', 'fullname', 'commision', 'commission_type']);
+  if (labId) ratesQuery = ratesQuery.where('id', '=', labId);
+  const rates = await ratesQuery.execute();
+  const rateOf = new Map(rates.map((r) => [Number(r.id), r]));
+
+  const earning = (eb: any) =>
+    eb.or([
+      eb('orders.status', '=', 'delivered'),
+      sql<SqlBool>`coalesce(orders.paid_amount, 0) + 0 > 0`,
+    ]);
+
+  let ordersQuery = db
+    .selectFrom('orders')
+    .select(['id', 'order_no', 'order_date', 'status', 'lab_id', 'paid_amount'])
+    .where('orders.deleted_at', 'is', null)
+    .where(earning);
+  let countQuery = db
+    .selectFrom('orders')
+    .select(db.fn.countAll().as('n'))
+    .where('orders.deleted_at', 'is', null)
+    .where(earning);
+  if (labId) {
+    ordersQuery = ordersQuery.where('orders.lab_id', '=', labId);
+    countQuery = countQuery.where('orders.lab_id', '=', labId);
+  }
+
+  const [orders, count] = await Promise.all([
+    ordersQuery.orderBy('id', 'desc').limit(limit).offset(offset).execute(),
+    countQuery.executeTakeFirstOrThrow(),
+  ]);
+
+  // Pieces for the page's orders in one query rather than one per row: a line
+  // carrying two card kinds is still one line of stones, so this is the raw
+  // quantity, the same figure the accrual sums.
+  const ids = orders.map((o) => Number(o.id));
+  const lines = ids.length
+    ? await db
+        .selectFrom('order_details')
+        .select(({ fn }) => ['order_id', fn.sum<number>('qty').as('total')])
+        .where('order_id', 'in', ids)
+        .groupBy('order_id')
+        .execute()
+    : [];
+  const piecesOf = new Map(lines.map((l) => [Number(l.order_id), Number(l.total) || 0]));
+
+  const entries = orders.map((o) => {
+    const lab = rateOf.get(Number(o.lab_id));
+    const rate = Number(lab?.commision) || 0;
+    const perPiece = lab?.commission_type === COMMISSION_TYPE.PER_PIECE;
+    const collected = Number(o.paid_amount) || 0;
+    const pieces = piecesOf.get(Number(o.id)) ?? 0;
+
+    return {
+      order_id: Number(o.id),
+      order_no: o.order_no,
+      order_date: o.order_date,
+      status: o.status,
+      lab_id: Number(o.lab_id),
+      lab_name: lab?.fullname ?? null,
+      collected,
+      pieces,
+      rate,
+      commission_type: perPiece ? COMMISSION_TYPE.PER_PIECE : COMMISSION_TYPE.PERCENT,
+      commission: round2(perPiece ? pieces * rate : (collected * rate) / 100),
+    };
+  });
+
+  return { entries, total: Number(count.n) };
 }
 
 export interface LedgerEntry {

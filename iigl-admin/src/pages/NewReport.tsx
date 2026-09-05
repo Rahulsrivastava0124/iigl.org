@@ -430,8 +430,12 @@ export default function NewReport() {
  * One grading field. An attribute marked `is_opensource` takes free text — a
  * value outside the list is added to it — so that renders as a text box rather
  * than a menu.
+ *
+ * Exported because amending a certificate grades it from the same set of
+ * fields it was issued with; a second copy of this on the edit screen is a
+ * second place for a field to start behaving differently.
  */
-function AttributeRow({
+export function AttributeRow({
   attribute,
   value,
   note,

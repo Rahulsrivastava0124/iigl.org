@@ -174,6 +174,13 @@ const cases: Case[] = [
 
   { name: 'commission as staff', method: 'POST', path: '/api/transactions/commission', as: 'staff', body: { commission_on: 100 }, expect: [400], note: 'laboratory accounts only' },
   { name: 'commission zero base', method: 'POST', path: '/api/transactions/commission', as: 'lab', body: { commission_on: 0 }, expect: [400] },
+  { name: 'amend transaction AS ADMIN', method: 'PATCH', path: '/api/transactions/1', as: 'admin', body: { remark: 'x' }, expect: [403], note: 'the receiver does not rewrite what it was sent' },
+  { name: 'amend transaction not mine', method: 'PATCH', path: '/api/transactions/1', as: 'lab', body: { remark: 'x' }, expect: [403, 404], note: 'only the sender' },
+  { name: 'amend transaction nothing sent', method: 'PATCH', path: '/api/transactions/1', as: 'lab', body: {}, expect: [400, 403, 404] },
+  { name: 'commission summary', method: 'GET', path: '/api/transactions/commission/summary', as: 'lab', expect: [200], note: 'earned, paid and due, with the laboratory own terms' },
+  { name: 'commission summary as admin', method: 'GET', path: '/api/transactions/commission/summary', as: 'admin', expect: [200], note: 'every laboratory summed; rate is null' },
+  { name: 'commission earnings', method: 'GET', path: '/api/transactions/commission/earnings', as: 'lab', expect: [200], note: 'the accrual behind the total, order by order' },
+  { name: 'commission earnings as admin', method: 'GET', path: '/api/transactions/commission/earnings', as: 'admin', expect: [200], note: 'every laboratory, named' },
   { name: 'ledger', method: 'GET', path: '/api/transactions/ledger', as: 'staff', expect: [200], note: 'must not resolve to a {id} route' },
   { name: 'ledger as admin', method: 'GET', path: '/api/transactions/ledger?user_id=1', as: 'admin', expect: [200] },
 

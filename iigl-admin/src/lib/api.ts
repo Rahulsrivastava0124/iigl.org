@@ -164,6 +164,17 @@ export interface Report {
   gross_weight: string;
   lab_id: number;
   created_at: string | null;
+  /**
+   * Which cards this certificate is for, read from the order line it belongs
+   * to — the kind is what the line asked for, not a property of the stone. The
+   * list endpoint resolves both; a certificate whose line has gone carries
+   * both, so it can still be reprinted.
+   */
+  smart_card: boolean;
+  classic_card: boolean;
+  /** `order_no` on a certificate holds the order id; these two say which is which. */
+  order_id: number | null;
+  order_number: string | null;
 }
 
 export interface Transaction {
@@ -183,6 +194,8 @@ export interface Transaction {
   remark: string | null;
   /** `public/uploads/…`, the payment proof. Render with `fileUrl`. */
   attachment: string | null;
+  /** The order a collection was taken against. Null on every other kind. */
+  order_id: number | null;
   created_at: string | null;
 }
 

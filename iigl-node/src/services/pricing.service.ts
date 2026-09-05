@@ -1,4 +1,6 @@
 import { db } from '../db/index.js';
+import type { Kysely } from 'kysely';
+import type { DB } from '../db/types.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { caratOf, gstOf, round2 } from '../lib/money.js';
 
@@ -29,8 +31,28 @@ export interface PricedCertificate {
   report_no: string;
   carat_weight: string;
   category_id: number;
+  /** What the line is for, by name. Null if the category row has gone. */
+  category_name: string | null;
   price_id: number | null;
-  price_source: 'laboratory' | 'standard' | 'unpriced';
+  /**
+   * Where the figure came from. `agreed` is the certificate's own snapshot —
+   * what it was issued at — and outranks the bands; the other two are a live
+   * band read now, which is what a certificate written before migration 031
+   * still gets.
+   */
+  price_source: 'agreed' | 'laboratory' | 'standard' | 'unpriced';
+  /**
+   * Why nothing priced it, when nothing did.
+   *
+   *   no_category_bands  the category has no price bands at all
+   *   weight_outside     it has bands, and none of them covers this weight
+   *
+   * The difference is the difference between two jobs: pricing a category
+   * nobody has priced, and extending a range that stops short. The screen used
+   * to tell everybody to widen a band, including the laboratory whose category
+   * had never had one.
+   */
+  unpriced_reason: 'no_category_bands' | 'weight_outside' | null;
   smart_price: number;
   classic_price: number;
   line_total: number;
@@ -63,8 +85,13 @@ export interface Quote {
  * `first()`, which returns the lowest primary key. Overlapping bands do exist
  * in the live data — category 2 has bands 0–1, 0–15, 1–10 and 15–20.
  */
-async function resolveBand(labId: number, categoryId: number, caratWeight: number) {
-  const bands = await db
+async function resolveBand(
+  labId: number,
+  categoryId: number,
+  caratWeight: number,
+  exec: Kysely<DB> = db,
+) {
+  const bands = await exec
     .selectFrom('prices')
     .select(['id', 'min_wt', 'max_wt', 'smart_price', 'classic_price', 'lab_id'])
     .where('category_id', '=', String(categoryId))
@@ -74,17 +101,70 @@ async function resolveBand(labId: number, categoryId: number, caratWeight: numbe
     .execute();
 
   const own = bands.find((b) => b.lab_id !== null && Number(b.lab_id) === labId);
-  if (own) return { band: own, source: 'laboratory' as const };
+  if (own) return { band: own, source: 'laboratory' as const, reason: null };
 
   const standard = bands.find((b) => b.lab_id === null);
-  if (standard) return { band: standard, source: 'standard' as const };
+  if (standard) return { band: standard, source: 'standard' as const, reason: null };
 
-  return { band: null, source: 'unpriced' as const };
+  /*
+    Nothing priced it, and the two ways that happens are not the same problem.
+    Asked only when the answer is needed, which is the rare case: a category
+    with no bands at all wants a price list written, and one whose bands stop
+    short of this weight wants a range extended.
+  */
+  const any = await exec
+    .selectFrom('prices')
+    .select('id')
+    .where('category_id', '=', String(categoryId))
+    .limit(1)
+    .executeTakeFirst();
+
+  return {
+    band: null,
+    source: 'unpriced' as const,
+    reason: any ? ('weight_outside' as const) : ('no_category_bands' as const),
+  };
 }
 
-/** Prices an order from its certificates. Read-only. */
-export async function quoteOrder(orderId: number, discount = 0): Promise<Quote> {
-  const order = await db
+/**
+ * The price to stamp on a certificate, at the moment it is written.
+ *
+ * The same band lookup the quote uses, offered to the one caller that needs an
+ * answer *before* there is anything to quote: issuing a certificate, and
+ * amending the weight on one. `exec` takes the transaction those run in, so the
+ * price is read against the rows they are writing.
+ *
+ * A weight nothing covers returns nulls rather than zeros: a certificate with
+ * no band has no agreed price, and stamping zero would freeze it at nothing —
+ * where leaving it unstamped lets a band added tomorrow price it.
+ */
+export async function agreedPriceFor(
+  labId: number,
+  categoryId: number,
+  caratWeight: number,
+  exec: Kysely<DB> = db,
+): Promise<{ smart: number; classic: number; bandId: number } | null> {
+  const { band } = await resolveBand(labId, categoryId, caratWeight, exec);
+  if (!band) return null;
+  return {
+    smart: Number(band.smart_price),
+    classic: Number(band.classic_price),
+    bandId: Number(band.id),
+  };
+}
+
+/**
+ * Prices an order from its certificates. Read-only.
+ *
+ * `exec` is the pool unless a caller hands it a transaction — which the price
+ * snapshot check does, to read a fixture it has not committed.
+ */
+export async function quoteOrder(
+  orderId: number,
+  discount = 0,
+  exec: Kysely<DB> = db,
+): Promise<Quote> {
+  const order = await exec
     .selectFrom('orders')
     .where('deleted_at', 'is', null)
     .select(['id', 'order_no', 'lab_id'])
@@ -92,7 +172,7 @@ export async function quoteOrder(orderId: number, discount = 0): Promise<Quote> 
     .executeTakeFirst();
   if (!order) throw notFound('Order not found.');
 
-  const items = await db
+  const items = await exec
     .selectFrom('order_details')
     .select(['id', 'category_id', 'smart_card', 'classic_card'])
     .where('order_id', '=', orderId)
@@ -102,9 +182,18 @@ export async function quoteOrder(orderId: number, discount = 0): Promise<Quote> 
   // column is misnamed: it stores the order id, not the order number — true
   // for all 22,103 live rows, and no row joins on the order number at all.
   const reports = items.length
-    ? await db
+    ? await exec
         .selectFrom('reports')
-        .select(['id', 'report_no', 'order_detail_id', 'carat_weight'])
+        .select([
+          'id',
+          'report_no',
+          'order_detail_id',
+          'carat_weight',
+          'smart_card_price',
+          'classic_card_price',
+          'priced_at',
+          'price_band_id',
+        ])
         .where(
           'order_detail_id',
           'in',
@@ -114,6 +203,18 @@ export async function quoteOrder(orderId: number, discount = 0): Promise<Quote> 
     : [];
 
   const itemById = new Map(items.map((i) => [Number(i.id), i]));
+
+  /* Named, not numbered: "category 3 has no price band" is a sentence nobody
+     at a counter can act on. One query over the categories this order touches. */
+  const categoryIds = [...new Set(items.map((i) => Number(i.category_id)))];
+  const categories = categoryIds.length
+    ? await exec
+        .selectFrom('categories')
+        .select(['id', 'name'])
+        .where('id', 'in', categoryIds)
+        .execute()
+    : [];
+  const categoryNames = new Map(categories.map((c) => [Number(c.id), c.name]));
   const certificates: PricedCertificate[] = [];
   let smartTotal = 0;
   let classicTotal = 0;
@@ -123,10 +224,40 @@ export async function quoteOrder(orderId: number, discount = 0): Promise<Quote> 
     if (!item) continue;
 
     const carat = caratOf(report.carat_weight);
-    const { band, source } = await resolveBand(Number(order.lab_id), Number(item.category_id), carat);
 
-    const smart = band && item.smart_card ? Number(band.smart_price) : 0;
-    const classic = band && item.classic_card ? Number(band.classic_price) : 0;
+    /*
+      The certificate's own price first.
+
+      A stone is priced when it is certified, and that price is what the
+      customer is billed. Reading the bands again on every open meant the bill
+      moved whenever a rate moved: a band edited today re-priced orders taken
+      months ago, and an account that was square grew a due nobody had created.
+      So a certificate carrying `priced_at` is billed at what it says, and the
+      bands decide nothing about it.
+
+      A certificate without one predates migration 031 — its two price columns
+      hold Laravel's placeholder 200 and 400, which are not prices — and is
+      priced from the bands exactly as before.
+    */
+    const agreed = report.priced_at !== null;
+    const { band, source, reason } = agreed
+      ? { band: null, source: 'agreed' as const, reason: null }
+      : await resolveBand(Number(order.lab_id), Number(item.category_id), carat, exec);
+
+    const smart = agreed
+      ? item.smart_card
+        ? Number(report.smart_card_price) || 0
+        : 0
+      : band && item.smart_card
+        ? Number(band.smart_price)
+        : 0;
+    const classic = agreed
+      ? item.classic_card
+        ? Number(report.classic_card_price) || 0
+        : 0
+      : band && item.classic_card
+        ? Number(band.classic_price)
+        : 0;
 
     smartTotal += smart;
     classicTotal += classic;
@@ -136,8 +267,16 @@ export async function quoteOrder(orderId: number, discount = 0): Promise<Quote> 
       report_no: report.report_no,
       carat_weight: report.carat_weight,
       category_id: Number(item.category_id),
-      price_id: band ? Number(band.id) : null,
+      category_name: categoryNames.get(Number(item.category_id)) ?? null,
+      price_id: agreed
+        ? report.price_band_id === null
+          ? null
+          : Number(report.price_band_id)
+        : band
+          ? Number(band.id)
+          : null,
       price_source: source,
+      unpriced_reason: reason,
       smart_price: smart,
       classic_price: classic,
       line_total: round2(smart + classic),
@@ -157,7 +296,7 @@ export async function quoteOrder(orderId: number, discount = 0): Promise<Quote> 
     than read from `orders.paid_amount` so it cannot disagree with the payment
     history printed beside it.
   */
-  const taken = await db
+  const taken = await exec
     .selectFrom('transactions')
     .select(({ fn }) => fn.sum<number>('amount').as('total'))
     .where('order_id', '=', orderId)
