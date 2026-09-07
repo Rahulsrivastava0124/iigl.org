@@ -9,6 +9,7 @@ import ClearIcon from '@mui/icons-material/CloseOutlined';
 import { fileUrl } from '../lib/config';
 import { messageOf } from '../lib/auth';
 import { uploadFiles } from '../lib/upload';
+import { tooLarge } from '../lib/image';
 import { isPdf } from './FilePreview';
 import { BRAND } from '../lib/theme';
 import { FRAME_CELL, Notice, toneColour } from './ui';
@@ -44,8 +45,6 @@ export interface LabDocument {
   added_at?: string;
 }
 
-/** 8 MB — the ceiling `upload.service.ts` gives multer. */
-const MAX_BYTES = 8 * 1024 * 1024;
 
 /** At most 25 entries, which is what the API accepts. */
 const MAX_DOCUMENTS = 25;
@@ -224,7 +223,8 @@ export default function DocumentAssets({
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     multiple: true,
-    maxSize: MAX_BYTES,
+    // Per file, and larger for a picture: `tooLarge` explains why.
+    validator: tooLarge,
     disabled: busy,
   });
 

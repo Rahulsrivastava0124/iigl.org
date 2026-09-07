@@ -1,6 +1,6 @@
 # IIGL API
 
-202 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
+218 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
 
 The interactive version is at `/docs` when the server is running, and the raw
 document at `/openapi.json`.
@@ -172,11 +172,11 @@ Remittances, approvals, dues collection and wallet balance.
 
 | Method | Path | Auth | Query | Body | Fails | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
-| GET | `/api/transactions` | session | `page`, `per_page`, `direction`, `status` | — | 401, 403 | List transactions |
+| GET | `/api/transactions` | session | `page`, `per_page`, `direction`, `scope`, `user_id`, `status` | — | 401, 403 | List transactions |
 | POST | `/api/transactions` | session | — | **amount**, **pay_mode**, transaction_no, transaction_type, remark, attachment | 400, 401, 403 | Send a remittance |
 | PATCH | `/api/transactions/{id}` | session | — | amount, pay_mode, transaction_no, remark | 400, 401, 403, 404 | Amend a transaction |
 | POST | `/api/transactions/{id}/status` | session | — | **status** | 400, 401, 403, 404 | Approve or decline a remittance |
-| POST | `/api/transactions/commission` | session | — | **commission_on**, pieces, pay_mode, transaction_no, remark, attachment | 400, 401, 403 | Pay commission to the administrator |
+| POST | `/api/transactions/commission` | session | — | amount, **commission_on**, pieces, pay_mode, transaction_no, remark, attachment | 400, 401, 403 | Pay commission to the administrator |
 | GET | `/api/transactions/commission/earnings` | session | `page`, `per_page` | — | 401, 403 | What the commission is made of, order by order |
 | GET | `/api/transactions/commission/summary` | session | — | — | 401, 403 | Commission earned, paid and due |
 | POST | `/api/transactions/dues/{orderId}` | session | — | **amount**, pay_mode, transaction_no, remark | 400, 401, 403, 404 | Collect dues against an order |
@@ -205,6 +205,10 @@ Laboratories, staff and account administration.
 | GET | `/api/users/me` | session | — | — | 401, 403 | Your account record |
 | PATCH | `/api/users/me` | session | — | fullname, owner_name, alt_mobile, office_tel, email, address, city, state, +24 more | 400, 401, 403, 409 | Update your own profile |
 | GET | `/api/users/staff` | session | `page`, `per_page`, `lab_id` | — | 401, 403 | List staff |
+| GET | `/api/users/staff/{id}/payslip` | session | `month`, `format` | — | 400, 401, 403 | A payslip for one month |
+| GET | `/api/users/staff/salary` | session | `month`, `lab_id` | — | 400, 401, 403 | What each employee is owed for a month |
+| POST | `/api/users/staff/salary/pay` | session | — | **emp_id**, **month**, **amount**, paid_on, pay_mode, reference, note | 400, 401, 403 | Record a salary payment |
+| GET | `/api/users/staff/salary/payments` | session | `emp_id`, `month`, `page`, `per_page` | — | 401, 403 | What has been paid, and to whom |
 
 ## Dashboard
 
@@ -301,6 +305,8 @@ Clocking in and out, breaks, and the record of both.
 | Method | Path | Auth | Query | Body | Fails | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/attendance` | session | `page`, `per_page`, `emp_id`, `from`, `to` | — | 400, 401, 403 | Attendance history |
+| POST | `/api/attendance` | session | — | **emp_id**, **date**, **clock_in**, clock_out | 400, 401, 403, 409 | Record a day that was never punched |
+| PATCH | `/api/attendance/{id}` | session | — | clock_in, clock_out, break_begin, break_end | 400, 401, 403, 404 | Correct a day |
 | POST | `/api/attendance/break` | session | — | **on_break** | 400, 401, 403 | Start or end a break |
 | POST | `/api/attendance/clock-in` | session | — | — | 401, 403, 409 | Clock in |
 | POST | `/api/attendance/clock-out` | session | — | — | 400, 401, 403, 409 | Clock out |
@@ -332,6 +338,8 @@ Views over orders, grouped by mobile number. There is no customer table.
 
 | Method | Path | Auth | Query | Body | Fails | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/customers/{mobile}/orders` | session | — | — | 400, 401, 403 | One customer's orders, and what they come to |
+| GET | `/api/customers/all` | session | `page`, `per_page`, `q` | — | 401, 403 | Every customer, registered or not |
 | GET | `/api/customers/registered` | session | `page`, `per_page` | — | 401, 403 | Customers with a GST number |
 | GET | `/api/customers/unregistered` | session | `page`, `per_page` | — | 401, 403 | Customers with no GST number |
 | GET | `/api/customers/verifiers` | session | `page`, `per_page` | — | 401, 403 | People who looked up a certificate |
@@ -396,6 +404,15 @@ The general enquiry book: questions, visits, leads and complaints.
 | POST | `/api/enquiries/{id}/followups` | session | — | note, outcome, next_follow_up_on, status | 400, 401, 403, 404 | Record a follow-up |
 | GET | `/api/enquiries/summary` | session | — | — | 401, 403 | Counts per kind and per status |
 
+## Settings
+
+| Method | Path | Auth | Query | Body | Fails | Purpose |
+| --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/holidays` | session | `from`, `to`, `lab_id` | — | 400, 401, 403 | The days the office is shut |
+| POST | `/api/holidays` | session | — | **date**, **name** | 400, 401, 403, 409 | Add a holiday |
+| PATCH | `/api/holidays/{id}` | session | — | date, name | 400, 401, 403, 404 | Change a holiday |
+| DELETE | `/api/holidays/{id}` | session | — | — | 400, 401, 403, 404 | Remove a holiday |
+
 ## Master
 
 | Method | Path | Auth | Query | Body | Fails | Purpose |
@@ -426,6 +443,15 @@ The general enquiry book: questions, visits, leads and complaints.
 | DELETE | `/api/master/states/{id}` | session | — | — | 401, 403, 404, 409 | Delete a state |
 | PATCH | `/api/master/states/{id}/active` | session | — | **is_active** | 401, 403, 404 | Retire or restore a state |
 
+## Messages
+
+| Method | Path | Auth | Query | Body | Fails | Purpose |
+| --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/messages` | session | `from`, `open`, `page`, `per_page` | — | 401, 403 | Inbox, or one person’s messages |
+| POST | `/api/messages` | session | — | **body**, kind, about_date | 400, 401, 403 | Write to your employer |
+| PATCH | `/api/messages/{id}/resolve` | session | — | resolved | 401, 403, 404 | Mark one dealt with |
+| GET | `/api/messages/employer` | session | — | — | 401, 403 | Who this account writes to |
+
 ## Settings
 
 | Method | Path | Auth | Query | Body | Fails | Purpose |
@@ -438,4 +464,4 @@ The general enquiry book: questions, visits, leads and complaints.
 
 Bold body fields are required.
 
-202 endpoints: 16 public, 186 requiring a session.
+218 endpoints: 16 public, 202 requiring a session.

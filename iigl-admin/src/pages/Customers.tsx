@@ -11,12 +11,32 @@ import {
   Typography,
 } from '@mui/material';
 import { useFetch, useDebounced } from '../lib/useFetch';
-import { Pager, Panel, SearchField, TableFrame } from '../components/ui';
+import { useAuth } from '../lib/auth';
+import { isSuper } from '../lib/portal';
+import {
+  IconAction,
+  Pager,
+  Panel,
+  RowActions,
+  SearchField,
+  TableFrame,
+  money,
+} from '../components/ui';
+import OpenIcon from '@mui/icons-material/VisibilityOutlined';
 import type { Paged } from '../lib/api';
 
-type Tab = 'registered' | 'unregistered' | 'verifiers';
+type Tab = 'all' | 'registered' | 'unregistered';
 
-const TABS: Array<{ id: Tab; label: string; note: string }> = [
+const TABS: Array<{ id: Tab; label: string; note: string; adminOnly?: boolean }> = [
+  {
+    id: 'all',
+    label: 'All Customers',
+    // Head office's list spans the network, and the GST split is not how it
+    // reads it: "who has ordered from us" is one question, and answering it
+    // meant paging two screens and adding them up.
+    adminOnly: true,
+    note: 'Everybody who has ordered, registered or not.',
+  },
   {
     id: 'registered',
     label: 'Register Customer',
@@ -26,11 +46,6 @@ const TABS: Array<{ id: Tab; label: string; note: string }> = [
     id: 'unregistered',
     label: 'Not-Register Customer',
     note: 'Customers with no GST number on any order.',
-  },
-  {
-    id: 'verifiers',
-    label: 'Verifier Customer',
-    note: 'People who looked up a certificate on the public site. The verification form never asked for a name, so all 2,142 rows carry only a number.',
   },
 ];
 
@@ -42,13 +57,12 @@ interface Customer {
   address: string | null;
   orders: number;
   last_order: string | null;
-}
-
-interface Verifier {
-  mobile: string;
-  fullname: string | null;
-  lookups: number;
-  last_lookup: string | null;
+  /** Every laboratory this number has ordered from, named and comma-separated. */
+  laboratories: string | null;
+  /** Summed over every order under the number. `due` is billed less paid. */
+  billed: number;
+  paid: number;
+  due: number;
 }
 
 /**
@@ -61,7 +75,23 @@ export default function Customers() {
   const tab = (params.get('tab') as Tab) ?? 'registered';
   const page = Number(params.get('page') ?? 1);
 
-  const current = TABS.find((t) => t.id === tab) ?? TABS[0];
+  const { user } = useAuth();
+  const admin = isSuper(user);
+
+  /* All Customers is head office's: its list spans the network. A laboratory
+     sees the two GST tabs, which is the only distinction its own data draws. */
+  const tabs = TABS.filter((t) => admin || !t.adminOnly);
+  const current = tabs.find((t) => t.id === tab) ?? tabs[0];
+
+  /*
+    All Customers has no view control.
+
+    That page is one customer's orders, and this tab is the network's list: the
+    same number can have ordered from two laboratories, so what it would open is
+    a history assembled across franchises rather than the one anybody came from.
+    The Registered and Not-Registered tabs keep it.
+  */
+  const canView = current.id !== 'all';
 
   // The term is component state rather than another URL parameter: `setPage`
   // and `setTab` below rewrite the whole query string, and a third value in it
@@ -72,8 +102,9 @@ export default function Customers() {
   const query = new URLSearchParams({ page: String(page), per_page: '25' });
   if (term.trim()) query.set('q', term.trim());
 
-  const source = useFetch<Paged<Customer & Verifier>>(`/customers/${current.id}?${query}`);
+  const source = useFetch<Paged<Customer>>(`/customers/${current.id}?${query}`);
   const rows = source.data?.data ?? [];
+
 
   const setTab = (next: Tab) => setParams(next === 'registered' ? {} : { tab: next });
   const setPage = (next: number) =>
@@ -87,8 +118,6 @@ export default function Customers() {
           : { tab, page: String(next) },
     );
 
-  const verifiers = current.id === 'verifiers';
-
   return (
     <>
       <Tabs
@@ -96,7 +125,7 @@ export default function Customers() {
         onChange={(_, v) => setTab(v)}
         sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
       >
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <Tab key={t.id} value={t.id} label={t.label} />
         ))}
       </Tabs>
@@ -120,50 +149,65 @@ export default function Customers() {
           <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>
-                {/* The verification form never captured a name, so that column
-                    would be empty on every row. */}
-                {!verifiers && <TableCell>Name</TableCell>}
+                <TableCell>Name</TableCell>
                 <TableCell>Mobile</TableCell>
-                {verifiers ? (
-                  <>
-                    <TableCell align="right">Lookups</TableCell>
-                    <TableCell>Last lookup</TableCell>
-                  </>
-                ) : (
-                  <>
-                    <TableCell>Email</TableCell>
-                    <TableCell>GST</TableCell>
-                    <TableCell align="right">Orders</TableCell>
-                    <TableCell>Last order</TableCell>
-                  </>
-                )}
+                {/* Whose customer this is. Head office reads across the
+                    network; a laboratory's list is its own by definition. */}
+                {admin && <TableCell>Laboratory</TableCell>}
+                <TableCell>Email</TableCell>
+                <TableCell>GST</TableCell>
+                <TableCell align="right">Orders</TableCell>
+                <TableCell align="right">Total amount</TableCell>
+                <TableCell align="right">Paid</TableCell>
+                <TableCell align="right">Due</TableCell>
+                <TableCell>Last order</TableCell>
+                {canView && <TableCell />}
               </TableRow>
             </TableHead>
             <TableBody>
               {rows.map((r) => (
                 <TableRow key={r.mobile} hover>
-                  {!verifiers && (
-                    <TableCell sx={{ whiteSpace: 'normal', minWidth: 160 }}>
-                      {r.customer_name || '—'}
+                  <TableCell sx={{ whiteSpace: 'normal', minWidth: 160 }}>
+                    {r.customer_name || '—'}
+                  </TableCell>
+                  <TableCell className="mono">{r.mobile}</TableCell>
+                  {admin && (
+                    <TableCell sx={{ whiteSpace: 'normal', minWidth: 150 }}>
+                      {r.laboratories || '—'}
                     </TableCell>
                   )}
-                  <TableCell className="mono">{r.mobile}</TableCell>
-                  {verifiers ? (
-                    <>
-                      <TableCell align="right" className="tabular">
-                        {r.lookups}
-                      </TableCell>
-                      <TableCell>{r.last_lookup?.slice(0, 10) ?? '—'}</TableCell>
-                    </>
-                  ) : (
-                    <>
-                      <TableCell>{r.email ?? '—'}</TableCell>
-                      <TableCell className="mono">{r.gst ?? '—'}</TableCell>
-                      <TableCell align="right" className="tabular">
-                        {r.orders}
-                      </TableCell>
-                      <TableCell>{r.last_order ?? '—'}</TableCell>
-                    </>
+                  <TableCell>{r.email ?? '—'}</TableCell>
+                  <TableCell className="mono">{r.gst ?? '—'}</TableCell>
+                  <TableCell align="right" className="tabular">
+                    {r.orders}
+                  </TableCell>
+                  <TableCell align="right" className="tabular">
+                    {money(r.billed ?? 0)}
+                  </TableCell>
+                  <TableCell align="right" className="tabular">
+                    {money(r.paid ?? 0)}
+                  </TableCell>
+                  {/* Amber only while something is owed. */}
+                  <TableCell
+                    align="right"
+                    className="tabular"
+                    sx={{ color: (r.due ?? 0) > 0 ? 'warning.main' : undefined }}
+                  >
+                    {money(r.due ?? 0)}
+                  </TableCell>
+                  <TableCell>{r.last_order ?? '—'}</TableCell>
+                  {canView && (
+                    <TableCell>
+                      {/* What they have ordered, and what it came to. The list
+                          can only say how many and when. */}
+                      <RowActions>
+                        <IconAction
+                          label="Orders and totals"
+                          icon={OpenIcon}
+                          to={`/customers/${encodeURIComponent(r.mobile)}`}
+                        />
+                      </RowActions>
+                    </TableCell>
                   )}
                 </TableRow>
               ))}

@@ -49,7 +49,20 @@ const CELL = TILE_CELL;
  * approval" and the four read as an accident rather than as one set of figures.
  */
 export function LedgerTotals({ account }: { account: LedgerPage | undefined }) {
-  const pending = account?.pending_out ?? 0;
+  /*
+    Money that has not moved yet, and whose move it is.
+
+    The tile read `pending_out` alone — what this account has sent and is
+    waiting to have approved — and so showed head office a nought while a
+    laboratory's remittance sat in the very list underneath, waiting on head
+    office to decide it. Both directions are pending; which one matters depends
+    on which end of it you are.
+
+    Incoming takes precedence because it is the one with something to do.
+  */
+  const incoming = account?.pending_in ?? 0;
+  const outgoing = account?.pending_out ?? 0;
+  const pending = incoming > 0 ? incoming : outgoing;
 
   return (
     <Grid container spacing={2} sx={{ mb: 2 }}>
@@ -73,8 +86,13 @@ export function LedgerTotals({ account }: { account: LedgerPage | undefined }) {
           colour over a zero is a warning nobody reads.
         */}
         <Tile
-          label="Awaiting approval"
+          label={incoming > 0 ? 'Awaiting your approval' : 'Awaiting approval'}
           value={money(pending)}
+          note={
+            incoming > 0 && outgoing > 0
+              ? `${money(outgoing)} of yours is waiting too`
+              : undefined
+          }
           fill={pending > 0 ? 'waiting' : 'plain'}
           icon={AwaitingIcon}
         />

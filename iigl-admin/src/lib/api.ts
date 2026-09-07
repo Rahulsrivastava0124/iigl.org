@@ -316,7 +316,10 @@ export interface DashboardSummary {
   };
   /**
    * The figures the Laravel laboratory dashboard showed. Null for head office,
-   * whose dashboard is a different screen with different quantities on it.
+   * whose dashboard is a different screen with different quantities on it —
+   * and null for an employee, who gets `mine`. What is in here is the
+   * laboratory's own business: what it owes head office, and what its staff are
+   * collectively holding.
    *
    * These are not the head-office figures scoped down: cards are counted rather
    * than orders, and the money is the laboratory's own ledger — what its staff
@@ -340,6 +343,42 @@ export interface DashboardSummary {
     admin_commission: number;
     today: {
       cards_ordered: number;
+      sale: number;
+      paid: number;
+      dues: number;
+    };
+  } | null;
+  /**
+   * One employee's own work, counted off `orders.received_by` and
+   * `transactions.received_by` — who took the order, and who took the money.
+   *
+   * Null for head office and for the laboratory account itself. Neither is
+   * somebody's front desk: a laboratory's own tiles already say what it took,
+   * at its counter and through its staff, and showing an employee those under
+   * a heading that says "my" is showing them the wrong number.
+   */
+  mine: {
+    orders_taken: number;
+    /** Cards on those orders, smart and classic together. */
+    cards_ordered: number;
+    reports_generated: number;
+    smart_generated: number;
+    classic_generated: number;
+    /** Their orders still in progress. */
+    active: number;
+    sale: number;
+    /** Money they have taken in. */
+    paid: number;
+    /** Billed on their orders, less what they have taken. Never negative. */
+    dues: number;
+    /** Handed on to their employer, and approved. */
+    transferred: number;
+    /** Still with them: taken in, plus any float, less what they handed on. */
+    wallet: number;
+    today: {
+      orders: number;
+      cards_ordered: number;
+      active: number;
       sale: number;
       paid: number;
       dues: number;

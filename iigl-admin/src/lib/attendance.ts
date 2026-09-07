@@ -43,6 +43,26 @@ export const hours = (minutes: number) =>
 /** The date a day belongs to, as the calendar keys them. */
 export const dayKey = (d: Day) => String(d.date).slice(0, 10);
 
+/** A holiday, as `GET /api/holidays` returns it. */
+export interface Holiday {
+  id: number;
+  date: string;
+  name: string;
+  /** Head office's, and so not this laboratory's to edit. */
+  shared: boolean;
+}
+
+/**
+ * A day the office was shut, as a calendar cell.
+ *
+ * Pink, and named. It is not an absence — nobody was asked to come in — and
+ * leaving it as the blank square an absence leaves is how a holiday gets
+ * queried as one at the end of the month.
+ */
+export function holidayDay(h: Holiday): CalendarDay {
+  return { tone: 'holiday', lines: [h.name], tooltip: `${h.date} · ${h.name} · office shut` };
+}
+
 /**
  * One attendance day, as a calendar cell.
  *
@@ -50,7 +70,7 @@ export const dayKey = (d: Day) => String(d.date).slice(0, 10);
  * open — the same two tones the attendance chip has always used, so a day
  * reads the same on the calendar as it does in a status column.
  */
-export function attendanceDay(d: Day): CalendarDay {
+export function attendanceDay(d: Day, holiday?: Holiday): CalendarDay {
   const open = isOpen(d);
   return {
     tone: open ? 'waiting' : 'settled',
@@ -58,6 +78,9 @@ export function attendanceDay(d: Day): CalendarDay {
     tooltip:
       `${dayKey(d)} · in ${time(d.clockIn)} · ` +
       (open ? 'still open' : `out ${time(d.clockOut)} · ${hours(minutesWorked(d))}`) +
-      (d.break_begin ? ` · break ${stamp(d.break_begin)}–${stamp(d.break_end)}` : ''),
+      (d.break_begin ? ` · break ${stamp(d.break_begin)}–${stamp(d.break_end)}` : '') +
+      // Somebody who came in on a holiday stays green — they worked — but the
+      // day still says what it was.
+      (holiday ? ` · ${holiday.name}, office shut` : ''),
   };
 }

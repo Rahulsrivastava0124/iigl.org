@@ -18,6 +18,7 @@ import { uploadRoutes } from './routes/upload.routes.js';
 import { attendanceRoutes } from './routes/attendance.routes.js';
 import { contentRoutes } from './routes/content.routes.js';
 import { customerRoutes } from './routes/customer.routes.js';
+import { messageRoutes } from './routes/message.routes.js';
 import { roleRoutes } from './routes/role.routes.js';
 import { studentRoutes } from './routes/student.routes.js';
 import { courseRoutes } from './routes/course.routes.js';
@@ -27,6 +28,7 @@ import { couponRoutes } from './routes/coupon.routes.js';
 import { fileRoutes } from './routes/file.routes.js';
 import { masterRoutes } from './routes/master.routes.js';
 import { settingsRoutes } from './routes/settings.routes.js';
+import { holidayRoutes } from './routes/holiday.routes.js';
 import { requireAuth } from './middleware/auth.js';
 import { loginLimiter, resetLimiter, verifyLogLimiter, renderLimiter } from './middleware/limits.js';
 import { openApiDocument } from './docs/openapi.js';
@@ -131,6 +133,7 @@ export function createApp() {
   app.use('/api/attendance', attendanceRoutes);
   app.use('/api/content', contentRoutes);
   app.use('/api/customers', customerRoutes);
+  app.use('/api/messages', messageRoutes);
   app.use('/api/roles', roleRoutes);
   app.use('/api/students', studentRoutes);
   app.use('/api/courses', courseRoutes);
@@ -138,6 +141,7 @@ export function createApp() {
   app.use('/api/enquiries', enquiryRoutes);
   app.use('/api/master', masterRoutes);
   app.use('/api/settings', settingsRoutes);
+  app.use('/api/holidays', holidayRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

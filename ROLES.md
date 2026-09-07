@@ -238,7 +238,7 @@ another door. `iigl-admin/src/lib/portal.ts` holds the doors; `requireAdmin` and
 | Catalogue, prices, website, roles | Yes | No | No |
 | Laboratories | All, and can create them | Own record only | No |
 | Employees | All | Own laboratory's | No |
-| Money | Every ledger | Own | Own |
+| Money | Own account by default — see below | Own | Own |
 | Students, enquiries, courses | Yes | No | No |
 | Issue a certificate | **No** — head office has no laboratory to issue against | Yes | With permission |
 
@@ -252,6 +252,35 @@ order is taken at a counter and head office has no counter, so the order queue
 is a laboratory's menu and is left off the super admin sidebar. `GET
 /api/orders` is still unscoped for role 1 and `/orders` is still a route — the
 header search lands on it — so this is emphasis in the menu, not a permission.
+
+### Money: an account's history is its own, head office included
+
+`GET /api/transactions` answers *"my transactions"* — the rows this account
+sent or received — and it answers it the same way for every role.
+
+Head office was once left unfiltered here, on the reasoning that an
+administrator may see everything. What that produced was head office's
+Transaction History listing a laboratory's own money: the collections its staff
+took at the counter, and the wallet transfers between them. Head office is a
+party to neither, and neither belongs in its history.
+
+Seeing more than your own is a different question, and is asked deliberately:
+
+```
+GET /api/transactions?scope=all      every transaction in the system
+GET /api/transactions?user_id=26     one account's history
+GET /api/transactions/ledger?user_id=26
+```
+
+Both are head office's alone, and both are **ignored** rather than refused for
+anybody else — a laboratory asking for everything is asking for its own.
+
+**"Unscoped for role 1" is not the default.** It is right for the screens that
+are *about* the network — `/commission/summary` and `/commission/earnings` sum
+every laboratory's accrual because that is the figure head office is owed — and
+wrong for every screen that shows an account its own records. When adding an
+endpoint, decide which of the two it is before writing the query, and say so in
+its docstring.
 
 ### How far a team member sees
 
@@ -326,8 +355,9 @@ never `roleId <= 2`.
 
 ### The permission list can grow
 
-The fourteen action types live in `permission_actions` rather than in a
-constant, so a new one can be added without a deployment — `POST
+The action types live in `permission_actions` rather than in a constant —
+fourteen at first, sixteen since migration 036 added `attendance` and
+`message`, so a new one can be added without a deployment — `POST
 /api/roles/actions`, head office only.
 
 **There is no button for it in the panel.** It was removed deliberately: adding
@@ -395,6 +425,22 @@ head office rather than to a laboratory.
 | Administrator-only routes | `requireAdmin` |
 | Laboratory scoping | `requireLabScope`, `assertLabOwnership` |
 | How far a team member sees | `orderVisibility()` in `iigl-node/src/services/permission.service.ts` |
+| Employer scoping — a laboratory acting on its own staff | `requireEmployer`, `assertEmploys` |
+| Whose money a screen shows | the `scope`/`user_id` branch in `iigl-node/src/routes/transaction.routes.ts` |
 
 The panel hides what a role cannot use. The API refuses it. Both are needed: the
 first is courtesy, the second is the boundary.
+
+### Two rules that have each been broken once
+
+**Read and write must be guarded alike.** `GET /api/users/{id}` was
+administrator-only while `PATCH` on the same id took `requireEmployer`, so a
+laboratory could save an employee it was not allowed to fetch — and pressing
+Edit answered *"Requires super admin access"* from the request that fills the
+form. Whoever may change a record may read it; give both the same guard and the
+same per-record check.
+
+**"Head office sees everything" is a decision, not a default.** See *Money*
+above. Ask of each new endpoint whether it is about the network or about the
+account asking, and write the answer in its docstring before writing the
+query.

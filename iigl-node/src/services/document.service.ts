@@ -485,3 +485,77 @@ export async function feeStatementPdf(enrolmentId: number, issuedBy: string): Pr
   const { renderHtmlToPdf } = await import('./pdf.service.js');
   return renderHtmlToPdf(html, { format: 'A4' });
 }
+
+
+/* --------------------------------------------------------------- payslip */
+
+const PAYSLIP_TEMPLATE = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../templates/payslip.ejs',
+);
+
+/**
+ * One employee's payslip for one month.
+ *
+ * Built from the payments themselves rather than from the arithmetic: a slip is
+ * a receipt for money that changed hands, and the salary screen's pro-rata
+ * figure is a suggestion nobody has yet agreed to. A month with no payment
+ * still renders — it says so, which is the answer to "have I been paid".
+ *
+ * The days and the monthly salary come from the payment rows, not from today's
+ * attendance: correcting a punch next week must not change a slip already
+ * handed over.
+ */
+export async function payslipHtml(empId: number, month: string): Promise<string> {
+  const employee = await db
+    .selectFrom('users')
+    .select(['id', 'fullname', 'empid', 'mobile'])
+    .where('id', '=', empId)
+    .executeTakeFirst();
+  if (!employee) throw notFound('Employee not found.');
+
+  const posting = await db
+    .selectFrom('employements')
+    .select(['salary', 'parent_id'])
+    .where('user_id', '=', empId)
+    .where('is_working', '=', '1')
+    .executeTakeFirst();
+
+  const employer = posting?.parent_id
+    ? await db
+        .selectFrom('users')
+        .select(['id', 'fullname', 'city'])
+        .where('empid', '=', posting.parent_id)
+        .executeTakeFirst()
+    : undefined;
+
+  const payments = await db
+    .selectFrom('salary_payments')
+    .select(['amount', 'paid_on', 'pay_mode', 'reference', 'note', 'days_present', 'salary_month'])
+    .where('emp_id', '=', empId)
+    .where('month', '=', month)
+    .orderBy('id')
+    .execute();
+
+  const [year, mm] = month.split('-').map(Number);
+  const daysInMonth = new Date(year, mm, 0).getDate();
+
+  return ejs.renderFile(PAYSLIP_TEMPLATE, {
+    employee,
+    employer: employer ?? { fullname: 'IIGL', city: null },
+    month,
+    payments,
+    daysInMonth,
+    // What the payments recorded, falling back to the employment for a month
+    // nothing has been paid against yet.
+    daysPresent: payments[0]?.days_present ?? 0,
+    salary: payments[0]?.salary_month ?? posting?.salary ?? 0,
+    logo: await asDataUri('public/card-logo.png'),
+  });
+}
+
+export async function payslipPdf(empId: number, month: string): Promise<Buffer> {
+  const html = await payslipHtml(empId, month);
+  const { renderHtmlToPdf } = await import('./pdf.service.js');
+  return renderHtmlToPdf(html, { format: 'A4' });
+}

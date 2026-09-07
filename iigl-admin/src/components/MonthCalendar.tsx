@@ -82,6 +82,8 @@ export default function MonthCalendar({
   subtitle,
   actions,
   dayFor,
+  onPick,
+  pickBlank,
   legend,
   note,
 }: {
@@ -92,6 +94,19 @@ export default function MonthCalendar({
   /** Controls that belong to the caller, shown before the month navigation. */
   actions?: ReactNode;
   dayFor: (date: string) => CalendarDay | null;
+  /**
+   * What pressing a day does, when anything does. A calendar with no handler
+   * stays what it was: something to read.
+   */
+  onPick?: (date: string) => void;
+  /**
+   * Whether a day with nothing on it may be pressed too.
+   *
+   * For attendance it must be: the day nobody punched is the one somebody needs
+   * to write, and it was the only kind that could not be opened. A future day
+   * is never pressable whatever this says — it has not happened.
+   */
+  pickBlank?: boolean;
   /** Chips explaining the colours, under the grid. */
   legend?: ReactNode;
   /** A line beside the legend: what a blank day means, or that it is loading. */
@@ -144,8 +159,13 @@ export default function MonthCalendar({
             const tint = day ? TONE[day.tone] : null;
             const future = date > today;
 
+            /* Something to open, or somewhere to write — but never a day
+               that has not happened. */
+            const pickable = Boolean(onPick && (day || pickBlank) && !future);
+
             const cell = (
               <Box
+                onClick={pickable ? () => onPick?.(date) : undefined}
                 sx={{
                   border: 1,
                   borderColor: tint ? tint.soft : 'divider',
@@ -154,6 +174,10 @@ export default function MonthCalendar({
                   minHeight: 74,
                   p: 1,
                   opacity: future ? 0.45 : 1,
+                  ...(pickable && {
+                    cursor: 'pointer',
+                    '&:hover': { borderColor: tint ? tint.main : 'primary.main' },
+                  }),
                   // Today is outlined rather than filled: the fill is spoken
                   // for by whether anything happened.
                   ...(date === today && { outline: '2px solid', outlineColor: 'primary.main' }),

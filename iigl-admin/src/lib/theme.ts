@@ -93,6 +93,11 @@ export const TONE = {
   // muted settled/refused tones lose that at-a-glance read. They stay separate
   // from settled/refused so that brightening a flag cannot brighten every
   // status chip and alert in the panel.
+  // A day the office was shut. Pink because it is neither good news nor bad —
+  // it is not a state somebody's day is in, it is a day nobody was asked to
+  // come in — and every other tone on the calendar already means present,
+  // still open, or absent.
+  holiday: { main: '#a0286b', on: '#ffffff', soft: '#fbe9f3' },
   yes: { main: '#20c020', on: '#ffffff', soft: '#e6f7e6' },
   no: { main: '#fb3b5c', on: '#ffffff', soft: '#feeaee' },
 } as const;

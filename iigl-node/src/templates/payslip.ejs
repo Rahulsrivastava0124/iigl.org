@@ -1,0 +1,116 @@
+<%
+/*
+  A payslip.
+
+  It states what was paid and what it was paid against, and nothing it cannot
+  stand behind: there are no deductions, allowances or tax lines in this system,
+  so there are none here. Inventing a "basic" and an "HRA" to fill a form would
+  be inventing somebody's terms of employment.
+
+  The days and the monthly salary are the ones stored on the payment, not read
+  back today: attendance can be corrected afterwards, and a receipt that changes
+  when somebody edits a punch is not a receipt.
+*/
+const money = (v) => {
+  const n = Number(v ?? 0);
+  return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+const v = (x) => (x == null || x === '' ? '' : String(x));
+const monthName = (m) => {
+  const [y, mm] = String(m).split('-').map(Number);
+  return new Date(y, mm - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+};
+const paidTotal = payments.reduce((t, p) => t + Number(p.amount || 0), 0);
+%>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Payslip — <%= v(employee.fullname) %> — <%= monthName(month) %></title>
+  <style>
+    @page { size: A4; margin: 14mm; }
+    * { box-sizing: border-box; }
+    body { font: 12px/1.5 "Helvetica Neue", Arial, sans-serif; color: #101828; margin: 0; }
+    header { display: flex; align-items: center; gap: 12px; border-bottom: 2px solid #0b1f4b; padding-bottom: 10px; }
+    header img { height: 46px; }
+    .name { font-size: 20px; font-weight: 700; color: #0b1f4b; letter-spacing: .5px; }
+    .sub { font-size: 11px; color: #667085; }
+    h1 { font-size: 15px; margin: 18px 0 2px; }
+    .period { color: #667085; font-size: 11.5px; margin-bottom: 14px; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+    .box { border: 1px solid #d0d5dd; border-radius: 6px; padding: 8px 10px; }
+    .box .k { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: #667085; }
+    .box .v { font-size: 14px; font-weight: 600; margin-top: 2px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    th, td { border: 1px solid #d0d5dd; padding: 6px 8px; text-align: left; }
+    th { background: #f2f4f7; font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    tr.total td { font-weight: 700; background: #f9fafb; }
+    .note { margin-top: 14px; font-size: 10.5px; color: #667085; }
+    .sign { margin-top: 42px; display: flex; justify-content: space-between; font-size: 11px; color: #475467; }
+    .sign div { border-top: 1px solid #98a2b3; padding-top: 4px; width: 200px; text-align: center; }
+  </style>
+</head>
+<body>
+  <header>
+    <% if (logo) { %><img src="<%= logo %>" alt=""><% } %>
+    <div>
+      <div class="name">IIGL</div>
+      <div class="sub"><%= v(employer.fullname) %><%= employer.city ? ' · ' + v(employer.city) : '' %></div>
+    </div>
+  </header>
+
+  <h1>Salary payslip</h1>
+  <div class="period"><%= monthName(month) %></div>
+
+  <div class="grid">
+    <div class="box"><div class="k">Employee</div><div class="v"><%= v(employee.fullname) %></div></div>
+    <div class="box"><div class="k">Employee ID</div><div class="v"><%= v(employee.empid) || '—' %></div></div>
+    <div class="box"><div class="k">Monthly salary</div><div class="v">&#8377; <%= money(salary) %></div></div>
+    <div class="box"><div class="k">Days present</div><div class="v"><%= daysPresent %> / <%= daysInMonth %></div></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Paid on</th>
+        <th>Mode</th>
+        <th>Reference</th>
+        <th>Note</th>
+        <th class="num">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% payments.forEach((p) => { %>
+        <tr>
+          <td><%= String(p.paid_on).slice(0, 10) %></td>
+          <td><%= v(p.pay_mode) %></td>
+          <td><%= v(p.reference) || '—' %></td>
+          <td><%= v(p.note) || '—' %></td>
+          <td class="num">&#8377; <%= money(p.amount) %></td>
+        </tr>
+      <% }) %>
+      <% if (payments.length === 0) { %>
+        <tr><td colspan="5">Nothing has been paid for this month.</td></tr>
+      <% } %>
+      <tr class="total">
+        <td colspan="4">Paid for <%= monthName(month) %></td>
+        <td class="num">&#8377; <%= money(paidTotal) %></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    This slip states what was paid and the attendance it was paid against. It
+    carries no deductions or allowances: none are recorded in this system, and a
+    figure nobody agreed is not put on a receipt. The days and the monthly
+    salary are those held on the payment, so a later correction to attendance
+    does not change a slip already issued.
+  </div>
+
+  <div class="sign">
+    <div>Employee</div>
+    <div>For <%= v(employer.fullname) %></div>
+  </div>
+</body>
+</html>

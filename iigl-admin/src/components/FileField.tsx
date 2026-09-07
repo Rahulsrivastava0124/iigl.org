@@ -10,6 +10,7 @@ import { fileUrl } from '../lib/config';
 import FilePreview, { isPdf } from './FilePreview';
 import { messageOf } from '../lib/auth';
 import { uploadFiles } from '../lib/upload';
+import { bytes, tooLarge } from '../lib/image';
 import { BRAND } from '../lib/theme';
 import { IconAction, toneColour } from './ui';
 
@@ -17,11 +18,6 @@ type Bucket =
   | 'report' | 'order' | 'signature' | 'employee'
   | 'banner' | 'icon' | 'website' | 'documentation' | 'screenshot';
 
-/**
- * 8 MB — the same ceiling `upload.service.ts` gives multer. Checked here as
- * well so an oversized file fails instantly instead of after the upload.
- */
-const MAX_BYTES = 8 * 1024 * 1024;
 
 /** How tall a shaped drop zone is. The width follows from the ratio. */
 const FRAME_HEIGHT = 200;
@@ -88,6 +84,14 @@ export default function FileField({
   const [percent, setPercent] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  /*
+    What the picture was shrunk from, said once under the field.
+
+    Not decoration: these are somebody's identity documents, and a panel that
+    quietly replaces a 4MB scan with a 300KB one should say so — the person who
+    uploaded it is the one who can tell whether it is still legible.
+  */
+  const [shrunk, setShrunk] = useState<{ before: number; after: number } | null>(null);
 
   /*
     The frame keeps its shape and stays inside its column.
@@ -112,7 +116,7 @@ export default function FileField({
       setPercent(0);
       setError(null);
       try {
-        const [stored] = await uploadFiles(bucket, [file], setPercent);
+        const [stored] = await uploadFiles(bucket, [file], setPercent, setShrunk);
         onChange(stored.path);
       } catch (e) {
         setError(messageOf(e));
@@ -147,7 +151,8 @@ export default function FileField({
   const { getRootProps, getInputProps, isDragActive, isDragReject } = useDropzone({
     onDrop,
     multiple: false,
-    maxSize: MAX_BYTES,
+    // Per file, and larger for a picture: `tooLarge` explains why.
+    validator: tooLarge,
     accept: accept === 'image/*' ? { 'image/*': [] } : undefined,
     disabled: busy,
     // The zone itself is the button; a nested one would swallow the click.
@@ -196,6 +201,7 @@ export default function FileField({
         danger
         onClick={() => {
           setError(null);
+          setShrunk(null);
           onChange(null);
         }}
       />
@@ -489,6 +495,13 @@ export default function FileField({
           sx={{ display: 'block', mt: 0.5, color: `${toneColour('refused')}.main` }}
         >
           {error}
+        </Typography>
+      )}
+
+      {/* Said only while it is worth saying: cleared when the field is. */}
+      {shrunk && value && !error && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+          Optimised from {bytes(shrunk.before)} to {bytes(shrunk.after)}.
         </Typography>
       )}
 

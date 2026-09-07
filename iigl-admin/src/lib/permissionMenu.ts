@@ -3,7 +3,7 @@
  *
  * There were three copies of this — one on the roles list, one in the roles
  * dialog, one on the role edit page — and they had drifted into three different
- * groupings with three different sets of names for the same fourteen rows.
+ * groupings with three different sets of names for the same rows.
  * Whatever the menu says has to be the same wherever it is shown, so it is
  * defined once here.
  *
@@ -58,6 +58,8 @@ export const NAMES: Record<string, string> = {
   website_enquiry: 'Enquiries',
   website_education: 'Education',
   website_report: 'Certificate lookup',
+  attendance: 'Attendance',
+  message: 'Messages',
 };
 
 export const nameFor = (action: string) =>
@@ -71,6 +73,9 @@ export const MENU: { title: string; actions: string[] }[] = [
   { title: 'Customer', actions: ['customer'] },
   { title: 'Laboratory', actions: ['laboratory'] },
   { title: 'Employee Management', actions: ['employee_management', 'admin_employee'] },
+  // What an employee does about their own working day, rather than about the
+  // laboratory's customers. Grouped as the sidebar groups them.
+  { title: 'Attendance & Messages', actions: ['attendance', 'message'] },
   { title: 'Enquiry', actions: ['visitor_book', 'website_enquiry'] },
   {
     title: 'Website Setup',

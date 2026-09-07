@@ -14,7 +14,9 @@ import SaveIcon from '@mui/icons-material/SaveOutlined';
 import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
-import { messageOf } from '../lib/auth';
+import { messageOf, useAuth } from '../lib/auth';
+import { ROLE, isSuper } from '../lib/portal';
+import Holidays from '../components/Holidays';
 import { Notice, Panel, StateChip } from '../components/ui';
 
 /**
@@ -61,6 +63,11 @@ const GROUPS: { id: string; label: string; note: string }[] = [
       'Applies to certificates issued from now on. Ones already printed keep the number they carry.',
   },
   {
+    id: 'holidays',
+    label: 'Holidays',
+    note: 'The days the office is shut.',
+  },
+  {
     id: 'session',
     label: 'Session and mail',
     note: 'How long a sign-in lasts, and where mail comes from.',
@@ -72,9 +79,16 @@ const groupOf = (s: Setting) => (s.group === 'mail' ? 'session' : s.group);
 
 export default function Settings() {
   const toast = useToast();
+  /*
+    A laboratory and its staff are sent the holiday group and nothing else, so
+    the tabs are what arrived rather than a fixed list. They read it: writing
+    settings is head office's, and the API refuses a PATCH from anybody else —
+    a Save button that 403s is worse than no Save button.
+  */
+  const { user } = useAuth();
+  const mayEdit = isSuper(user);
   const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') ?? GROUPS[0].id;
-  const group = GROUPS.find((g) => g.id === tab) ?? GROUPS[0];
+  const tab = params.get('tab') ?? '';
 
   const source = useFetch<{ data: Setting[] }>('/settings');
   const settings = source.data?.data ?? [];
@@ -120,7 +134,18 @@ export default function Settings() {
     // array is the right thing to watch.
   }, [source.data]);
 
+  /*
+    Only the groups something was actually sent for — plus Holidays, which is a
+    table of its own rather than a set of settings, and so arrives on nobody's
+    settings list. Everybody sees it: staff read the calendar they work to.
+  */
+  const groups = GROUPS.filter(
+    (g) => g.id === 'holidays' || settings.some((s) => groupOf(s) === g.id),
+  );
+  const group = groups.find((g) => g.id === tab) ?? groups[0] ?? GROUPS[0];
+
   const shown = settings.filter((s) => groupOf(s) === group.id);
+
   const changed = shown.filter((s) => (draft[s.key] ?? '') !== s.value);
 
   const save = async () => {
@@ -157,14 +182,22 @@ export default function Settings() {
     <>
       <Tabs
         value={group.id}
-        onChange={(_, v) => setParams(v === GROUPS[0].id ? {} : { tab: v })}
+        onChange={(_, v) => setParams(v === groups[0]?.id ? {} : { tab: v })}
         sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
       >
-        {GROUPS.map((g) => (
+        {groups.map((g) => (
           <Tab key={g.id} value={g.id} label={g.label} />
         ))}
       </Tabs>
 
+      {group.id === 'holidays' ? (
+        <Holidays
+          // Staff read; the two employer roles keep a list. Head office's is
+          // the shared one, a laboratory's is its own.
+          canWrite={(user?.roleId ?? 0) === ROLE.SUPER || user?.roleId === ROLE.LAB}
+          headOffice={mayEdit}
+        />
+      ) : (
       <Panel title={group.label} subtitle={group.note}>
         {source.error && <Notice kind="error">{source.error}</Notice>}
 
@@ -225,8 +258,9 @@ export default function Settings() {
                 // caused it rather than in a toast that is gone by the time
                 // somebody looks back at the box.
                 error={s.key === 'mail.smtp_url' && smtp?.ok === false}
+                disabled={!mayEdit}
                 multiline={s.kind === 'multiline'}
-                minRows={s.kind === 'multiline' ? 2 : undefined}
+                minRows={s.kind !== 'multiline' ? undefined : s.key === 'holidays.list' ? 10 : 2}
                 sx={s.kind === 'multiline' ? { gridColumn: '1 / -1' } : undefined}
                 helperText={
                   // What the mail server said wins the space: it is the thing
@@ -254,19 +288,29 @@ export default function Settings() {
             clearing the session length should know it goes back to two days
             and not to nothing.
           */}
-          {shown.some((s) => !s.secret && s.fallback) && (
+          {shown.some((s) => !s.secret && s.fallback && s.kind !== 'multiline') && (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
               Clear a field to put it back to its default
               {' — '}
               {shown
-                .filter((s) => !s.secret && s.fallback)
+                .filter((s) => !s.secret && s.fallback && s.kind !== 'multiline')
                 .map((s) => `${s.label}: ${s.fallback}`)
                 .join(' · ')}
               .
             </Typography>
           )}
 
-          <Stack direction="row" spacing={1} sx={{ mt: 2.5, justifyContent: 'flex-end' }}>
+          {!mayEdit && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
+              Head office keeps this list. Ask them to change it.
+            </Typography>
+          )}
+
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ mt: 2.5, justifyContent: 'flex-end', display: mayEdit ? 'flex' : 'none' }}
+          >
             <Button
               variant="contained"
               startIcon={<SaveIcon />}
@@ -278,6 +322,7 @@ export default function Settings() {
           </Stack>
         </Box>
       </Panel>
+      )}
     </>
   );
 }

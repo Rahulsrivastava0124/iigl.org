@@ -11,6 +11,18 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   ? ColumnType<S, I | undefined, U>
   : ColumnType<T, T | undefined, T>;
 
+export type Json = ColumnType<JsonValue, string, string>;
+
+export type JsonArray = JsonValue[];
+
+export type JsonObject = {
+  [x: string]: JsonValue | undefined;
+};
+
+export type JsonPrimitive = boolean | number | string | null;
+
+export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
+
 export interface Attendances {
   break_begin: string | null;
   break_end: string | null;
@@ -119,6 +131,15 @@ export interface Categories {
   updated_at: Date | null;
 }
 
+export interface Countries {
+  code: string | null;
+  created_at: Date | null;
+  id: Generated<number>;
+  is_active: Generated<number>;
+  name: string;
+  updated_at: Date | null;
+}
+
 export interface CouponRedemptions {
   code: string;
   coupon_id: number;
@@ -137,13 +158,13 @@ export interface CouponRedemptions {
 
 export interface Courses {
   added_by: number | null;
-  gst_id: number | null;
-  gst_percent: string | null;
   code: string | null;
   created_at: Date | null;
   description: string | null;
   duration: string | null;
   fee: Generated<Decimal>;
+  gst_id: number | null;
+  gst_percent: Decimal | null;
   id: Generated<number>;
   is_active: Generated<number>;
   name: string;
@@ -169,6 +190,15 @@ export interface DiscountCoupons {
   used_count: Generated<number>;
   valid_from: Date | null;
   valid_to: Date | null;
+}
+
+export interface Districts {
+  created_at: Date | null;
+  id: Generated<number>;
+  is_active: Generated<number>;
+  name: string;
+  state_id: number;
+  updated_at: Date | null;
 }
 
 export interface Employements {
@@ -221,6 +251,16 @@ export interface EnquiryFollowups {
   updated_at: Date | null;
 }
 
+export interface EnquiryTypes {
+  code: string;
+  created_at: Date | null;
+  id: Generated<number>;
+  is_active: Generated<number>;
+  label: string;
+  sort: Generated<number>;
+  updated_at: Date | null;
+}
+
 export interface FailedJobs {
   connection: string;
   exception: string;
@@ -241,14 +281,24 @@ export interface Formlayouts {
   updated_at: Date | null;
 }
 
+export interface GstRates {
+  created_at: Date | null;
+  id: Generated<number>;
+  is_active: Generated<number>;
+  name: string;
+  percent: Generated<Decimal>;
+  updated_at: Date | null;
+}
+
 export interface Holidays {
   created_at: Date | null;
   date: Date;
   id: Generated<number>;
+  lab_id: Generated<number>;
   occasion: string;
-  status: number;
+  status: Generated<number>;
   updated_at: Date | null;
-  userid: number;
+  userid: Generated<number>;
 }
 
 export interface Migrations {
@@ -321,11 +371,11 @@ export interface PermissionActions {
 }
 
 export interface Prices {
-  gst_id: number | null;
-  gst_percent: string | null;
   category_id: string;
   classic_price: number;
   created_at: Date | null;
+  gst_id: number | null;
+  gst_percent: Decimal | null;
   id: Generated<number>;
   lab_id: string | null;
   max_wt: number;
@@ -339,14 +389,6 @@ export interface Reports {
   carat_weight: string;
   classic_card_price: string;
   comments: string | null;
-  /**
-   * When the two price columns above stopped being Laravel's placeholder 200
-   * and 400 and became this certificate's own agreed prices. NULL on every row
-   * written before migration 031, which is priced from the live bands instead.
-   */
-  priced_at: Date | null;
-  /** The `prices` row those figures came from. Recorded, never read back. */
-  price_band_id: number | null;
   created_at: Date | null;
   description: string;
   gross_weight: string;
@@ -357,6 +399,8 @@ export interface Reports {
   lab_id: number;
   order_detail_id: string;
   order_no: string;
+  price_band_id: number | null;
+  priced_at: Date | null;
   report_no: string;
   size: string | null;
   smart_card_price: string;
@@ -413,11 +457,59 @@ export interface Roles {
   updated_at: Date | null;
 }
 
+export interface SalaryPayments {
+  amount: Decimal;
+  created_at: Date | null;
+  days_present: number | null;
+  emp_id: number;
+  id: Generated<number>;
+  month: string;
+  note: string | null;
+  paid_by: number;
+  paid_on: Date;
+  pay_mode: Generated<string>;
+  reference: string | null;
+  salary_month: Decimal | null;
+  updated_at: Date | null;
+}
+
 export interface SchemaMigrations {
   applied_at: Generated<Date>;
   checksum: string;
   name: string;
   statements: number;
+}
+
+export interface Settings {
+  created_at: Date | null;
+  id: Generated<number>;
+  key: string;
+  updated_at: Date | null;
+  updated_by: number | null;
+  value: string | null;
+}
+
+export interface StaffMessages {
+  about_date: Date | null;
+  body: string;
+  created_at: Date | null;
+  from_user: number;
+  id: Generated<number>;
+  kind: Generated<string>;
+  resolved_at: Date | null;
+  resolved_by: number | null;
+  to_user: number;
+  updated_at: Date | null;
+}
+
+export interface States {
+  code: string | null;
+  country_id: number;
+  created_at: Date | null;
+  id: Generated<number>;
+  is_active: Generated<number>;
+  name: string;
+  updated_at: Date | null;
 }
 
 export interface StudentCertificates {
@@ -450,6 +542,8 @@ export interface StudentCourses {
   fee: Generated<Decimal>;
   fee_paid: Generated<Decimal>;
   final_fee: Generated<Decimal>;
+  gst_amount: Generated<Decimal>;
+  gst_percent: Generated<Decimal>;
   id: Generated<number>;
   remark: string | null;
   result: string | null;
@@ -457,8 +551,6 @@ export interface StudentCourses {
   status: Generated<string>;
   student_id: number;
   updated_at: Date | null;
-  gst_amount: Generated<string>;
-  gst_percent: Generated<string>;
 }
 
 export interface StudentEnquiries {
@@ -579,12 +671,10 @@ export interface Users {
   company_logo: string | null;
   country: string | null;
   created_at: Date | null;
-  documentation: string | null;
-  // JSON. Read back parsed by the driver, written as a string, so the two
-  // directions are different types and the column says so.
-  documents: ColumnType<unknown, string | null, string | null> | null;
   dl_no: string | null;
   dl_photo: string | null;
+  documentation: string | null;
+  documents: Json | null;
   email: string | null;
   empid: string | null;
   fax: string | null;
@@ -599,13 +689,13 @@ export interface Users {
   owner_name: string | null;
   pan_no: string | null;
   pan_photo: string | null;
+  parent_id: string | null;
   passport_no: string | null;
   passport_photo: string | null;
-  parent_id: string | null;
   password: string;
   pincode: string | null;
   profile_photo: string | null;
-  registration_fee: string | null;
+  registration_fee: Decimal | null;
   remember_token: string | null;
   role_id: number | null;
   signature: string | null;
@@ -629,62 +719,6 @@ export interface Websites {
   updated_at: Date | null;
 }
 
-export interface GstRates {
-  created_at: Date | null;
-  id: Generated<number>;
-  is_active: Generated<number>;
-  name: string;
-  percent: Generated<string>;
-  updated_at: Date | null;
-}
-
-export interface EnquiryTypes {
-  code: string;
-  created_at: Date | null;
-  id: Generated<number>;
-  is_active: Generated<number>;
-  label: string;
-  sort: Generated<number>;
-  updated_at: Date | null;
-}
-
-export interface Countries {
-  code: string | null;
-  created_at: Date | null;
-  id: Generated<number>;
-  is_active: Generated<number>;
-  name: string;
-  updated_at: Date | null;
-}
-
-export interface States {
-  code: string | null;
-  country_id: number;
-  created_at: Date | null;
-  id: Generated<number>;
-  is_active: Generated<number>;
-  name: string;
-  updated_at: Date | null;
-}
-
-export interface Districts {
-  created_at: Date | null;
-  id: Generated<number>;
-  is_active: Generated<number>;
-  name: string;
-  state_id: number;
-  updated_at: Date | null;
-}
-
-export interface Settings {
-  created_at: Date | null;
-  id: Generated<number>;
-  key: string;
-  updated_at: Date | null;
-  updated_by: number | null;
-  value: string | null;
-}
-
 export interface DB {
   attendances: Attendances;
   attribute_values: AttributeValues;
@@ -693,14 +727,18 @@ export interface DB {
   blogs: Blogs;
   branches: Branches;
   categories: Categories;
+  countries: Countries;
   coupon_redemptions: CouponRedemptions;
   courses: Courses;
   discount_coupons: DiscountCoupons;
+  districts: Districts;
   employements: Employements;
   enquiries: Enquiries;
   enquiry_followups: EnquiryFollowups;
+  enquiry_types: EnquiryTypes;
   failed_jobs: FailedJobs;
   formlayouts: Formlayouts;
+  gst_rates: GstRates;
   holidays: Holidays;
   migrations: Migrations;
   order_details: OrderDetails;
@@ -713,7 +751,11 @@ export interface DB {
   reporttypes: Reporttypes;
   role_permissions: RolePermissions;
   roles: Roles;
+  salary_payments: SalaryPayments;
   schema_migrations: SchemaMigrations;
+  settings: Settings;
+  staff_messages: StaffMessages;
+  states: States;
   student_certificates: StudentCertificates;
   student_courses: StudentCourses;
   student_enquiries: StudentEnquiries;
@@ -724,10 +766,4 @@ export interface DB {
   user_permissions: UserPermissions;
   users: Users;
   websites: Websites;
-  countries: Countries;
-  districts: Districts;
-  enquiry_types: EnquiryTypes;
-  gst_rates: GstRates;
-  states: States;
-  settings: Settings;
 }

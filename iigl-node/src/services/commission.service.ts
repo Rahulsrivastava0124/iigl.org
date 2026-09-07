@@ -38,7 +38,19 @@ const STATUS = { PENDING: 0, APPROVED: 1, DECLINED: 2 } as const;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export interface CommissionInput {
-  commission_on: number;
+  /**
+   * What is being sent.
+   *
+   * Given, it is the payment: a laboratory settling its account types the
+   * figure it is actually transferring, and head office approves or declines
+   * it — which is the check that matters, since nothing moves until it does.
+   *
+   * Absent, the amount is still worked out from the laboratory's own terms, so
+   * the endpoint remains usable without the panel.
+   */
+  amount?: number;
+  /** The collection the commission is reckoned against. Context, when `amount` is given. */
+  commission_on?: number;
   /** Pieces certified, for a laboratory paid per piece rather than a percentage. */
   pieces?: number;
   pay_mode?: string;
@@ -49,9 +61,27 @@ export interface CommissionInput {
 
 export function validateCommissionInput(body: unknown): CommissionInput {
   const b = (body ?? {}) as Record<string, unknown>;
-  const base = Number(b.commission_on);
-  if (!Number.isFinite(base) || base <= 0) {
-    throw badRequest('Enter the collected amount the commission is calculated on.');
+
+  let amount: number | undefined;
+  if (b.amount !== undefined && b.amount !== null && b.amount !== '') {
+    amount = Number(b.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw badRequest('Enter an amount above zero.');
+    }
+  }
+
+  // The base is required only when it is doing the arithmetic. With an amount
+  // in hand it is context, and a laboratory paying off an old balance has no
+  // single collection to name.
+  let base: number | undefined;
+  if (b.commission_on !== undefined && b.commission_on !== null && b.commission_on !== '') {
+    base = Number(b.commission_on);
+    if (!Number.isFinite(base) || base <= 0) {
+      throw badRequest('The collected amount must be above zero.');
+    }
+  }
+  if (amount === undefined && base === undefined) {
+    throw badRequest('Enter the amount to send, or the collected amount it is calculated on.');
   }
 
   // Only meaningful for a per-piece laboratory, and checked here rather than
@@ -65,6 +95,7 @@ export function validateCommissionInput(body: unknown): CommissionInput {
   }
 
   return {
+    amount,
     commission_on: base,
     pieces,
     pay_mode: b.pay_mode ? String(b.pay_mode) : 'cash',
@@ -99,32 +130,47 @@ export async function sendCommission(
     .executeTakeFirstOrThrow();
 
   const rate = Number(lab.commision ?? 0);
-  if (rate <= 0) {
-    throw badRequest('No commission rate is set for this laboratory. Ask the administrator to set one.');
-  }
+  const perPiece = lab.commission_type === COMMISSION_TYPE.PER_PIECE;
 
   /*
-    The rate is read on the laboratory's own terms. A percentage applies to the
-    collected base; a per-piece rate applies to the pieces, and the collected
-    amount is recorded beside it as context rather than being multiplied by
-    anything. A per-piece laboratory that sends no piece count is refused: the
-    alternative is charging it a percentage of its takings, which is not the
-    agreement it signed.
+    What is being sent.
+
+    A stated amount is taken as given: this is a payment, and a laboratory
+    settling its account knows what it is transferring — an old balance, a part
+    payment, a round figure agreed on the phone. Nothing moves on it until head
+    office approves the row, which is the check that matters.
+
+    Without one the amount is still derived from the laboratory's own terms — a
+    percentage of the collection, or a flat rate for each piece — so the
+    endpoint works without a form in front of it, and so a rate that has been
+    configured is not simply ignored.
   */
-  const perPiece = lab.commission_type === COMMISSION_TYPE.PER_PIECE;
-  if (perPiece && !input.pieces) {
-    throw badRequest('This laboratory is paid per piece. Send the number of pieces certified.');
+  let amount: number;
+  if (input.amount !== undefined) {
+    amount = round2(input.amount);
+  } else {
+    if (rate <= 0) {
+      throw badRequest(
+        'No commission rate is set for this laboratory, so an amount cannot be worked out. Send the amount, or ask the administrator to set a rate.',
+      );
+    }
+    if (perPiece && !input.pieces) {
+      throw badRequest('This laboratory is paid per piece. Send the number of pieces certified, or the amount.');
+    }
+    amount = round2(
+      perPiece ? (input.pieces ?? 0) * rate : ((input.commission_on ?? 0) * rate) / 100,
+    );
   }
 
-  const amount = round2(
-    perPiece ? (input.pieces ?? 0) * rate : (input.commission_on * rate) / 100,
-  );
+  if (amount <= 0) throw badRequest('There is nothing to send.');
 
   const result = await db
     .insertInto('transactions')
     .values({
       amount: String(amount),
-      comission_on: input.commission_on,
+      // Null when the payment names no single collection: an account settled
+      // in one figure is not reckoned against one order's takings.
+      comission_on: input.commission_on ?? null,
       transaction_type: TRANSACTION_TYPE.COMMISSION,
       pay_mode: input.pay_mode ?? 'cash',
       transaction_no: input.transaction_no,
@@ -143,7 +189,7 @@ export async function sendCommission(
 
   return {
     id: Number(result.insertId),
-    commission_on: input.commission_on,
+    commission_on: input.commission_on ?? 0,
     rate,
     commission_type: perPiece ? COMMISSION_TYPE.PER_PIECE : COMMISSION_TYPE.PERCENT,
     amount,

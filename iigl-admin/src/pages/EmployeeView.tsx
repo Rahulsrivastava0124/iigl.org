@@ -1,16 +1,27 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import { Avatar, Box, Stack, Typography } from '@mui/material';
+import {
+  Avatar,
+  Box,
+  Grid,
+  Stack,
+  Typography,
+} from '@mui/material';
 import PresentIcon from '@mui/icons-material/EventAvailableOutlined';
 import OpenIcon from '@mui/icons-material/HourglassEmptyOutlined';
 import HoursIcon from '@mui/icons-material/AccessTimeOutlined';
+import HolidayIcon from '@mui/icons-material/CelebrationOutlined';
 import { fileUrl } from '../lib/config';
 import { useFetch } from '../lib/useFetch';
 import MonthCalendar, { monthRange, thisMonth } from '../components/MonthCalendar';
-import { Panel, StateChip, Tile, YesNo, attendanceState } from '../components/ui';
-import { attendanceDay, dayKey, hours, isOpen, minutesWorked } from '../lib/attendance';
-import type { Day } from '../lib/attendance';
+import { Panel, Tile, YesNo } from '../components/ui';
+import { attendanceDay, dayKey, holidayDay, hours, isOpen, minutesWorked } from '../lib/attendance';
+import AttendanceEdit from '../components/AttendanceEdit';
+import StaffInbox from '../components/StaffInbox';
+import SalaryHistory from '../components/SalaryHistory';
+import { useAuth } from '../lib/auth';
+import type { Day, Holiday } from '../lib/attendance';
 import type { Paged } from '../lib/api';
 
 interface Employment {
@@ -84,12 +95,28 @@ export default function EmployeeView() {
     id ? `/attendance?emp_id=${id}&from=${from}&to=${to}&per_page=200` : null,
   );
 
+  /* The days the office was shut — head office's list and this laboratory's. */
+  const holidays = useFetch<{ data: Holiday[] }>(`/holidays?from=${from}&to=${to}`);
+  const holidayOn = new Map((holidays.data?.data ?? []).map((h) => [h.date, h]));
+
   const recorded = days.data?.data ?? [];
   const byDate = new Map(recorded.map((d) => [dayKey(d), d]));
   const stillOpen = recorded.filter(isOpen).length;
   const workedMinutes = recorded.reduce((total, d) => total + minutesWorked(d), 0);
 
   const p = person.data?.data;
+
+  /*
+    Correcting a day is the employer's, not the employee's: a person editing
+    their own attendance is a person writing their own timesheet, and the API
+    refuses it either way. This screen belongs to whoever employs them, so
+    anybody who is not the person on it may correct a day here.
+  */
+  const { user } = useAuth();
+  const mayCorrect = Boolean(user && p && user.id !== p.id);
+  /** The day being corrected or written, as a date. Its record may not exist. */
+  const [editing, setEditing] = useState<string | null>(null);
+
   const roleName =
     p && p.role_id !== null
       ? (roles.data?.data.find((r) => r.id === p.role_id)?.role_name ?? `role ${p.role_id}`)
@@ -143,7 +170,7 @@ export default function EmployeeView() {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' },
+          gridTemplateColumns: { xs: '1fr', sm: 'repeat(4, 1fr)' },
           gap: 2,
           mb: 2,
         }}
@@ -163,30 +190,84 @@ export default function EmployeeView() {
           tone={stillOpen > 0 ? 'waiting' : 'plain'}
         />
         <Tile label="Hours worked" value={hours(workedMinutes)} icon={HoursIcon} />
+        <Tile
+          label="Holidays"
+          value={String(holidayOn.size)}
+          note="office shut"
+          icon={HolidayIcon}
+          tone={holidayOn.size > 0 ? 'holiday' : 'plain'}
+        />
       </Box>
 
+      {/*
+        The month, and what it has to say about itself.
+
+        Half and half: the grid answers "what did the month look like", the
+        column beside it answers "what needs fixing", and neither is legible
+        inside the other — an absence is a blank square, and a blank square
+        explains nothing.
+      */}
+      <Grid container spacing={2} sx={{ alignItems: 'flex-start' }}>
+        <Grid size={{ xs: 12, lg: 6 }}>
       <MonthCalendar
         value={month}
         onChange={setMonth}
         subtitle="Attendance"
         dayFor={(date) => {
           const record = byDate.get(date);
-          return record ? attendanceDay(record) : null;
+          const shut = holidayOn.get(date);
+          // Attendance wins the colour: somebody who came in on a holiday
+          // worked, and a pink square would say they did not.
+          if (record) return attendanceDay(record, shut);
+          return shut ? holidayDay(shut) : null;
         }}
-        legend={
-          <>
-            <StateChip {...attendanceState(true)} />
-            <StateChip {...attendanceState(false)} />
-          </>
-        }
-        note={
-          days.loading
-            ? 'Loading the month…'
-            : recorded.length === 0
-              ? 'No attendance recorded this month.'
-              : 'A blank day is one with no attendance recorded.'
-        }
+        /*
+          Any day that has already happened, recorded or not. A day nobody
+          punched is exactly the one somebody needs to write — it was blank and
+          unpressable, which is the wrong way round.
+        */
+        onPick={mayCorrect ? (date) => setEditing(date) : undefined}
+        pickBlank={mayCorrect}
+        /*
+          No legend. The cells carry their own times and the colour follows
+          them — green closed, amber still open — so the chips restated what the
+          grid above already showed, and the note explained an empty square.
+        */
+        note={days.loading ? 'Loading the month…' : undefined}
       />
+
+        </Grid>
+
+        <Grid size={{ xs: 12, lg: 6 }}>
+          {/*
+            What they have written, not what the sheet implies. An inbox is
+            somebody's own words — "I forgot to punch out on Tuesday", "I need
+            Friday off" — and it sits beside the attendance because that is
+            nearly always what it is about.
+          */}
+          <StaffInbox from={Number(id)} title="Messages and requests" />
+        </Grid>
+      </Grid>
+
+      {/*
+        What they have actually been paid, every month of it, with each month's
+        payslip on its own row. The salary screen shows one month across
+        everybody; this is the other cut of the same record — one person, all
+        the way back — and it is the only place an old month's payslip can be
+        reached.
+      */}
+      <SalaryHistory empId={Number(id)} title="Salary paid" sx={{ mt: 2 }} />
+
+      {editing && (
+        <AttendanceEdit
+          day={byDate.get(editing) ?? null}
+          date={editing}
+          empId={Number(id)}
+          name={p?.fullname}
+          onClose={() => setEditing(null)}
+          onSaved={days.reload}
+        />
+      )}
     </>
   );
 }

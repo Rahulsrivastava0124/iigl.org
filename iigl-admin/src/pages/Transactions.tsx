@@ -15,6 +15,7 @@ import {
   Typography,
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
+import FileField from '../components/FileField';
 import { useToast } from '../components/Toast';
 import { useFetch, useDebounced } from '../lib/useFetch';
 import { api } from '../lib/api';
@@ -122,68 +123,42 @@ export default function Transactions() {
   const canPay = commissionOnly && isLab(user) && (position?.rate ?? 0) > 0;
 
   const [paying, setPaying] = useState(false);
-  /** What is being sent, on percentage terms. The base is worked out from it. */
-  const [payAmount, setPayAmount] = useState('');
-  const [base, setBase] = useState('');
-  const [pieces, setPieces] = useState('');
+  /**
+   * Paying commission: the amount, a reference, and the proof.
+   *
+   * The dialog asks for what is being transferred and nothing else. It used to
+   * ask for the pieces certified, or the takings the share was reckoned on, and
+   * derive the amount from the laboratory's configured rate — correct
+   * arithmetic and the wrong question: a laboratory settling its account knows
+   * the figure it is sending, and often it is an old balance or a round number
+   * agreed on the phone that no single collection explains.
+   *
+   * Nothing moves on the strength of what is typed here. The row is raised
+   * pending, and head office approves or declines it.
+   */
   const [payMode, setPayMode] = useState('cash');
+  const [payAmount, setPayAmount] = useState('');
   const [reference, setReference] = useState('');
+  const [proof, setProof] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
   /*
-    What the payment will come to, on this laboratory's own terms — a share of
-    what it collected, or a flat amount for each piece. Shown before it is sent
-    because the API derives the amount from the configured rate and ignores any
-    figure the browser offers: without this the dialog would take a number and
-    record a different one.
+    Cash has no reference and no screenshot — it was counted, and the receipt is
+    the transaction row itself. Every other method leaves a trace somewhere,
+    which is the thing head office approves the payment against, so the two
+    fields appear once the method says there is one.
   */
-  const rate = position?.rate ?? 0;
+  const traceable = payMode !== 'cash';
 
-  /*
-    The figure the dialog is about is the commission, not the takings it is a
-    share of. On percentage terms it is typed directly and the base is worked
-    back from it, because a laboratory paying 30 should type 30 — it read 300
-    in the field and 30 underneath, which is the wrong way round and looks like
-    a bill for ten times the money.
+  const amount = Math.round((Number(payAmount) || 0) * 100) / 100;
 
-    Per-piece terms are already in the right currency: the pieces are the thing
-    counted, and the amount follows from them.
-  */
-  const amount = position?.per_piece
-    ? Math.round((Number(pieces) || 0) * rate * 100) / 100
-    : Math.round((Number(payAmount) || 0) * 100) / 100;
-
-  /* What the API is told the commission was calculated on. Derived, so the
-     amount it computes from the rate is the amount shown here. */
-  const commissionOn =
-    position?.per_piece
-      ? Math.round((Number(base) || 0) * 100) / 100
-      : rate > 0
-        ? Math.round((amount * 100 * 100) / rate) / 100
-        : 0;
-
-  /*
-    Opened on the figure the laboratory came here to pay.
-
-    The API derives the amount from the base — the takings on a percentage, the
-    pieces on per-piece terms — so paying an outstanding 30 at 10% meant working
-    back to a base of 300 and typing that. An empty base is an amount of zero,
-    which left the Send button dead with nothing on the dialog saying why, and
-    the payment that should have been in the list below was never sendable.
-
-    So the base is filled in to settle exactly what is owed, and is editable for
-    a laboratory paying part of it.
-  */
+  /** Opened on what is outstanding; editable for a part payment. */
   const openPay = () => {
     const due = position?.due ?? 0;
-    if (position?.per_piece) {
-      setPieces(rate > 0 ? String(Math.round(due / rate)) : '');
-      // Recorded beside the pieces as context, and the API insists on a figure
-      // above zero: what the certified pieces were collected against.
-      setBase(due > 0 ? String(due) : '');
-    } else {
-      setPayAmount(due > 0 ? String(due) : '');
-    }
+    setPayMode('cash');
+    setPayAmount(due > 0 ? String(due) : '');
+    setReference('');
+    setProof(null);
     setPaying(true);
   };
 
@@ -191,17 +166,18 @@ export default function Transactions() {
     setSending(true);
     try {
       await api.post('/transactions/commission', {
-        commission_on: commissionOn,
-        pieces: position?.per_piece ? Number(pieces) : undefined,
+        amount,
         pay_mode: payMode,
-        transaction_no: reference.trim() === '' ? null : reference.trim(),
+        // Cash carries neither, whatever was typed before the method changed.
+        transaction_no: traceable && reference.trim() !== '' ? reference.trim() : null,
+        attachment: traceable ? proof : null,
       });
       toast.ok('Commission sent. It waits on head office to approve it.');
       setPaying(false);
+      setPayMode('cash');
       setPayAmount('');
-      setBase('');
-      setPieces('');
       setReference('');
+      setProof(null);
       reload();
       summary.reload();
     } catch (err) {
@@ -295,7 +271,6 @@ export default function Transactions() {
                   {isSuper(user) && <TableCell>Laboratory</TableCell>}
                   <TableCell>Status</TableCell>
                   <TableCell align="right">Collected</TableCell>
-                  <TableCell align="right">Pieces</TableCell>
                   <TableCell>Rate</TableCell>
                   <TableCell align="right">Commission</TableCell>
                 </TableRow>
@@ -315,9 +290,6 @@ export default function Transactions() {
                     </TableCell>
                     <TableCell align="right" className="tabular">
                       {money(e.collected)}
-                    </TableCell>
-                    <TableCell align="right" className="tabular">
-                      {e.pieces}
                     </TableCell>
                     {/* The base is the half of the rate that is doing the work,
                         so it is named rather than left to be inferred from two
@@ -470,50 +442,16 @@ export default function Transactions() {
           busy={sending}
           disabled={amount <= 0}
         >
-          {/* The panel's form grid, in a dialog: two columns rather than the
-              page's three, because a `sm` dialog is half a page wide and three
-              fields across it read as three slivers. */}
+          {/*
+            The method first, because it decides what the rest of the dialog
+            asks for: cash was counted and has nothing to show, everything else
+            leaves a reference and a screenshot behind.
+          */}
           <Grid container spacing={2}>
-            {position.per_piece && (
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  label="Pieces certified"
-                  type="number"
-                  required
-                  value={pieces}
-                  onChange={(e) => setPieces(e.target.value)}
-                  slotProps={{ htmlInput: { min: 1, step: 1 } }}
-                />
-              </Grid>
-            )}
-            <Grid size={{ xs: 12, sm: 6 }}>
-              {position.per_piece ? (
-                <TextField
-                  label="Collected amount"
-                  type="number"
-                  required
-                  value={base}
-                  onChange={(e) => setBase(e.target.value)}
-                  slotProps={{
-                    htmlInput: { min: 0 },
-                    ...hint('What was collected on those pieces. Recorded with the payment.'),
-                  }}
-                />
-              ) : (
-                <TextField
-                  label="Amount to pay"
-                  type="number"
-                  required
-                  value={payAmount}
-                  onChange={(e) => setPayAmount(e.target.value)}
-                  slotProps={{ htmlInput: { min: 0 } }}
-                />
-              )}
-            </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
                 select
-                label="Payment mode"
+                label="Payment method"
                 value={payMode}
                 onChange={(e) => setPayMode(e.target.value)}
               >
@@ -525,22 +463,54 @@ export default function Transactions() {
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
-                label="Reference"
-                value={reference}
-                onChange={(e) => setReference(e.target.value)}
-                slotProps={hint('Cheque or transaction number, if there is one.')}
+                label="Amount"
+                type="number"
+                required
+                value={payAmount}
+                onChange={(e) => setPayAmount(e.target.value)}
+                slotProps={{
+                  htmlInput: { min: 0, step: '0.01' },
+                  ...hint('Opens at what is outstanding. Type less to pay part of it.'),
+                }}
               />
             </Grid>
+
+            {traceable && (
+              <>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Reference number"
+                    value={reference}
+                    onChange={(e) => setReference(e.target.value)}
+                    slotProps={hint('The transaction, cheque or UPI reference.')}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  {/*
+                    Unshaped, so it is the height of a field rather than a
+                    picture frame: this sits in a row of inputs, and a 4:3 zone
+                    filled the dialog with empty dashes.
+                  */}
+                  <FileField
+                    label="Payment proof"
+                    bucket="screenshot"
+                    accept="image/*,application/pdf"
+                    value={proof}
+                    onChange={setProof}
+                    helperText="The screenshot or receipt head office approves this against."
+                  />
+                </Grid>
+              </>
+            )}
+
             <Grid size={12}>
               <Typography
                 variant="body2"
                 sx={{ fontWeight: 600, color: amount > 0 ? 'text.primary' : 'error.main' }}
               >
                 {amount > 0
-                  ? `Sending ${money(amount)} to head office. Opens at what is outstanding; type less to pay part of it.`
-                  : position.per_piece
-                    ? 'Enter the pieces certified: nothing to send until then.'
-                    : 'Enter an amount above zero: nothing to send until then.'}
+                  ? `Sending ${money(amount)} to head office. It waits there for approval.`
+                  : 'Enter an amount above zero: nothing to send until then.'}
               </Typography>
             </Grid>
           </Grid>

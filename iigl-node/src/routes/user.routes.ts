@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { db } from '../db/index.js';
+import { sql } from 'kysely';
 import type { Kysely } from 'kysely';
 import type { DB } from '../db/types.js';
+import type { SessionUser } from '../lib/session.js';
 
 /**
  * A database handle: the pool, or a transaction on it.
@@ -22,6 +24,8 @@ import {
   franchiseAgreementPdf,
   franchiseeFormHtml,
   franchiseeFormPdf,
+  payslipHtml,
+  payslipPdf,
 } from '../services/document.service.js';
 
 /** Approved is 1; a pending row has not moved any money. */
@@ -508,30 +512,398 @@ userRoutes.get(
 );
 
 /** Staff of a lab, joined through employements. */
+/**
+ * What each employee is owed for a month, and what the month says they worked.
+ *
+ * There is no payroll in this schema — no payslip, no payment, no deduction —
+ * and this does not invent one. It puts two facts the panel already holds side
+ * by side: the salary agreed on the employment, and the days their attendance
+ * records for the month asked for.
+ *
+ * The pro-rata figure is **arithmetic, not a payslip**: the monthly salary
+ * divided by the days in the month, times the days present. Whether a Sunday
+ * counts, whether a half day is half, what an absence costs — none of that is
+ * recorded anywhere, so none of it is assumed here. The screen says the rule it
+ * used, and the figures it used it on, and stops.
+ *
+ * Scoped exactly as the staff list is: a laboratory sees its own people, head
+ * office sees its own, or one laboratory's with `lab_id`.
+ */
+/**
+ * Whose employees a staff list is about.
+ *
+ * Head office asked for `/users/staff` and was handed **the whole network** —
+ * its own people and every laboratory's, mixed into one list. The employee
+ * screen worked around that by filtering the rows it had already been sent,
+ * which fixed the look of that one page and nothing else: the salary screen
+ * beside it had no such filter and listed other laboratories' staff, and the
+ * filtered page still paged and counted over rows it then threw away.
+ *
+ * So the question is answered once, here:
+ *
+ *   `lab_id`         head office looking at one laboratory's people, by name.
+ *   head office      its own — employed by a head-office account, which is
+ *                    what `employer.role_id` says. A laboratory's staff belong
+ *                    on that laboratory's page.
+ *   a laboratory     its own, as before.
+ *   anybody else     nobody. A session whose employer does not resolve used to
+ *                    fall through every filter and see every employee in the
+ *                    system; belonging to nobody is not a licence to read
+ *                    everybody.
+ */
+function scopeStaff<Q extends { where: any }>(q: Q, user: SessionUser, labIdParam: unknown): Q {
+  if (user.roleId === ROLE.SUPER) {
+    const asked = Number(labIdParam) || null;
+    return asked
+      ? (q.where('employer.id', '=', asked) as Q)
+      : (q.where('employer.role_id', '=', ROLE.SUPER) as Q);
+  }
+  // Nobody, said plainly.
+  if (user.labId === null) return q.where(sql`1 = 0`) as Q;
+  return q.where('employer.id', '=', user.labId) as Q;
+}
+
+userRoutes.get(
+  '/staff/salary',
+  requireLabScope,
+  wrap(async (req, res) => {
+    const month = String(req.query.month ?? '').trim() || new Date().toISOString().slice(0, 7);
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+      throw badRequest('The month must be YYYY-MM.');
+    }
+
+    const [year, mm] = month.split('-').map(Number);
+    const from = `${month}-01`;
+    const daysInMonth = new Date(year, mm, 0).getDate();
+    const to = `${month}-${String(daysInMonth).padStart(2, '0')}`;
+
+    const labId = req.user.roleId === ROLE.SUPER ? Number(req.query.lab_id) || null : req.user.labId;
+
+    const staffQuery = scopeStaff(
+      db
+        .selectFrom('employements')
+        .innerJoin('users', 'users.id', 'employements.user_id')
+        .leftJoin('users as employer', 'employer.empid', 'employements.parent_id')
+        .where('employements.is_working', '=', '1')
+        .select([
+          'users.id as id',
+          'users.empid as empid',
+          'users.fullname as fullname',
+          'users.role_id as role_id',
+          'employements.salary as salary',
+          'employements.joining_date as joining_date',
+          'employer.fullname as lab_name',
+        ]),
+      req.user,
+      req.query.lab_id,
+    );
+
+    const staff = await staffQuery.orderBy('users.fullname').execute();
+    if (staff.length === 0) {
+      res.json({ data: [], month, days_in_month: daysInMonth });
+      return;
+    }
+
+    /*
+      The month's attendance for all of them at once.
+
+      `clockOut` is NOT NULL with a `00:00:00` seed meaning "still working", so
+      an open day counts as present and contributes no minutes — the same
+      reading the calendar and the tiles use.
+    */
+    const worked = await db
+      .selectFrom('attendances')
+      .select(({ fn }) => [
+        'empId',
+        fn.count('id').as('days'),
+        sql<number>`SUM(CASE WHEN clockOut <> '00:00:00' AND clockOut > clockIn
+                             THEN TIME_TO_SEC(clockOut) - TIME_TO_SEC(clockIn) ELSE 0 END)`.as(
+          'seconds',
+        ),
+      ])
+      .where(
+        'empId',
+        'in',
+        staff.map((p) => Number(p.id)),
+      )
+      .where('date', '>=', new Date(`${from}T00:00:00`))
+      .where('date', '<=', new Date(`${to}T00:00:00`))
+      .groupBy('empId')
+      .execute();
+
+    /*
+      The days the office was shut.
+
+      A holiday is not an absence, so it cannot be left to read as one: a month
+      with two national holidays would otherwise pay two days short for
+      everybody who was told not to come in.
+
+      Both lists count — head office's, which applies to everybody, and this
+      laboratory's own — and they are counted as *distinct dates*, so a local
+      holiday falling on a national one is one day off rather than two.
+    */
+    const holidayRows = await db
+      .selectFrom('holidays')
+      .select('date')
+      .where('status', '<>', 0)
+      .where('date', '>=', new Date(`${from}T00:00:00`))
+      .where('date', '<=', new Date(`${to}T00:00:00`))
+      // 0 is head office's list, which applies to everybody. See migration 035.
+      .where('lab_id', 'in', labId === null ? [0] : [0, labId])
+      .execute();
+    const holidays = new Set(holidayRows.map((h) => String(h.date).slice(0, 10)));
+
+    /* What has actually been paid against this month, per person. */
+    const paidRows = await db
+      .selectFrom('salary_payments')
+      .select(({ fn }) => ['emp_id', fn.sum<number>('amount').as('paid')])
+      .where('month', '=', month)
+      .where(
+        'emp_id',
+        'in',
+        staff.map((p) => Number(p.id)),
+      )
+      .groupBy('emp_id')
+      .execute();
+
+    /*
+      Which holidays somebody was *not* already at work on. Attendance wins: a
+      person who came in on a holiday is present that day, and counting the day
+      twice would pay them for thirty-two days in a thirty-one day month.
+    */
+    const attendedOn = new Map<number, Set<string>>();
+    for (const d of await db
+      .selectFrom('attendances')
+      .select(['empId', 'date'])
+      .where('empId', 'in', staff.map((p) => Number(p.id)))
+      .where('date', '>=', new Date(`${from}T00:00:00`))
+      .where('date', '<=', new Date(`${to}T00:00:00`))
+      .execute()) {
+      const held = attendedOn.get(Number(d.empId));
+      const key = String(d.date).slice(0, 10);
+      if (held) held.add(key);
+      else attendedOn.set(Number(d.empId), new Set([key]));
+    }
+
+    const byEmp = new Map(worked.map((w) => [Number(w.empId), w]));
+    const paidBy = new Map(paidRows.map((r) => [Number(r.emp_id), Number(r.paid) || 0]));
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+
+    res.json({
+      data: staff.map((p) => {
+        const row = byEmp.get(Number(p.id));
+        const present = Number(row?.days ?? 0);
+        const salary = Number(p.salary ?? 0);
+        const paid = round2(paidBy.get(Number(p.id)) ?? 0);
+
+        const attended = attendedOn.get(Number(p.id)) ?? new Set<string>();
+        const off = [...holidays].filter((d) => !attended.has(d)).length;
+        // Never more than the month has, whatever the two lists say.
+        const counted = Math.min(daysInMonth, present + off);
+
+        return {
+          ...p,
+          salary,
+          days_present: present,
+          // The days the office was shut and they were not in anyway. Counted
+          // as worked, and returned separately so the screen can say why the
+          // figure is more than the days attended.
+          holidays: off,
+          minutes_worked: Math.round(Number(row?.seconds ?? 0) / 60),
+          // The rule, applied. Zero salary stays zero rather than becoming a
+          // figure nobody agreed. It is what the Pay dialog opens on, not a
+          // figure the list states as owed.
+          payable: salary > 0 ? round2((salary / daysInMonth) * counted) : 0,
+          paid,
+        };
+      }),
+      month,
+      days_in_month: daysInMonth,
+    });
+  }),
+);
+
+/**
+ * Record a salary payment.
+ *
+ * The employer's, like everything else that writes about their staff: a person
+ * paying their own salary is a person writing their own receipt.
+ *
+ * One row per payment rather than per month. A month is often paid in parts,
+ * and a record that assumed one payment would have to be overwritten to hold
+ * the second — which is how a part payment quietly becomes the only payment.
+ *
+ * The agreed salary and the days attended are copied onto the row as they stand
+ * now. Attendance can be corrected afterwards, and a payslip that changes when
+ * somebody edits a punch is not a receipt.
+ */
+userRoutes.post(
+  '/staff/salary/pay',
+  requireEmployer,
+  wrap(async (req, res) => {
+    const empId = Number(req.body?.emp_id);
+    if (!Number.isInteger(empId) || empId <= 0) throw badRequest('Which employee?');
+    await assertEmploys(req.user, empId);
+
+    const month = String(req.body?.month ?? '').trim();
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw badRequest('The month must be YYYY-MM.');
+
+    const amount = Number(req.body?.amount);
+    if (!Number.isFinite(amount) || amount <= 0) throw badRequest('Enter an amount above zero.');
+
+    const paidOn = String(req.body?.paid_on ?? '').trim() || new Date().toISOString().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(paidOn)) throw badRequest('The payment date must be YYYY-MM-DD.');
+
+    // What the figures were at the moment of paying.
+    const employment = await db
+      .selectFrom('employements')
+      .select('salary')
+      .where('user_id', '=', empId)
+      .where('is_working', '=', '1')
+      .executeTakeFirst();
+
+    const [year, mm] = month.split('-').map(Number);
+    const daysInMonth = new Date(year, mm, 0).getDate();
+    const present = await db
+      .selectFrom('attendances')
+      .select(({ fn }) => fn.count('id').as('n'))
+      .where('empId', '=', empId)
+      .where('date', '>=', new Date(`${month}-01T00:00:00`))
+      .where('date', '<=', new Date(`${month}-${String(daysInMonth).padStart(2, '0')}T00:00:00`))
+      .executeTakeFirstOrThrow();
+
+    const result = await db
+      .insertInto('salary_payments')
+      .values({
+        emp_id: empId,
+        paid_by: req.user.id,
+        month,
+        amount: String(Math.round(amount * 100) / 100),
+        paid_on: new Date(`${paidOn}T00:00:00`),
+        pay_mode: String(req.body?.pay_mode ?? 'cash'),
+        reference: req.body?.reference ? String(req.body.reference).trim() : null,
+        note: req.body?.note ? String(req.body.note).trim() : null,
+        salary_month: employment?.salary ? String(employment.salary) : null,
+        days_present: Number(present.n) || 0,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })
+      .executeTakeFirst();
+
+    res.status(201).json({ data: { id: Number(result.insertId), month, amount } });
+  }),
+);
+
+/**
+ * What has been paid, and to whom.
+ *
+ * `emp_id` narrows it to one person — their own page asks that way — and
+ * `month` to one month. Without either it is everything this employer has paid,
+ * newest first, which is the history screen.
+ */
+userRoutes.get(
+  '/staff/salary/payments',
+  requireLabScope,
+  wrap(async (req, res) => {
+    const p = readPage(req, 50, 200);
+
+    let q = db
+      .selectFrom('salary_payments')
+      .leftJoin('users as employee', 'employee.id', 'salary_payments.emp_id')
+      .leftJoin('users as payer', 'payer.id', 'salary_payments.paid_by')
+      .select([
+        'salary_payments.id as id',
+        'salary_payments.emp_id as emp_id',
+        'salary_payments.month as month',
+        'salary_payments.amount as amount',
+        'salary_payments.paid_on as paid_on',
+        'salary_payments.pay_mode as pay_mode',
+        'salary_payments.reference as reference',
+        'salary_payments.note as note',
+        'salary_payments.days_present as days_present',
+        'salary_payments.salary_month as salary_month',
+        'employee.fullname as employee_name',
+        'employee.empid as employee_empid',
+        'payer.fullname as paid_by_name',
+      ]);
+
+    if (req.query.emp_id) {
+      const empId = Number(req.query.emp_id);
+      // Their own, or one of yours. Anybody else's payroll is not yours to see.
+      if (empId !== req.user.id) await assertEmploys(req.user, empId);
+      q = q.where('salary_payments.emp_id', '=', empId);
+    } else if (req.user.roleId !== ROLE.SUPER) {
+      // Everything this employer has paid.
+      q = q.where('salary_payments.paid_by', '=', req.user.id);
+    }
+
+    if (req.query.month) q = q.where('salary_payments.month', '=', String(req.query.month));
+
+    const rows = await q
+      .orderBy('salary_payments.id', 'desc')
+      .limit(p.limit)
+      .offset(p.offset)
+      .execute();
+
+    res.json(paged(rows, rows.length + p.offset, p));
+  }),
+);
+
+/**
+ * The payslip, as a PDF. `?format=html` for the markup, as the other documents.
+ *
+ * The employer's, or their own: a person may have their own payslip, and only
+ * their employer may read anybody else's.
+ */
+userRoutes.get(
+  '/staff/:id/payslip',
+  numericId,
+  requireLabScope,
+  wrap(async (req, res) => {
+    const empId = Number(req.params.id);
+    if (empId !== req.user.id) await assertEmploys(req.user, empId);
+
+    const month = String(req.query.month ?? '').trim() || new Date().toISOString().slice(0, 7);
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw badRequest('The month must be YYYY-MM.');
+
+    if (req.query.format === 'html') {
+      res.type('html').send(await payslipHtml(empId, month));
+      return;
+    }
+
+    const pdf = await payslipPdf(empId, month);
+    res.type('application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="payslip-${empId}-${month}.pdf"`);
+    res.send(pdf);
+  }),
+);
+
 userRoutes.get(
   '/staff',
   requireLabScope,
   wrap(async (req, res) => {
     const p = readPage(req);
-    const labId = req.user.roleId === ROLE.SUPER ? Number(req.query.lab_id) || null : req.user.labId;
 
     // Qualified column names: the join puts a `mobile` on both sides.
     const search = readSearch(req, ['users.fullname', 'users.mobile', 'users.email']);
 
     const base = () => {
-      let q = db
-        .selectFrom('employements')
-        .innerJoin('users', 'users.id', 'employements.user_id')
-        // Who they work for. `employements.parent_id` is an `empid` — a
-        // laboratory's, or head office's — so the employer's name comes from
-        // the same table as the employee's, joined on that instead of on the
-        // primary key. Left, so a parent that resolves to nobody still shows
-        // the employee rather than hiding them.
-        .leftJoin('users as employer', 'employer.empid', 'employements.parent_id')
-        .where('employements.is_working', '=', '1');
-      // Filtered on the employer's id rather than their empid: `labId` comes
-      // from the session, which is keyed by user id like the rest of the API.
-      if (labId !== null) q = q.where('employer.id', '=', labId);
+      let q = scopeStaff(
+        db
+          .selectFrom('employements')
+          .innerJoin('users', 'users.id', 'employements.user_id')
+          // Who they work for. `employements.parent_id` is an `empid` — a
+          // laboratory's, or head office's — so the employer's name comes from
+          // the same table as the employee's, joined on that instead of on the
+          // primary key. Left, so a parent that resolves to nobody still shows
+          // the employee rather than hiding them.
+          .leftJoin('users as employer', 'employer.empid', 'employements.parent_id')
+          .where('employements.is_working', '=', '1'),
+        // Scoped on the employer's id rather than their empid: the session is
+        // keyed by user id, like the rest of the API.
+        req.user,
+        req.query.lab_id,
+      );
       if (search) q = q.where(search);
       return q;
     };
@@ -907,9 +1279,21 @@ userRoutes.patch(
 userRoutes.get(
   '/:id',
   numericId,
-  requireAdmin,
+  /*
+    Whoever may change the account may read it — the same guard and the same
+    per-record check `PATCH /:id` runs.
+
+    They had drifted apart: a laboratory could save an employee and could not
+    fetch one, so pressing Edit on its own staff answered "Requires super admin
+    access" from the request that fills the form. The narrower half was the
+    read, which is the half that gives nothing away it could not already save.
+  */
+  requireEmployer,
   wrap(async (req, res) => {
     const id = Number(req.params.id);
+    // A laboratory may read its own staff and nobody else's.
+    await assertEmploys(req.user, id);
+
     const row = await db
       .selectFrom('users')
       .select(PUBLIC_COLUMNS)

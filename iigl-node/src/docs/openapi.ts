@@ -1614,12 +1614,26 @@ const document = {
       get: {
         tags: ['Transactions'],
         summary: 'List transactions',
+        description:
+          'The caller’s own transactions — every row they sent or received — for every role, head office included. Head office was left unscoped here once, and its Transaction History listed a laboratory’s own money: the collections its staff took at the counter and the wallet transfers between them, neither of which head office is a party to. Seeing more than your own is asked for deliberately with `scope` or `user_id`, and both are head office’s alone.',
         parameters: [
           ...pageParams,
           {
             name: 'direction',
             in: 'query',
             schema: { type: 'string', enum: ['all', 'sent', 'received'], default: 'all' },
+          },
+          {
+            name: 'scope',
+            in: 'query',
+            schema: { type: 'string', enum: ['mine', 'all'], default: 'mine' },
+            description: 'Head office only: `all` lists every transaction in the system. Ignored for anybody else — a laboratory asking for everything is asking for its own.',
+          },
+          {
+            name: 'user_id',
+            in: 'query',
+            schema: { type: 'integer' },
+            description: 'Head office only: read one account’s history instead of its own, as `/api/transactions/ledger` already takes it. Ignored for anybody else.',
           },
           {
             name: 'status',
@@ -1778,8 +1792,9 @@ const document = {
                 type: 'object',
                 required: ['commission_on'],
                 properties: {
-                  commission_on: { type: 'number', minimum: 0.01, examples: [100], description: 'The collected amount the commission is calculated on.' },
-                  pieces: { type: 'integer', minimum: 1, examples: [12], description: 'Pieces certified. Required for a laboratory on per-piece terms and ignored for one on a percentage.' },
+                  amount: { type: 'number', minimum: 0.01, examples: [155], description: 'What is being sent. Given, it is the payment — a laboratory settling its account knows the figure it is transferring, and head office approves or declines the row before anything moves. Omit it and the amount is worked out from the laboratory’s own terms instead.' },
+                  commission_on: { type: 'number', minimum: 0.01, examples: [100], description: 'The collection the commission is reckoned against. Required only when it is doing the arithmetic — with `amount` given it is context, and may be omitted for a payment against an old balance.' },
+                  pieces: { type: 'integer', minimum: 1, examples: [12], description: 'Pieces certified. Used to work out the amount for a laboratory on per-piece terms when no `amount` is given.' },
                   pay_mode: { type: 'string', default: 'cash' },
                   transaction_no: { type: ['string', 'null'] },
                   remark: { type: ['string', 'null'] },
@@ -1807,7 +1822,7 @@ const document = {
               },
             },
           },
-          400: errorResponse('Not a laboratory account, no rate configured, the base is not above zero, or a per-piece laboratory sent no piece count.'),
+          400: errorResponse('Not a laboratory account; nothing to send; or no amount given and none can be worked out — no rate configured, or a per-piece laboratory sent no piece count.'),
           ...guarded,
         },
       },

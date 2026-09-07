@@ -32,14 +32,36 @@ transactionRoutes.get(
     let q = db.selectFrom('transactions').selectAll();
     let c = db.selectFrom('transactions').select(db.fn.countAll().as('n'));
 
-    if (req.user.roleId !== ROLE.SUPER) {
-      const me = req.user.id;
+    /*
+      Whose history this is.
+
+      This endpoint answers "my transactions", and it answers it for everybody
+      — head office included. It used to leave head office unfiltered, on the
+      reasoning that an administrator may see everything, and the result was
+      that head office's Transaction History listed a laboratory's own money:
+      the collections its staff took at the counter and the wallet transfers
+      between them, neither of which head office is a party to.
+
+      Seeing everything is a different question, asked deliberately:
+
+        scope=all        every transaction in the system
+        user_id=26       one account's, as `/ledger` already takes it
+
+      Both are head office's alone. For anybody else they are ignored rather
+      than refused: a laboratory asking for another account's history is asking
+      for its own.
+    */
+    const isSuper = req.user.roleId === ROLE.SUPER;
+    const wantsAll = isSuper && String(req.query.scope ?? '') === 'all';
+    const target = isSuper && req.query.user_id ? Number(req.query.user_id) : req.user.id;
+
+    if (!wantsAll) {
       const mine = (eb: any) =>
         direction === 'sent'
-          ? eb('send_by', '=', me)
+          ? eb('send_by', '=', target)
           : direction === 'received'
-            ? eb('received_by', '=', me)
-            : eb.or([eb('send_by', '=', me), eb('received_by', '=', me)]);
+            ? eb('received_by', '=', target)
+            : eb.or([eb('send_by', '=', target), eb('received_by', '=', target)]);
       q = q.where(mine);
       c = c.where(mine);
     }

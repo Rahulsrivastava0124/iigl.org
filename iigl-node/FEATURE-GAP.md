@@ -292,11 +292,23 @@ Head office only, like every other course route. Both screens are wired: the
 coupon list (Student › Discount Coupons) writes and withdraws them, and the
 discount dialog on Student › Discount takes a code, checks it, and applies it.
 
-### 13. Messages — nothing to migrate
+### 13. Messages — built rather than migrated
 
-Both sidebars show Message, with Send Message and Message History. Both entries
-are `href="#"` in the Blade: no route, no controller, no table. The feature was
-never built, so it is not in the new menu either.
+Both Laravel sidebars show Message, with Send Message and Message History. Both
+entries are `href="#"` in the Blade: no route, no controller, no table. There
+was nothing to port.
+
+It exists now, built to the need rather than to the menu: an employee writes a
+line to the person who employs them, and that person reads it on the employee's
+page beside the attendance it is nearly always about — "I forgot to punch out on
+Tuesday", "I need Friday off". Migration 032, `staff_messages`, and
+`/api/messages`.
+
+Deliberately not a mail system: one direction, no threads, no replies, no
+attachments, and nobody writes sideways to a colleague. A `request` expects
+something to happen and a `message` does not; `resolved_at` is the whole of the
+state, because unread and unactioned are the same thing to the person who has to
+act on it.
 
 ### 14. Employee views inside the laboratory portal
 
@@ -314,7 +326,8 @@ Recorded so nobody rebuilds them by mistake.
 | --- | --- |
 | `POST /regsiter`, `GET /verifysponserid` | Writes `userid`, `name`, `position`, `sponserid` — none of which exist in `users`. Contains a `$$last_child` double-dollar bug. Pasted in from another project; cannot ever have run. |
 | `ReportController@editgetreportform` | Routed at `/report/getformdata/{sid}/{rid}` but the method does not exist. Returns 500. |
-| `HolidayController`, `SliderController`, `OrderDetailController` | Empty classes, 10 lines each, no methods, no routes. |
+| `SliderController`, `OrderDetailController` | Empty classes, 10 lines each, no methods, no routes. |
+| `HolidayController` | Was the same: an empty class over a `holidays` table with no model, no view and zero rows. **Now built** — `/api/holidays`, two lists (head office's and each laboratory's), drawn on the attendance calendar and counted as worked in the salary arithmetic. Migrations 034 and 035 scope the existing table rather than adding a second one. |
 | `FormlayoutController` | 5 real methods but **no route reaches it**. The `formlayouts` table holds 2 rows. `GET /api/catalog/form-layouts/:categoryId` reads them; the editor was never wired up in the old app either. |
 | Laravel auth scaffolding | `ForgotPasswordController`, `ResetPasswordController`, `VerificationController` — framework defaults with no routes. There is no password reset in the old application either. |
 

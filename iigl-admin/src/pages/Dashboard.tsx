@@ -22,6 +22,7 @@ import RegisteredIcon from '@mui/icons-material/HowToRegOutlined';
 import CustomerIcon from '@mui/icons-material/PersonOutlineOutlined';
 import TodayIcon from '@mui/icons-material/TodayOutlined';
 import CertificateIcon from '@mui/icons-material/WorkspacePremiumOutlined';
+import TransferIcon from '@mui/icons-material/SendOutlined';
 
 /**
  * One width for every card here, shared with the rest of the panel: a quarter
@@ -75,7 +76,19 @@ export default function Dashboard() {
             system's — so the reply carries a `lab` block only for a laboratory,
             and its presence is what chooses the screen.
           */}
-          {s.lab ? <LaboratoryTiles s={s} lab={s.lab} /> : <HeadOfficeTiles s={s} />}
+          {/*
+            Three dashboards. An employee's is not the laboratory's scoped
+            down: it is their own orders and their own takings, off
+            `orders.received_by` and `transactions.received_by`. Which block the
+            reply carries is what chooses the screen.
+          */}
+          {s.mine ? (
+            <StaffTiles mine={s.mine} />
+          ) : s.lab ? (
+            <LaboratoryTiles s={s} lab={s.lab} />
+          ) : (
+            <HeadOfficeTiles s={s} />
+          )}
 
           {/*
             The charts keep a panel of their own. A tile is a figure and the
@@ -344,6 +357,141 @@ function HeadOfficeTiles({ s }: { s: DashboardSummary }) {
  * come first here, as they now do for head office, rather than sitting below
  * twelve running totals.
  */
+/**
+ * One employee's dashboard.
+ *
+ * The same shape as the laboratory's — a today row over a standing row —
+ * because it answers the same two questions at the scale a person works at:
+ * what have I done today, and what have I done. Every figure here is theirs.
+ *
+ * What is deliberately not here: Total employee, Employee wallet and Admin
+ * commission. Those are the laboratory's own business — how many people it
+ * employs, what they are collectively holding, what it owes head office — and
+ * an employee cannot act on any of them.
+ */
+function StaffTiles({ mine }: { mine: NonNullable<DashboardSummary['mine']> }) {
+  return (
+    <>
+      <Typography variant="h2" sx={{ mt: 0, mb: 1 }}>
+        Today's my performance
+      </Typography>
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid size={TODAY_CELL}>
+          <Tile
+            label="Today collect"
+            value={n(mine.today.cards_ordered)}
+            note="cards"
+            fill="brand"
+            solid
+            icon={TodayIcon}
+          />
+        </Grid>
+        <Grid size={TODAY_CELL}>
+          <Tile label="Today's sale" value={money(mine.today.sale)} fill="brand" solid icon={SaleIcon} />
+        </Grid>
+        <Grid size={TODAY_CELL}>
+          <Tile label="Today's paid" value={money(mine.today.paid)} fill="settled" solid icon={PaidIcon} />
+        </Grid>
+        <Grid size={TODAY_CELL}>
+          <Tile
+            label="Today's dues"
+            value={money(mine.today.dues)}
+            fill={owed(mine.today.dues)}
+            solid
+            icon={DuesIcon}
+          />
+        </Grid>
+        <Grid size={TODAY_CELL}>
+          <Tile
+            label="Today's active"
+            value={n(mine.today.active)}
+            fill="waiting"
+            solid
+            icon={ActiveIcon}
+          />
+        </Grid>
+      </Grid>
+
+      <Typography variant="h2" sx={{ mt: 0, mb: 1 }}>
+        My work
+      </Typography>
+      <Grid container spacing={2}>
+        <Grid size={CELL}>
+          <Tile
+            label="Total collected"
+            value={n(mine.cards_ordered)}
+            note="cards"
+            fill="brand"
+            icon={OrdersIcon}
+          />
+        </Grid>
+        <Grid size={CELL}>
+          <Tile
+            label="Complete tested"
+            value={n(mine.reports_generated)}
+            fill="settled"
+            icon={DeliveredIcon}
+          />
+        </Grid>
+        <Grid size={CELL}>
+          <Tile
+            label="Smart report"
+            value={n(mine.smart_generated)}
+            fill="brand"
+            icon={SmartCardIcon}
+          />
+        </Grid>
+        <Grid size={CELL}>
+          <Tile
+            label="Classic report"
+            value={n(mine.classic_generated)}
+            fill="brand"
+            icon={ClassicCardIcon}
+          />
+        </Grid>
+        <Grid size={CELL}>
+          <Tile
+            label="Active orders"
+            value={n(mine.active)}
+            fill="waiting"
+            icon={ActiveIcon}
+            to="/orders?status=preparing"
+          />
+        </Grid>
+        <Grid size={CELL}>
+          <Tile label="Total sale" value={money(mine.sale)} fill="brand" icon={SaleIcon} />
+        </Grid>
+        <Grid size={CELL}>
+          <Tile label="Paid amount" value={money(mine.paid)} fill="settled" icon={PaidIcon} />
+        </Grid>
+        <Grid size={CELL}>
+          <Tile label="Dues amount" value={money(mine.dues)} fill={owed(mine.dues)} icon={DuesIcon} />
+        </Grid>
+        <Grid size={CELL}>
+          <Tile
+            label="Transfer amount"
+            value={money(mine.transferred)}
+            note="handed on"
+            fill="brand"
+            icon={TransferIcon}
+            to="/transactions"
+          />
+        </Grid>
+        <Grid size={CELL}>
+          <Tile
+            label="My wallet"
+            value={money(mine.wallet)}
+            note="still with me"
+            fill="brand"
+            icon={WalletIcon}
+            to="/wallet"
+          />
+        </Grid>
+      </Grid>
+    </>
+  );
+}
+
 function LaboratoryTiles({
   s,
   lab,

@@ -278,12 +278,70 @@ export const extraPaths: Record<string, unknown> = {
     },
   },
 
+  '/api/holidays': {
+    get: {
+      tags: ['Settings'],
+      summary: 'The days the office is shut',
+      description:
+        'Two lists, not one. Head office keeps the national list, which everybody works to; a laboratory keeps its own, for the days only it closes — a local festival, a shutdown for stocktaking.\n\nHead office reads the shared list, or one laboratory’s with `lab_id`. Anybody else reads the shared list **and their own laboratory’s**, which together are what their calendar draws and what their pay is worked out against. `shared` on each row says which list it came from, and therefore who may change it.\n\n`from` and `to` narrow it to a month, which is how a calendar asks. Without them it is the whole list.',
+      parameters: [
+        { name: 'from', in: 'query', schema: { type: 'string', format: 'date' } },
+        { name: 'to', in: 'query', schema: { type: 'string', format: 'date' } },
+        { name: 'lab_id', in: 'query', schema: { type: 'integer' }, description: 'Head office only: one laboratory’s own list.' },
+      ],
+      responses: { 200: ok('Holidays, earliest first.'), 400: err('A date that is not YYYY-MM-DD.'), ...guarded },
+    },
+    post: {
+      tags: ['Settings'],
+      summary: 'Add a holiday',
+      description:
+        'To the caller’s own list: head office writes the shared one, a laboratory writes its own. One entry per date per list — a second holiday on one date is a mistake every time, and everything that reads this counts days.',
+      requestBody: body({ date: { type: 'string', format: 'date' }, name: str }, ['date', 'name']),
+      responses: {
+        201: ok('Added.'),
+        400: err('A date that is not YYYY-MM-DD, or no name.'),
+        409: err('That date is already on this list.'),
+        ...guarded,
+      },
+    },
+  },
+
+  '/api/holidays/{id}': {
+    patch: {
+      tags: ['Settings'],
+      summary: 'Change a holiday',
+      description:
+        'Only on the caller’s own list. A laboratory cannot edit head office’s: a shared holiday changed by one franchise would silently move everybody’s calendar and everybody’s pay.',
+      parameters: [idParam],
+      requestBody: body({ date: { type: 'string', format: 'date' }, name: str }),
+      responses: {
+        200: ok('Saved.'),
+        400: err('Somebody else’s list, or a date that is not YYYY-MM-DD.'),
+        404: err('Holiday not found.'),
+        ...guarded,
+      },
+    },
+    delete: {
+      tags: ['Settings'],
+      summary: 'Remove a holiday',
+      description:
+        'Only from the caller’s own list. A real delete: this is a short list kept by hand, and a day that is no longer a holiday is not history worth keeping.',
+      parameters: [idParam],
+      responses: {
+        204: { description: 'Gone.' },
+        400: err('Somebody else’s list.'),
+        404: err('Holiday not found.'),
+        ...guarded,
+      },
+    },
+  },
+
   '/api/settings': {
     get: {
       tags: ['Settings'],
       summary: 'Every setting',
       description:
-        'Each setting with its value, its built-in default, and whether anybody has set it. Nothing is seeded: an unset setting reads as the constant or environment variable the code used before the table existed, so an empty table behaves exactly as the hardcoded version did. A secret comes back empty, with `set` saying whether one is stored and `preview` showing it with the password replaced by dots — enough to check the server, account and port without the secret leaving the server.',
+        'Each setting with its value, its built-in default, and whether anybody has set it. Nothing is seeded: an unset setting reads as the constant or environment variable the code used before the table existed, so an empty table behaves exactly as the hardcoded version did. A secret comes back empty, with `set` saying whether one is stored and `preview` showing it with the password replaced by dots — enough to check the server, account and port without the secret leaving the server.\n\nHead office reads all of them. A laboratory and its staff read the `holidays` group and nothing else — the calendar the whole company works to — and may not write any of them.',
       responses: { 200: ok('Every setting, grouped by the part of its key before the dot.'), ...guarded },
     },
     patch: {
@@ -1335,6 +1393,21 @@ export const extraPaths: Record<string, unknown> = {
     },
   },
 
+  '/api/customers/all': {
+    get: {
+      tags: ['Customers'],
+      summary: 'Every customer, registered or not',
+      description:
+        'The registered and unregistered lists in one. Head office’s list spans the network and the GST split is not how it reads it — "who has ordered from us" is one question, and answering it meant paging two screens and adding them up. Scoped like the other two: a laboratory sees its own.\n\nEach row carries `laboratories`, every franchise the number has ordered from, named and comma-separated — a mobile number is all that groups these rows, and the same person can walk into two.',
+      parameters: [
+        { name: 'page', in: 'query', schema: { type: 'integer' } },
+        { name: 'per_page', in: 'query', schema: { type: 'integer', maximum: 200 } },
+        { name: 'q', in: 'query', schema: { type: 'string' }, description: 'Matches name, mobile, email or GST on any of the customer’s orders.' },
+      ],
+      responses: { 200: ok('A page of customers, most orders first.'), ...guarded },
+    },
+  },
+
   '/api/customers/verifiers': {
     get: {
       tags: ['Customers'],
@@ -1346,6 +1419,29 @@ export const extraPaths: Record<string, unknown> = {
         { name: 'per_page', in: 'query', schema: { type: 'integer', maximum: 200 } },
       ],
       responses: { 200: ok('A page of people, most lookups first.'), ...guarded },
+    },
+  },
+
+  '/api/customers/{mobile}/orders': {
+    get: {
+      tags: ['Customers'],
+      summary: "One customer's orders, and what they come to",
+      description:
+        'Keyed by mobile number, because that is what a customer is here: there is no customer table, and the list groups the orders by it. Every order the caller may see under that number, newest first, with `totals` — how many, billed, paid, and due.\n\nThe money is read from the orders rather than re-priced from the weight bands: this is a history of what was billed and collected, and re-pricing it today would answer what the same work would cost now. `due` is billed less paid rather than a sum of `dues_amount`, which is written at settlement and says nothing about an order billed and not yet paid at all.\n\nScoped as the customer list is: a laboratory sees its own orders, a team member without the collection right sees only the ones they took or were assigned, and head office sees them all.',
+      parameters: [
+        {
+          name: 'mobile',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          description: 'The customer’s mobile number, as the orders hold it.',
+        },
+      ],
+      responses: {
+        200: ok('The orders under that number, with their totals.'),
+        400: err('A mobile number is required.'),
+        ...guarded,
+      },
     },
   },
 
@@ -1450,6 +1546,28 @@ export const extraPaths: Record<string, unknown> = {
         ...guarded,
       },
     },
+    post: {
+      tags: ['Attendance'],
+      summary: 'Record a day that was never punched',
+      description:
+        'The employer only, as correcting is. The clock can only record now, so a day nobody punched at all — the machine was down, they were at a fair, somebody forgot — has no row to correct, and this writes one.\n\nRefused for a day that has not happened: a row dated forward would count in the month’s hours before it was worked. Refused too where the day is already recorded, which is `PATCH /api/attendance/{id}`.\n\nA blank `clock_out` leaves the day open, the same `00:00:00` sentinel the rest of this table uses. Breaks are not taken here: a day reconstructed after the fact is reconstructed from arrival and departure.',
+      requestBody: body(
+        {
+          emp_id: { type: 'integer' },
+          date: { type: 'string', examples: ['2026-09-03'] },
+          clock_in: { type: 'string', examples: ['09:30'] },
+          clock_out: { type: ['string', 'null'], examples: ['18:30'] },
+        },
+        ['emp_id', 'date', 'clock_in'],
+      ),
+      responses: {
+        201: ok('The day, as written.'),
+        400: err('No employee, a malformed date or time, a day in the future, or a clock-out at or before the clock-in.'),
+        409: err('That day is already recorded.'),
+        ...guarded,
+        403: err('That account is not one of your employees.'),
+      },
+    },
   },
 
   '/api/attendance/today': {
@@ -1489,6 +1607,95 @@ export const extraPaths: Record<string, unknown> = {
       summary: 'Start or end a break',
       requestBody: body({ on_break: { type: 'boolean', description: 'True starts a break, false ends it.' } }, ['on_break']),
       responses: { 200: ok('Break state recorded.'), 400: err('Not clocked in today.'), ...guarded },
+    },
+  },
+
+  '/api/attendance/{id}': {
+    patch: {
+      tags: ['Attendance'],
+      summary: 'Correct a day',
+      description:
+        'The employer only — head office for anyone, a laboratory for the people it employs, and a member of staff for nobody, including themselves: a person editing their own attendance is a person writing their own timesheet.\n\nFor the days the clock in the bar cannot fix, because it only ever records now: somebody who forgot to punch out and left the day open, or punched in an hour after they arrived.\n\nTimes are `HH:MM` or `HH:MM:SS`. `clock_out: null` reopens the day — the column is NOT NULL and `00:00:00` is the sentinel for "still working" — and a break is cleared the same way. The break columns are datetimes, so a time is stamped onto the day the record belongs to rather than onto today.',
+      parameters: [idParam],
+      requestBody: body({
+        clock_in: { type: 'string', examples: ['09:05'] },
+        clock_out: { type: ['string', 'null'], examples: ['18:30'] },
+        break_begin: { type: ['string', 'null'], examples: ['13:00'] },
+        break_end: { type: ['string', 'null'], examples: ['13:30'] },
+      }),
+      responses: {
+        200: ok('The corrected day.'),
+        400: err('Nothing to change, a time that is not a time, or a clock-out at or before the clock-in.'),
+        404: err('That attendance record does not exist.'),
+        ...guarded,
+        403: err('That account is not one of your employees.'),
+      },
+    },
+  },
+
+  // ------------------------------------------------------------- messages
+  '/api/messages': {
+    get: {
+      tags: ['Messages'],
+      summary: 'Inbox, or one person’s messages',
+      description:
+        'Without `from`, what has been written to you. With it, what one person has written — the employee page asks that way, and the employer check decides whether they are yours to read. Anybody may pass their own id to read what they sent.',
+      parameters: [
+        { name: 'from', in: 'query', schema: { type: 'integer' }, description: 'One writer: yourself, or somebody you employ.' },
+        { name: 'open', in: 'query', schema: { type: 'string', enum: ['1'] }, description: 'Only what has not been dealt with.' },
+        { name: 'page', in: 'query', schema: { type: 'integer' } },
+        { name: 'per_page', in: 'query', schema: { type: 'integer', maximum: 200 } },
+      ],
+      responses: {
+        200: ok('A page of messages, newest first.'),
+        ...guarded,
+        403: err('That account is not one of your employees.'),
+      },
+    },
+    post: {
+      tags: ['Messages'],
+      summary: 'Write to your employer',
+      description:
+        'The Laravel sidebars drew a Message menu and never built it — both entries are `href="#"`. This is the whole of it: one line from an employee to the person who employs them, read beside the attendance it is usually about.\n\nThere is no recipient in the body. Staff have exactly one employer, and a field for it would be a field to get wrong; an account nobody employs is told there is nobody to write to rather than having the message go nowhere.\n\nA `request` expects something to happen — a correction, a day off — and a `message` does not. The reader’s list is coloured by the difference, so it is asked rather than guessed from the words.',
+      requestBody: body(
+        {
+          body: { type: 'string', maxLength: 2000 },
+          kind: { type: 'string', enum: ['message', 'request'], default: 'message' },
+          about_date: { type: ['string', 'null'], description: 'The day it concerns, as YYYY-MM-DD, when it concerns one.' },
+        },
+        ['body'],
+      ),
+      responses: {
+        201: ok('Written.'),
+        400: err('Nothing written, too long, an unknown kind, a malformed date, or nobody to write to.'),
+        ...guarded,
+      },
+    },
+  },
+
+  '/api/messages/{id}/resolve': {
+    patch: {
+      tags: ['Messages'],
+      summary: 'Mark one dealt with',
+      description:
+        'The reader’s, not the writer’s: they asked, you answer. `resolved: false` reopens it. `resolved_at` is the whole of the state — unread and unactioned are the same thing to the person who has to act.',
+      parameters: [idParam],
+      requestBody: body({ resolved: { type: 'boolean', default: true } }),
+      responses: {
+        200: ok('Marked.'),
+        404: err('That message does not exist.'),
+        ...guarded,
+        403: err('That message was not written to you.'),
+      },
+    },
+  },
+
+  '/api/messages/employer': {
+    get: {
+      tags: ['Messages'],
+      summary: 'Who this account writes to',
+      description: 'The employer a message would go to, so the form can say so before anybody types. Null when nobody employs this account.',
+      responses: { 200: ok('The employer, or null.'), ...guarded },
     },
   },
 
@@ -1759,12 +1966,14 @@ export const extraPaths: Record<string, unknown> = {
       tags: ['Users'],
       summary: 'Read one account',
       description:
-        'Administrators only. Everyone else reads themselves at /api/users/me. Carries `employment` — the current posting with its joining date, salary and employer, resolved to a user id and a name — or null when nobody employs them, which is the case for a laboratory and for somebody whose employment was ended.',
+        'Head office reads any account; a laboratory reads the people it employs, and nobody else — the same rule `PATCH /api/users/{id}` applies, because whoever may change an account may read it. Everyone else reads themselves at /api/users/me. Carries `employment` — the current posting with its joining date, salary and employer, resolved to a user id and a name — or null when nobody employs them, which is the case for a laboratory and for somebody whose employment was ended.',
       parameters: [idParam],
       responses: {
         200: ok('Account, with its current employment.'),
         404: err('Account not found.'),
+        // After the spread, or the shared 403 overwrites this one.
         ...guarded,
+        403: err('That account is not one of your employees.'),
       },
     },
     patch: {
@@ -1851,6 +2060,87 @@ export const extraPaths: Record<string, unknown> = {
         404: err('Account not found.'),
         409: err('Students, orders or staff still point at this account.'),
         ...guarded,
+      },
+    },
+  },
+
+  '/api/users/staff/salary': {
+    get: {
+      tags: ['Users'],
+      summary: 'What each employee is owed for a month',
+      description:
+        'There is no payroll in this schema — no payslip, no payment, no deduction — and this does not invent one. It puts two facts the panel already holds side by side: the salary agreed on the employment, and the days their attendance recorded for the month.\n\n`payable` is arithmetic, not a payslip: the monthly salary over the days in the month, times the days present. Whether a Sunday counts, whether a half day is half, what an absence costs — none of it is recorded anywhere, so none of it is assumed here.\n\nA day punched into and never out of counts as present and contributes no minutes, which is the reading the calendar and the attendance tiles use. Scoped as the staff list is: a laboratory sees its own people, head office its own or one laboratory’s with `lab_id`.',
+      parameters: [
+        { name: 'month', in: 'query', schema: { type: 'string' }, description: 'YYYY-MM. Defaults to the current month.' },
+        { name: 'lab_id', in: 'query', schema: { type: 'integer' }, description: 'Head office only: one laboratory’s staff.' },
+      ],
+      responses: {
+        200: ok('One row per employee, with `month` and `days_in_month`.'),
+        400: err('The month must be YYYY-MM.'),
+        ...guarded,
+      },
+    },
+  },
+
+  '/api/users/staff/salary/pay': {
+    post: {
+      tags: ['Users'],
+      summary: "Record a salary payment",
+      description:
+        'One row per payment, not per month. A month is often paid in parts, and a record that assumed one payment would have to be overwritten to hold the second — which is how a part payment quietly becomes the only payment.\n\n`month` is the month it is *for*, as YYYY-MM; `paid_on` is when it changed hands, and the two are often in different months. The agreed monthly salary and the days attended are copied onto the row as they stand now: attendance can be corrected afterwards, and a payslip that changes when somebody edits a punch is not a receipt.\n\nThe employer’s, like everything else that writes about their staff.',
+      requestBody: body(
+        {
+          emp_id: int,
+          month: { type: 'string', description: 'YYYY-MM, the month it is for.' },
+          amount: { type: 'number' },
+          paid_on: { type: 'string', format: 'date' },
+          pay_mode: { type: 'string', enum: ['cash', 'upi', 'bank', 'cheque'] },
+          reference: str,
+          note: str,
+        },
+        ['emp_id', 'month', 'amount'],
+      ),
+      responses: {
+        201: ok('Recorded.'),
+        400: err('No employee, a month that is not YYYY-MM, or an amount at or below zero.'),
+        ...guarded,
+        403: err('Not your employee.'),
+      },
+    },
+  },
+
+  '/api/users/staff/salary/payments': {
+    get: {
+      tags: ['Users'],
+      summary: 'What has been paid, and to whom',
+      description:
+        '`emp_id` narrows it to one person — their own page asks that way, and a person may read their own — and `month` to one month. With neither, it is everything this employer has paid, newest first, which is the history screen. Anybody else’s payroll is not yours to read.',
+      parameters: [
+        { name: 'emp_id', in: 'query', schema: { type: 'integer' }, description: 'One person’s history.' },
+        { name: 'month', in: 'query', schema: { type: 'string' }, description: 'YYYY-MM.' },
+        { name: 'page', in: 'query', schema: { type: 'integer' } },
+        { name: 'per_page', in: 'query', schema: { type: 'integer', maximum: 200 } },
+      ],
+      responses: { 200: ok('Payments, newest first.'), ...guarded, 403: err('Not your employee.') },
+    },
+  },
+
+  '/api/users/staff/{id}/payslip': {
+    get: {
+      tags: ['Users'],
+      summary: 'A payslip for one month',
+      description:
+        'The payments recorded against that month, with the days and the monthly salary that were stored on them rather than read back today — attendance can be corrected afterwards, and a receipt that changes is not a receipt. There are no deductions, allowances or tax lines in this system, so there are none on the slip. Returns a PDF inline; `?format=html` returns the markup it is rendered from. The employer’s, or their own.',
+      parameters: [
+        idParam,
+        { name: 'month', in: 'query', schema: { type: 'string' }, description: 'YYYY-MM. Defaults to the current month.' },
+        { name: 'format', in: 'query', schema: { type: 'string', enum: ['html'] } },
+      ],
+      responses: {
+        200: { description: 'The payslip, as a PDF or as HTML.' },
+        400: err('The month must be YYYY-MM.'),
+        ...guarded,
+        403: err('Not your employee.'),
       },
     },
   },

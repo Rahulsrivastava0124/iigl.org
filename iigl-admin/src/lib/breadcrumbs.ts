@@ -75,7 +75,7 @@ const VIEWS: Record<string, Record<string, string>> = {
   attributes: { 'tab=values': 'Attribute Values' },
   pricing: { 'scope=laboratory': 'Laboratory Prices' },
   transactions: { 'status=0': 'Commission Approval', 'type=commision': 'Commission History' },
-  customers: { 'tab=unregistered': 'Not Registered', 'tab=verifiers': 'Verifiers' },
+  customers: { 'tab=all': 'All Customers', 'tab=unregistered': 'Not Registered' },
   content: {
     'tab=pages': 'Pages',
     'tab=types': 'Report Types',

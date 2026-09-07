@@ -1,4 +1,5 @@
 import { apiUrl } from './config';
+import { compressImage } from './image';
 
 /**
  * Uploading, with something to look at while it happens.
@@ -12,6 +13,12 @@ import { apiUrl } from './config';
  * The wait is real — a round trip to object storage measures the better part
  * of a second before any bytes move — so the fix is not to make it quicker but
  * to say what it is doing.
+ *
+ * **Every upload in the panel comes through here**, which is why the shrinking
+ * is here too rather than in each field: a phone photograph of an Aadhaar card
+ * is four megabytes of a document that prints at 3cm across, and an uploader
+ * that forgot to compress would be one nobody noticed until the storage bill.
+ * See `compressImage` for what it leaves alone.
  */
 
 export interface UploadedFile {
@@ -22,14 +29,30 @@ export interface UploadedFile {
   mime: string;
 }
 
-export function uploadFiles(
+export async function uploadFiles(
   bucket: string,
   files: File[],
   onProgress?: (percent: number) => void,
+  /** What the shrinking saved, once it is known and before the bytes move. */
+  onShrunk?: (saved: { before: number; after: number }) => void,
 ): Promise<UploadedFile[]> {
+  /*
+    Shrunk first, then sent. The progress bar therefore measures the bytes that
+    are actually travelling — reporting progress against the original size and
+    then sending a tenth of it is a bar that finishes before it starts.
+
+    In parallel: each is a decode and a re-encode on the GPU, and a franchise
+    attaching five documents should not wait for five of them in a row.
+  */
+  const prepared = await Promise.all(files.map(compressImage));
+
+  const before = prepared.reduce((n, p) => n + p.before, 0);
+  const after = prepared.reduce((n, p) => n + p.after, 0);
+  if (after < before) onShrunk?.({ before, after });
+
   return new Promise((resolve, reject) => {
     const form = new FormData();
-    for (const file of files) form.append('files', file);
+    for (const { file } of prepared) form.append('files', file);
 
     const request = new XMLHttpRequest();
     request.open('POST', apiUrl(`/uploads/${bucket}`));

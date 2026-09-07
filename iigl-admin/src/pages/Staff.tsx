@@ -322,16 +322,19 @@ export default function Staff() {
     }
   };
 
-  /**
-   * Head office's own employees, on head office's screen.
-   *
-   * `/users/staff` returns the whole network to head office, which wants only
-   * the people it employs itself here — a laboratory's staff belong to that
-   * laboratory's page. For a laboratory the endpoint has already scoped the
-   * rows to its own employees, and applying this filter to them left the list
-   * empty: every one of them is employed by a laboratory, not by head office.
-   */
-  const filteredRows = admin ? rows.filter((r) => r.employer_role_id === ROLE.SUPER) : rows;
+  /*
+    No filtering here any more.
+
+    This screen used to drop the laboratories' staff out of the rows head office
+    had been sent, because `/users/staff` answered head office with the whole
+    network. That fixed the look of this one page and nothing else: the salary
+    screen beside it had no such filter and listed other laboratories' people,
+    and this page still paged and counted over rows it then threw away — a page
+    of 25 arriving as a list of 3, with the pager describing the 25.
+
+    The endpoint scopes it now: head office's own employees, a laboratory's own,
+    or one laboratory's with `lab_id`.
+  */
 
   return (
     <>
@@ -553,8 +556,8 @@ export default function Staff() {
         title="Employee"
         count={
           data
-            ? `${filteredRows.length} ${admin ? 'head office' : 'laboratory'} employee${
-                filteredRows.length === 1 ? '' : 's'
+            ? `${rows.length} ${admin ? 'head office' : 'laboratory'} employee${
+                rows.length === 1 ? '' : 's'
               }`
             : 'Loading…'
         }
@@ -580,7 +583,7 @@ export default function Staff() {
           </>
         }
       >
-        <TableFrame loading={loading} error={error} empty={filteredRows.length === 0}>
+        <TableFrame loading={loading} error={error} empty={rows.length === 0}>
           <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>
@@ -596,7 +599,7 @@ export default function Staff() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredRows.map((s, index) => (
+              {rows.map((s, index) => (
                 <TableRow key={s.id} hover>
                   <TableCell className="mono">{index + 1}</TableCell>
                   <TableCell>

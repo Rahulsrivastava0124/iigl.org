@@ -211,10 +211,14 @@ dashboardRoutes.get(
      * telling it for years; each is marked below.
      *
      * Null for head office, which has no employer of its own and sees the
-     * administrator's dashboard instead.
+     * administrator's dashboard instead — and null for an employee, who has
+     * `mine` below. These are the laboratory's private arrangements: what it
+     * owes head office, what its staff are collectively holding, what the whole
+     * counter has taken. A front desk can act on none of it, and it was being
+     * sent to every employee's browser to be dropped by the screen.
      */
     const labFigures = async () => {
-      if (isAdmin) return null;
+      if (isAdmin || req.user.roleId !== ROLE.LAB) return null;
       const me = req.user.id;
       const empid = await empidOf(labId!);
 
@@ -456,6 +460,208 @@ dashboardRoutes.get(
       };
     };
 
+    /**
+     * One employee's own figures.
+     *
+     * The laboratory block beside this is the *laboratory's*, and an employee
+     * was being shown it under headings that say "my" — "Today's my
+     * performance" over the whole counter's takings, "My wallet" beside a
+     * staff-wallet tile that is every colleague's money as well. A front desk
+     * reading its own performance off the shop's total is reading the wrong
+     * number.
+     *
+     * An order is theirs if they **took it or were assigned it** — the same
+     * test the order list uses, and the one the row itself shows under
+     * "Assigned to". A laboratory routinely takes an order at its own counter
+     * and hands it to somebody to run: `received_by` is the counter, and
+     * `assigned_to` is whose work it then is. Counting only what they received
+     * left an employee looking at a dashboard of zeros beside a list of the
+     * orders assigned to them.
+     *
+     * Money is not the same question. `transactions.received_by` is who
+     * actually took the payment, and being handed an order to run is not being
+     * handed the money for it, so the takings stay on that alone.
+     *
+     * Null for head office and for the laboratory account itself: neither is
+     * somebody's front desk, and the laboratory's own tiles already say what it
+     * took, at the counter and through its staff.
+     */
+    const myFigures = async () => {
+      if (isAdmin || req.user.roleId === ROLE.LAB) return null;
+      const me = req.user.id;
+
+      /**
+       * My orders: taken by me, or assigned to me. `todayOnly` dates them the
+       * way the rest of this screen does.
+       *
+       * Columns are qualified because two of the callers join `order_details`
+       * and `reports` alongside — and an unqualified `received_by` next to
+       * `transactions` would be ambiguous the moment somebody adds that join.
+       */
+      const myOrders = <Q extends { where: any }>(q: Q, todayOnly = false): Q => {
+        let out = live(q).where((eb: any) =>
+          eb.or([eb('orders.received_by', '=', me), eb('orders.assigned_to', '=', me)]),
+        ) as Q;
+        if (todayOnly) out = out.where('orders.order_date', '=', today) as Q;
+        return out;
+      };
+
+      const countMine = async (todayOnly = false, status?: string) => {
+        let q = myOrders(db.selectFrom('orders').select(db.fn.countAll().as('n')), todayOnly);
+        if (status) q = q.where('orders.status', '=', status);
+        const row = await q.executeTakeFirstOrThrow();
+        return Number(row.n);
+      };
+
+      const saleMine = async (todayOnly = false) => {
+        const row = await myOrders(
+          db.selectFrom('orders').select(db.fn.sum<number>('orders.payable_amt').as('total')),
+          todayOnly,
+        ).executeTakeFirstOrThrow();
+        return Number(row.total ?? 0);
+      };
+
+      /** Money I took in. Dated by when it arrived, as the laboratory's is. */
+      const paidMine = async (todayOnly = false) => {
+        let q = db
+          .selectFrom('transactions')
+          .select(db.fn.sum<number>('amount').as('total'))
+          .where('transaction_type', '=', TRANSACTION_TYPE.ORDER_COLLECTION)
+          .where('received_by', '=', me);
+        if (todayOnly) {
+          q = q
+            .where('created_at', '>=', startOfToday)
+            .where('created_at', '<', startOfTomorrow);
+        }
+        const row = await q.executeTakeFirstOrThrow();
+        return Number(row.total ?? 0);
+      };
+
+      /** Cards on my orders, by kind. */
+      const cardsMine = async (flag: 'smart_card' | 'classic_card', todayOnly = false) => {
+        const row = await myOrders(
+          db
+            .selectFrom('order_details')
+            .innerJoin('orders', 'orders.id', 'order_details.order_id')
+            .select(db.fn.sum<number>('order_details.qty').as('total'))
+            .where(`order_details.${flag}` as 'order_details.smart_card', '=', 1),
+          todayOnly,
+        ).executeTakeFirstOrThrow();
+        return Number(row.total ?? 0);
+      };
+
+      /** Certificates issued against my orders, by kind. */
+      const reportsMine = async (flag: 'smart_card' | 'classic_card') => {
+        const row = await myOrders(
+          db
+            .selectFrom('reports')
+            .innerJoin('order_details', 'order_details.id', 'reports.order_detail_id')
+            .innerJoin('orders', 'orders.id', 'order_details.order_id')
+            .select(db.fn.countAll().as('n'))
+            .where(`order_details.${flag}` as 'order_details.smart_card', '=', 1),
+        ).executeTakeFirstOrThrow();
+        return Number(row.n);
+      };
+
+      /**
+       * What I have handed on, and had approved.
+       *
+       * Whoever received it: an employee hands money to their laboratory, not
+       * to head office, so the wallet arithmetic's `send_by = me AND received
+       * by head office` is the wrong question here.
+       */
+      /** Approved wallet transfers *to* me — a float handed over to work with. */
+      const walletInMine = async () => {
+        const row = await db
+          .selectFrom('transactions')
+          .select(db.fn.sum<number>('amount').as('total'))
+          .where('transaction_type', '=', TRANSACTION_TYPE.WALLET_TRANSFER)
+          .where('received_by', '=', me)
+          .where('status', '=', TX_STATUS.APPROVED)
+          .executeTakeFirstOrThrow();
+        return Number(row.total ?? 0);
+      };
+
+      const transferredMine = async () => {
+        const row = await db
+          .selectFrom('transactions')
+          .select(db.fn.sum<number>('amount').as('total'))
+          .where('transaction_type', '=', TRANSACTION_TYPE.WALLET_TRANSFER)
+          .where('send_by', '=', me)
+          .where('status', '=', TX_STATUS.APPROVED)
+          .executeTakeFirstOrThrow();
+        return Number(row.total ?? 0);
+      };
+
+      const [
+        ordersTaken,
+        activeMine,
+        smartCardsMine,
+        classicCardsMine,
+        smartReportsMine,
+        classicReportsMine,
+        saleAll,
+        paidAll,
+        transferred,
+        walletCredit,
+        todayOrders,
+        todayActiveMine,
+        todayCards,
+        todayClassicCards,
+        todaySaleMine,
+        todayPaidMine,
+      ] = await Promise.all([
+        countMine(),
+        countMine(false, 'preparing'),
+        cardsMine('smart_card'),
+        cardsMine('classic_card'),
+        reportsMine('smart_card'),
+        reportsMine('classic_card'),
+        saleMine(),
+        paidMine(),
+        transferredMine(),
+        walletInMine(),
+        countMine(true),
+        countMine(true, 'preparing'),
+        cardsMine('smart_card', true),
+        cardsMine('classic_card', true),
+        saleMine(true),
+        paidMine(true),
+      ]);
+
+      return {
+        orders_taken: ordersTaken,
+        cards_ordered: smartCardsMine + classicCardsMine,
+        reports_generated: smartReportsMine + classicReportsMine,
+        smart_generated: smartReportsMine,
+        classic_generated: classicReportsMine,
+        active: activeMine,
+        sale: round2(saleAll),
+        paid: round2(paidAll),
+        // Floored: taking in more than has been billed is a credit, not a debt.
+        dues: round2(Math.max(0, saleAll - paidAll)),
+        transferred: round2(transferred),
+        /*
+          What they are still holding: what they took in, plus any float handed
+          to them, less what they have handed on and had approved.
+
+          Not the laboratory's `my_wallet`, which this screen used to borrow.
+          That subtracts only what was sent *to head office*, and an employee
+          hands money to their employer — so every transfer they made left the
+          tile unchanged and the figure only ever grew.
+        */
+        wallet: round2(paidAll + walletCredit - transferred),
+        today: {
+          orders: todayOrders,
+          cards_ordered: todayCards + todayClassicCards,
+          active: todayActiveMine,
+          sale: round2(todaySaleMine),
+          paid: round2(todayPaidMine),
+          dues: round2(Math.max(0, todaySaleMine - todayPaidMine)),
+        },
+      };
+    };
+
     const [
       orders,
       active,
@@ -502,7 +708,7 @@ dashboardRoutes.get(
       customers(false),
     ]);
 
-    const lab = await labFigures();
+    const [lab, mine] = await Promise.all([labFigures(), myFigures()]);
 
     let reportsQuery = db.selectFrom('reports').select(db.fn.countAll().as('n'));
     if (!isAdmin) reportsQuery = reportsQuery.where('lab_id', '=', labId);
@@ -538,6 +744,9 @@ dashboardRoutes.get(
         // What the Laravel laboratory dashboard showed, and only a laboratory
         // has: null for head office, whose dashboard is a different screen.
         lab,
+        // One employee's own work. Null for head office and for the
+        // laboratory account, neither of which is somebody's front desk.
+        mine,
         people: {
           laboratories: labCount,
           employees: staffCount,

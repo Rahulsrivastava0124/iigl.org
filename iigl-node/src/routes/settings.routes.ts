@@ -2,7 +2,7 @@ import { Router } from 'express';
 import nodemailer from 'nodemailer';
 import { wrap } from '../lib/async.js';
 import { badRequest } from '../lib/errors.js';
-import { requireAdmin } from '../middleware/auth.js';
+import { ROLE, requireAdmin, requireLabScope } from '../middleware/auth.js';
 import { allSettings, saveSettings, setting } from '../services/settings.service.js';
 
 /**
@@ -11,17 +11,34 @@ import { allSettings, saveSettings, setting } from '../services/settings.service
  * One resource, not one per group: the screen reads them all at once and saves
  * whichever it changed, and a group is only the part of a key before the dot.
  *
- * Administrators only. These decide what customers are billed and what is
- * printed on a certificate.
+ * Writing is head office's: these decide what customers are billed, what is
+ * printed on a certificate and where mail comes from.
+ *
+ * Reading is not all head office's. The holiday list is a calendar the whole
+ * company works to, and a laboratory that cannot see which days the office is
+ * shut is being asked to guess. So a laboratory and its staff read that group
+ * and nothing else — the guard is on each route rather than on the router,
+ * which is what let one `requireAdmin` hide it.
  */
 export const settingsRoutes = Router();
-settingsRoutes.use(requireAdmin);
 
-/** Every setting, its value, its default, and whether it has been set. */
+/** What may be read by somebody who is not head office. */
+const SHARED = 'holidays.';
+
+/**
+ * Every setting, its value, its default, and whether it has been set — filtered
+ * to the shared group for anybody but head office. Filtered here rather than in
+ * the panel: a screen that hides a field it was sent has still been sent it.
+ */
 settingsRoutes.get(
   '/',
-  wrap(async (_req, res) => {
-    res.json({ data: await allSettings() });
+  requireLabScope,
+  wrap(async (req, res) => {
+    const all = await allSettings();
+    res.json({
+      data:
+        req.user.roleId === ROLE.SUPER ? all : all.filter((s) => s.key.startsWith(SHARED)),
+    });
   }),
 );
 
@@ -32,6 +49,7 @@ settingsRoutes.get(
  */
 settingsRoutes.patch(
   '/',
+  requireAdmin,
   wrap(async (req, res) => {
     const written = await saveSettings((req.body ?? {}) as Record<string, unknown>, req.user.id);
     res.json({ data: { written } });
@@ -57,6 +75,7 @@ settingsRoutes.patch(
  */
 settingsRoutes.post(
   '/test-smtp',
+  requireAdmin,
   wrap(async (req, res) => {
     const url = String((req.body ?? {}).url ?? '').trim() || (await setting('mail.smtp_url'));
     if (!url) throw badRequest('There is no SMTP URL to test. Type one, or save one first.');

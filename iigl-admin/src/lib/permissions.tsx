@@ -4,17 +4,21 @@ import { useFetch } from './useFetch';
 /**
  * The permission matrix, as the signed-in user sees it.
  *
- * `role_permissions` carries fourteen action types per role, each with view,
- * create, update and delete. The API enforces it on every request; this exists
+ * `role_permissions` carries one row per action type per role, each with view,
+ * create, update and delete. The list of actions lives in `permission_actions`
+ * — head office can add to it — so this type names the ones the panel itself
+ * asks about. The API enforces it on every request; this exists
  * so the panel does not offer a button the API would refuse. A control that
  * throws a permission error on click is worse than one that isn't there.
  *
- * Loaded once at sign-in rather than per screen — it is fourteen rows and it
- * does not change while someone is working.
+ * Loaded once at sign-in rather than per screen — it is a handful of rows and
+ * it does not change while someone is working.
  */
 
 export type ActionType =
   | 'account'
+  | 'attendance'
+  | 'message'
   | 'admin_employee'
   | 'customer'
   | 'employee_management'

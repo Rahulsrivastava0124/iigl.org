@@ -5,13 +5,24 @@ import LogoutIcon from '@mui/icons-material/LogoutOutlined';
 import BreakIcon from '@mui/icons-material/FreeBreakfastOutlined';
 import { useToast } from '../components/Toast';
 import { isSuper, isLab } from '../lib/portal';
+import { usePermissions } from '../lib/permissions';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
 import MonthCalendar, { monthRange, thisMonth } from '../components/MonthCalendar';
-import { Panel, StateChip, attendanceState } from '../components/ui';
-import { attendanceDay, dayKey, hours, isOpen, minutesWorked, time } from '../lib/attendance';
-import type { Day } from '../lib/attendance';
+import { Panel, StateChip } from '../components/ui';
+import MessageCompose from '../components/MessageCompose';
+import MessageIcon from '@mui/icons-material/ForumOutlined';
+import {
+  attendanceDay,
+  dayKey,
+  holidayDay,
+  hours,
+  isOpen,
+  minutesWorked,
+  time,
+} from '../lib/attendance';
+import type { Day, Holiday } from '../lib/attendance';
 import type { Paged } from '../lib/api';
 
 interface Today {
@@ -41,11 +52,16 @@ export default function Attendance() {
   // Head office and a laboratory may read somebody else's days; a team member
   // reads their own.
   const canReadOthers = isSuper(user) || isLab(user);
+  // A laboratory always may; its staff may when they have been granted it.
+  const { can } = usePermissions();
+  const canMessage = canReadOthers || can('message', 'create');
 
   // 'me' rather than '' — an empty MUI select value leaves the label
   // unshrunk, so the field shows its label where the choice should be.
   const [empId, setEmpId] = useState('me');
   const [month, setMonth] = useState(thisMonth());
+  /** The write-to-your-employer dialog. */
+  const [writing, setWriting] = useState(false);
   const { from, to, days: daysInMonth } = monthRange(month);
 
   const today = useFetch<{ data: Today }>('/attendance/today');
@@ -54,6 +70,10 @@ export default function Attendance() {
   const query = new URLSearchParams({ from, to, per_page: '200' });
   if (empId !== 'me') query.set('emp_id', empId);
   const history = useFetch<Paged<Day>>(`/attendance?${query}`);
+
+  /* The days the office was shut: head office's list and this laboratory's. */
+  const holidays = useFetch<{ data: Holiday[] }>(`/holidays?from=${from}&to=${to}`);
+  const holidayOn = new Map((holidays.data?.data ?? []).map((h) => [h.date, h]));
 
   const [busy, setBusy] = useState(false);
 
@@ -140,11 +160,26 @@ export default function Attendance() {
                 >
                   Clock out
                 </Button>
+                {/*
+                  The clock records now and nothing else, so the day somebody
+                  forgot to punch out of cannot be fixed from here — only their
+                  employer may change a record. What they can do is say so, and
+                  this is where they say it.
+                */}
+                {/* Granted, like everything else a laboratory decides about
+                    its front desk. */}
+                {canMessage && (
+                  <Button startIcon={<MessageIcon />} onClick={() => setWriting(true)}>
+                    Message employer
+                  </Button>
+                )}
               </Stack>
             </Stack>
           </Box>
         </Panel>
       )}
+
+      {writing && <MessageCompose onClose={() => setWriting(false)} />}
 
       <MonthCalendar
         value={month}
@@ -171,21 +206,27 @@ export default function Attendance() {
         }
         dayFor={(date) => {
           const record = byDate.get(date);
-          return record ? attendanceDay(record) : null;
+          const shut = holidayOn.get(date);
+          // Attendance wins the colour: somebody who came in on a holiday
+          // worked, and a pink square would say they did not.
+          if (record) return attendanceDay(record, shut);
+          return shut ? holidayDay(shut) : null;
         }}
-        legend={
-          <>
-            <StateChip {...attendanceState(true)} />
-            <StateChip {...attendanceState(false)} />
-          </>
-        }
+        /* No legend: the cells carry their own times, and the colour follows
+           them. The note below is the month's own summary, which says
+           something the grid does not. */
         note={
           history.loading
             ? 'Loading the month…'
             : rows.length === 0
               ? 'No attendance recorded this month.'
               : `${rows.length} of ${daysInMonth} days · ${hours(workedMinutes)} worked` +
-                (stillOpen > 0 ? ` · ${stillOpen} still open` : '')
+                (stillOpen > 0 ? ` · ${stillOpen} still open` : '') +
+                // Said out loud, because the difference between "twenty days"
+                // and "twenty-two" is usually the two pink squares.
+                (holidayOn.size > 0
+                  ? ` · ${holidayOn.size} ${holidayOn.size === 1 ? 'holiday' : 'holidays'}`
+                  : '')
         }
       />
     </>

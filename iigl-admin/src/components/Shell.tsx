@@ -1,9 +1,8 @@
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { Link as RouterLink, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   AppBar,
   Avatar,
-  Badge,
   Box,
   Breadcrumbs,
   Button,
@@ -27,7 +26,6 @@ import {
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import SearchIcon from '@mui/icons-material/SearchOutlined';
-import BellIcon from '@mui/icons-material/NotificationsNoneOutlined';
 import AddIcon from '@mui/icons-material/AddOutlined';
 import ExpandIcon from '@mui/icons-material/ExpandMoreOutlined';
 import NextIcon from '@mui/icons-material/NavigateNextOutlined';
@@ -46,19 +44,20 @@ import PricingIcon from '@mui/icons-material/SellOutlined';
 import ContentIcon from '@mui/icons-material/ArticleOutlined';
 import StudentIcon from '@mui/icons-material/SchoolOutlined';
 import EnquiryIcon from '@mui/icons-material/SupportAgentOutlined';
+import AttendanceIcon from '@mui/icons-material/CalendarMonthOutlined';
 import SettingsIcon from '@mui/icons-material/SettingsOutlined';
 import LogoutIcon from '@mui/icons-material/LogoutOutlined';
 import { alpha } from '@mui/material/styles';
 import { BRAND, TONE } from '../lib/theme';
 import { useAuth } from '../lib/auth';
 import { CrumbSlotContext } from '../lib/crumbActions';
-import { useFetch } from '../lib/useFetch';
 import { ROLE, ROLE_NAMES } from '../lib/portal';
 import { api } from '../lib/api';
 import { fileUrl } from '../lib/config';
 import { useBreadcrumbs } from '../lib/breadcrumbs';
+import NotificationBell from './NotificationBell';
+import PunchClock from './PunchClock';
 import { usePermissions } from '../lib/permissions';
-import { toneColour } from './ui';
 
 const WIDTH = 276;
 const RAIL = 76;
@@ -86,7 +85,7 @@ interface Item {
   /** Only for an employee; a laboratory sees it in its own group. */
   staffOnly?: boolean;
   /** A permission the matrix has to grant before the entry is shown. */
-  needs?: 'order-create' | 'report-create';
+  needs?: 'order-create' | 'report-create' | 'attendance-view';
 }
 
 /**
@@ -172,6 +171,7 @@ const ADMIN_GROUPS: Group[] = [
     icon: StaffIcon,
     items: [
       { to: '/staff', label: 'Employee List' },
+      { to: '/salary', label: 'Salary' },
       // Roles sit with the people who hold them. They had a group of their own
       // — "Admin Employee", one entry, the same icon — which read as a second
       // employee menu rather than as part of this one.
@@ -183,22 +183,22 @@ const ADMIN_GROUPS: Group[] = [
     icon: TransactionsIcon,
     items: [
       { to: '/wallet', label: 'Wallet' },
+      // What head office does with commission is decide it, which is this
+      // queue. There is no Transaction History beside it: head office's own
+      // movements are the Wallet — the same rows, with the balance they
+      // produced — and a franchise's are its own, read per laboratory on the
+      // laboratory's page. A history that showed either was one screen too
+      // many or somebody else's money.
       { to: '/transactions?status=0', label: 'Commission Approval' },
-      // No Commission History here. That screen is a franchise's own account —
-      // what it has earned, what it has remitted and what it still owes — and
-      // head office reads the same thing per laboratory on the laboratory's
-      // page. What head office does with commission is decide it, which is the
-      // approval queue above.
-      { to: '/transactions', label: 'Transaction History' },
     ],
   },
   {
     label: 'Customer',
     icon: CustomerIcon,
     items: [
+      { to: '/customers?tab=all', label: 'All Customers', adminOnly: true },
       { to: '/customers', label: 'Registered' },
       { to: '/customers?tab=unregistered', label: 'Not Registered' },
-      { to: '/customers?tab=verifiers', label: 'Verifiers' },
     ],
   },
   {
@@ -273,6 +273,7 @@ const ADMIN_GROUPS: Group[] = [
     items: [
       { to: '/settings', label: 'Company', end: true },
       { to: '/settings?tab=certificate', label: 'Certificate' },
+      { to: '/settings?tab=holidays', label: 'Holidays' },
       { to: '/settings?tab=session', label: 'Session & Mail' },
     ],
   },
@@ -346,11 +347,20 @@ const FIELD_GROUPS: Group[] = [
     ],
   },
   {
+    // Their own working day: the month they punched, and the days the office
+    // was shut. A laboratory sees it too — the same screen, with a person
+    // picker on it — so this is not `staffOnly`.
+    label: 'Attendance',
+    icon: AttendanceIcon,
+    items: [{ to: '/attendance', label: 'Attendance', end: true, needs: 'attendance-view' }],
+  },
+  {
     label: 'Employee',
     icon: StaffIcon,
     labOnly: true,
     items: [
       { to: '/staff', label: 'Employee List' },
+      { to: '/salary', label: 'Salary' },
       // A franchise decides what its own front desk may do. The roles it makes
       // are its own — no other laboratory sees them — and head office's shared
       // roles show here read-only. Its staff do not see this: `labOnly` is the
@@ -358,6 +368,14 @@ const FIELD_GROUPS: Group[] = [
       // rather than by one.
       { to: '/roles', label: 'Roles & Permissions' },
     ],
+  },
+  {
+    // The one setting that is not head office's alone. A laboratory reads the
+    // holiday calendar rather than writing it — the screen says so, and the
+    // API sends it nothing else.
+    label: 'Settings',
+    icon: SettingsIcon,
+    items: [{ to: '/settings?tab=holidays', label: 'Holidays' }],
   },
 ];
 
@@ -397,6 +415,12 @@ export default function Shell() {
   // runs a counter. The menu follows that split, not a rank.
   const isSuper = user?.roleId === ROLE.SUPER;
   const isLab = user?.roleId === ROLE.ADMIN;
+  /*
+    Everybody else: a laboratory's staff, whatever role it made for them.
+    Defined by exclusion because the roles below a laboratory are not a fixed
+    list — a franchise invents its own, and `role_id` may be NULL.
+  */
+  const isStaff = Boolean(user) && !isSuper && !isLab;
 
   /**
    * An administrator runs the business; a laboratory and its employees run the
@@ -433,22 +457,15 @@ export default function Shell() {
   // A certificate is written against the issuer's laboratory, and head office
   // has none — so this asks "works at a laboratory", not "is senior".
   const canIssue = (user?.roleId ?? -1) >= ROLE.ADMIN && can('report', 'create');
+  /*
+    Attendance is granted, not assumed. A laboratory keeps its own list of what
+    its front desk may open, and until 036 there was no way for it to say
+    anything about this screen at all. The laboratory account itself always has
+    it: it is the one that corrects a day.
+  */
+  const canAttend = isLab || can('attendance', 'view');
   /** May take an order at the counter — the header button and the menu entry. */
   const canCollect = (user?.roleId ?? -1) >= ROLE.ADMIN && can('product_collection', 'create');
-
-  /**
-   * What is waiting on this person: transactions sent to them and still
-   * pending. Re-read on every navigation, which is often enough for a queue
-   * that moves a few times a day and costs one indexed count.
-   */
-  const pending = useFetch<{ meta: { total: number } }>(
-    '/transactions?status=0&direction=received&per_page=1',
-  );
-  const waiting = pending.data?.meta.total ?? 0;
-
-  useEffect(() => {
-    pending.reload();
-  }, [location.pathname]);
 
   const crumbs = useBreadcrumbs(portal);
   const here = `${location.pathname}${location.search}`;
@@ -587,7 +604,8 @@ export default function Shell() {
                   (!item.labOnly || isLab) &&
                   (!item.staffOnly || !isLab) &&
                   (item.needs !== 'order-create' || canCollect) &&
-                  (item.needs !== 'report-create' || canIssue),
+                  (item.needs !== 'report-create' || canIssue) &&
+                  (item.needs !== 'attendance-view' || canAttend),
               );
               if (items.length === 0) return null;
 
@@ -807,10 +825,37 @@ export default function Shell() {
               <Typography sx={{ fontSize: 12, color: alpha('#fff', 0.7) }}>{today}</Typography>
             </Box>
 
+            {/*
+              The middle of the bar, and who gets it.
+
+              For head office and a laboratory it is the search — a certificate
+              number or a customer, across the laboratory. Staff have their own
+              work in front of them and the lists to page; what the bar owes
+              them is the day's clock, so that takes the room the field had, in
+              the same place.
+            */}
+            {isStaff && (
+              <Box
+                sx={{
+                  flex: 1,
+                  display: 'flex',
+                  justifyContent: 'center',
+                  minWidth: 0,
+                }}
+              >
+                <PunchClock />
+              </Box>
+            )}
+
             <Box
               component="form"
               onSubmit={search}
-              sx={{ flex: 1, maxWidth: 520, mx: 'auto', display: { xs: 'none', md: 'block' } }}
+              sx={{
+                flex: 1,
+                maxWidth: 520,
+                mx: 'auto',
+                display: isStaff ? 'none' : { xs: 'none', md: 'block' },
+              }}
             >
               <TextField
                 placeholder="Search a certificate number, or a customer…"
@@ -860,6 +905,8 @@ export default function Shell() {
               />
             </Box>
 
+            {/* The gap that pushes the controls right on a narrow screen,
+                where the field in the middle is hidden. */}
             <Box sx={{ flex: { xs: 1, md: 0 } }} />
 
             {/*
@@ -871,6 +918,10 @@ export default function Shell() {
               Shown only to somebody who may actually collect one: the same
               `product_collection` create grant that decides whether Orders ›
               Collect New is in the menu, so the two cannot disagree.
+
+              It sits immediately left of the bell for every role, so the one
+              thing anybody starts from is in the same place whoever is signed
+              in — staff have the clock in the middle, not instead of this.
             */}
             {canCollect && (
               <Button
@@ -892,29 +943,11 @@ export default function Shell() {
             )}
 
             {/*
-              The bell was a control that did nothing. It now counts the one
-              thing in this system that actually waits on a person: transactions
-              sent to you and not yet approved or declined. An administrator
-              sees every pending one, since the API scopes the list by role.
+              The bell counts the one thing in this system that actually waits
+              on a person — money sent to them and not yet approved or declined
+              — and opens the box that lists it. See `NotificationBell`.
             */}
-            <Tooltip
-              title={
-                waiting === 0
-                  ? 'Nothing is waiting on you'
-                  : `${waiting} transaction${waiting === 1 ? '' : 's'} awaiting your decision`
-              }
-            >
-              <IconButton
-                aria-label={
-                  waiting === 0 ? 'Notifications' : `Notifications, ${waiting} waiting`
-                }
-                onClick={() => navigate('/transactions?status=0')}
-              >
-                <Badge color={toneColour('waiting')} badgeContent={waiting} max={99}>
-                  <BellIcon />
-                </Badge>
-              </IconButton>
-            </Tooltip>
+            <NotificationBell />
 
             <Stack
               direction="row"

@@ -25,6 +25,7 @@ import Roles from './pages/Roles';
 import RoleEdit from './pages/RoleEdit';
 import Attendance from './pages/Attendance';
 import EmployeeView from './pages/EmployeeView';
+import Salary from './pages/Salary';
 import Coupons from './pages/Coupons';
 import Profile from './pages/Profile';
 import Content from './pages/Content';
@@ -32,6 +33,7 @@ import NewReport from './pages/NewReport';
 import ReportEdit from './pages/ReportEdit';
 import NewOrder from './pages/NewOrder';
 import Customers from './pages/Customers';
+import CustomerOrders from './pages/CustomerOrders';
 import Students from './pages/Students';
 import StudentCreate from './pages/StudentCreate';
 import StudentEdit from './pages/StudentEdit';
@@ -140,6 +142,9 @@ function Routed() {
         <Route path="/wallet" element={<Wallet />} />
         <Route path="/attendance" element={<Attendance />} />
         <Route path="/customers" element={<Customers />} />
+        {/* One customer's orders and what they came to. Keyed by mobile, which
+            is what a customer is here. */}
+        <Route path="/customers/:mobile" element={<CustomerOrders />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/laboratories" element={<Laboratories />} />
         <Route
@@ -168,6 +173,9 @@ function Routed() {
         />
         <Route path="/staff" element={<Staff />} />
         <Route path="/staff/:id" element={<EmployeeView />} />
+        {/* What each employee is owed for a month. Scoped by employer, like the
+            staff list it reads from. */}
+        <Route path="/salary" element={<Salary />} />
         <Route
           path="/student-enquiries"
           element={
@@ -238,14 +246,13 @@ function Routed() {
             </AdminOnly>
           }
         />
-        <Route
-          path="/settings"
-          element={
-            <AdminOnly>
-              <Settings />
-            </AdminOnly>
-          }
-        />
+        {/*
+          Not AdminOnly. The API sends a laboratory and its staff the holiday
+          group and nothing else, and the screen renders what it was sent — so
+          the door is open and what is behind it is decided in one place rather
+          than two.
+        */}
+        <Route path="/settings" element={<Settings />} />
         <Route
           path="/categories"
           element={

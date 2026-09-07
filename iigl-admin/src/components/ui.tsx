@@ -66,6 +66,10 @@ const TONE_COLOUR = {
   waiting: 'warning',
   refused: 'error',
   plain: 'default',
+  // Material UI has no pink chip. A holiday keeps its own colour on the
+  // calendar, where the tone is painted from TONE directly; anywhere a
+  // Material component picks the colour it reads as the neutral it is.
+  holiday: 'default',
   yes: 'success',
   no: 'error',
 } as const satisfies Record<Tone, 'success' | 'warning' | 'error' | 'default'>;
@@ -76,6 +80,7 @@ const TONE_SEVERITY: Record<Tone, 'success' | 'warning' | 'error' | 'info'> = {
   waiting: 'warning',
   refused: 'error',
   plain: 'info',
+  holiday: 'info',
   yes: 'success',
   no: 'error',
 };
@@ -1189,9 +1194,10 @@ export function ToneAction({
       // glance as accept and refuse.
       variant="contained"
       size={size}
-      // `plain` has no Button colour of its own — a toneless action inherits
-      // the surrounding text colour rather than claiming a semantic one.
-      color={tone === 'plain' ? 'inherit' : TONE_COLOUR[tone]}
+      // `plain` and `holiday` have no Button colour of their own — a toneless
+      // action inherits the surrounding text colour rather than claiming a
+      // semantic one.
+      color={tone === 'plain' || tone === 'holiday' ? 'inherit' : TONE_COLOUR[tone]}
       startIcon={<Icon fontSize="small" />}
       disabled={disabled}
       onClick={onClick}

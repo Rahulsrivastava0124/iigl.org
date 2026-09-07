@@ -24,6 +24,7 @@ import { uploadRoutes } from '../routes/upload.routes.js';
 import { attendanceRoutes } from '../routes/attendance.routes.js';
 import { contentRoutes } from '../routes/content.routes.js';
 import { customerRoutes } from '../routes/customer.routes.js';
+import { messageRoutes } from '../routes/message.routes.js';
 import { roleRoutes } from '../routes/role.routes.js';
 import { studentRoutes } from '../routes/student.routes.js';
 import { courseRoutes } from '../routes/course.routes.js';
@@ -32,6 +33,7 @@ import { enquiryRoutes } from '../routes/enquiry.routes.js';
 import { couponRoutes } from '../routes/coupon.routes.js';
 import { masterRoutes } from '../routes/master.routes.js';
 import { settingsRoutes } from '../routes/settings.routes.js';
+import { holidayRoutes } from '../routes/holiday.routes.js';
 import { db } from '../db/index.js';
 
 const MOUNTS: Array<[string, Router]> = [
@@ -49,6 +51,7 @@ const MOUNTS: Array<[string, Router]> = [
   ['/api/attendance', attendanceRoutes],
   ['/api/content', contentRoutes],
   ['/api/customers', customerRoutes],
+  ['/api/messages', messageRoutes],
   ['/api/roles', roleRoutes],
   ['/api/students', studentRoutes],
   ['/api/courses', courseRoutes],
@@ -57,6 +60,7 @@ const MOUNTS: Array<[string, Router]> = [
   ['/api/coupons', couponRoutes],
   ['/api/master', masterRoutes],
   ['/api/settings', settingsRoutes],
+  ['/api/holidays', holidayRoutes],
 ];
 
 /** Routes registered directly on the app rather than through a router. */
