@@ -46,12 +46,109 @@ async function employerOf(userId: number): Promise<number | null> {
 }
 
 /**
- * Write to your employer.
+ * Everybody this account may write to.
  *
- * There is no recipient in the body: staff have exactly one employer, and a
- * field for it would be a field to get wrong. Somebody nobody employs — a
- * laboratory, head office — has nobody to write to, and is told so rather than
- * having the message go nowhere.
+ * Staff have exactly one recipient — the person who employs them — so the
+ * panel does not ask them; it says who it is going to. An employer has a list,
+ * and the list is what the compose box selects from:
+ *
+ *   head office   every laboratory, and everybody they employ
+ *   laboratory    its own staff
+ *
+ * Nobody writes sideways. A message here is between somebody and the person
+ * they answer to, in one direction or the other, and a colleague-to-colleague
+ * channel is a different feature with different rules about who may read it.
+ */
+messageRoutes.get(
+  '/recipients',
+  wrap(async (req, res) => {
+    if (req.user.roleId === ROLE.SUPER) {
+      const rows = await db
+        .selectFrom('users')
+        .leftJoin('employements', (join) =>
+          join.onRef('employements.user_id', '=', 'users.id').on('employements.is_working', '=', '1'),
+        )
+        .leftJoin('users as employer', 'employer.empid', 'employements.parent_id')
+        .select([
+          'users.id as id',
+          'users.fullname as fullname',
+          'users.empid as empid',
+          'users.role_id as role_id',
+          'employer.fullname as employer_name',
+        ])
+        .where('users.id', '!=', req.user.id)
+        .where('users.is_active', '=', 1)
+        .where((eb) =>
+          eb.or([eb('users.role_id', '=', ROLE.LAB), eb('employements.id', 'is not', null)]),
+        )
+        .orderBy('users.role_id')
+        .orderBy('users.fullname')
+        .execute();
+      res.json({ data: rows });
+      return;
+    }
+
+    /*
+      Employer or employee, decided by whether anybody actually works under
+      them — not by whether they have an `empid`, which everybody has. Reading
+      it that way listed a staff member's own non-existent staff and left them
+      with nobody to write to.
+    */
+    const mine = await empidOf(req.user.id);
+    const employs = mine
+      ? await db
+          .selectFrom('employements')
+          .select('id')
+          .where('parent_id', '=', mine)
+          .where('is_working', '=', '1')
+          .executeTakeFirst()
+      : undefined;
+
+    if (!employs) {
+      // Staff: one recipient, and the panel names it rather than listing it.
+      const employer = await employerOf(req.user.id);
+      const row = employer
+        ? await db
+            .selectFrom('users')
+            .select(['id', 'fullname', 'empid', 'role_id'])
+            .where('id', '=', employer)
+            .executeTakeFirst()
+        : undefined;
+      res.json({ data: row ? [{ ...row, employer_name: null }] : [] });
+      return;
+    }
+
+    const rows = await db
+      .selectFrom('employements')
+      .innerJoin('users', 'users.id', 'employements.user_id')
+      .select([
+        'users.id as id',
+        'users.fullname as fullname',
+        'users.empid as empid',
+        'users.role_id as role_id',
+      ])
+      .where('employements.parent_id', '=', mine as string)
+      .where('employements.is_working', '=', '1')
+      .where('users.id', '!=', req.user.id)
+      .orderBy('users.fullname')
+      .execute();
+
+    res.json({ data: rows.map((r) => ({ ...r, employer_name: null })) });
+  }),
+);
+
+/**
+ * Write a message, to one person or to several.
+ *
+ * Both directions now. Staff write upward and name nobody: they have exactly
+ * one employer, and a field for it would be a field to get wrong. An employer
+ * writes downward and says who to — one row per recipient, so each is dealt
+ * with, or not, on its own; a single row addressed to nine people is one that
+ * eight of them cannot answer.
+ *
+ * Who may write to whom is checked here rather than trusted from the body:
+ * head office to any laboratory or employee, a laboratory to its own staff, and
+ * staff to their employer. Nobody writes sideways.
  */
 messageRoutes.post(
   '/',
@@ -68,25 +165,56 @@ messageRoutes.post(
       throw badRequest('The date it is about must be YYYY-MM-DD.');
     }
 
-    const employer = await employerOf(req.user.id);
-    if (!employer) {
-      throw badRequest('Nobody employs this account, so there is nobody to write to.');
+    /*
+      Who it is for.
+
+      Given, it is an employer writing downward and every id is checked. Absent,
+      it is staff writing to the one person they answer to, which nobody has to
+      name.
+    */
+    const asked: number[] = Array.isArray(req.body?.to)
+      ? (req.body.to as unknown[]).map((v) => Number(v))
+      : req.body?.to !== undefined && req.body?.to !== null && req.body?.to !== ''
+        ? [Number(req.body.to)]
+        : [];
+
+    let recipients: number[];
+
+    if (asked.length > 0) {
+      if (asked.some((id) => !Number.isInteger(id) || id <= 0)) {
+        throw badRequest('That is not a person.');
+      }
+      if (asked.length > 100) throw badRequest('That is too many people for one message.');
+
+      if (req.user.roleId !== ROLE.SUPER) {
+        // A laboratory writes to the people it employs, and to nobody else.
+        for (const id of asked) await assertEmploys(req.user, id);
+      }
+      recipients = [...new Set(asked)].filter((id) => id !== req.user.id);
+      if (recipients.length === 0) throw badRequest('Choose somebody to write to.');
+    } else {
+      const employer = await employerOf(req.user.id);
+      if (!employer) {
+        throw badRequest('Nobody employs this account, so there is nobody to write to.');
+      }
+      recipients = [employer];
     }
 
-    const result = await db
-      .insertInto('staff_messages')
-      .values({
-        from_user: req.user.id,
-        to_user: employer,
-        kind,
-        body,
-        about_date: about ? new Date(`${about}T00:00:00`) : null,
-        created_at: new Date(),
-        updated_at: new Date(),
-      })
-      .executeTakeFirst();
+    // One row each. A message to nine people is nine things to be dealt with.
+    const now = new Date();
+    const rows = recipients.map((to) => ({
+      from_user: req.user.id,
+      to_user: to,
+      kind,
+      body,
+      about_date: about ? new Date(`${about}T00:00:00`) : null,
+      created_at: now,
+      updated_at: now,
+    }));
 
-    res.status(201).json({ data: { id: Number(result.insertId) } });
+    const result = await db.insertInto('staff_messages').values(rows).executeTakeFirst();
+
+    res.status(201).json({ data: { id: Number(result.insertId), sent: recipients.length } });
   }),
 );
 
@@ -116,6 +244,7 @@ messageRoutes.get(
         'staff_messages.resolved_at as resolved_at',
         'staff_messages.created_at as created_at',
         'staff_messages.from_user as from_user',
+        'staff_messages.to_user as to_user',
         'author.fullname as from_name',
       ]);
 
@@ -127,6 +256,19 @@ messageRoutes.get(
       // A person reading their own sees what they sent; an employer sees what
       // was sent to them, which for their own staff is the same rows.
       if (from !== req.user.id) q = q.where('staff_messages.to_user', '=', req.user.id);
+    } else if (req.query.box === 'all') {
+      /*
+        The whole conversation between this account and everybody it writes to
+        or hears from — which, for staff, is their employer. Both directions in
+        one list, because a reply read apart from what it replies to is half a
+        sentence.
+      */
+      q = q.where((eb) =>
+        eb.or([
+          eb('staff_messages.to_user', '=', req.user.id),
+          eb('staff_messages.from_user', '=', req.user.id),
+        ]),
+      );
     } else {
       q = q.where('staff_messages.to_user', '=', req.user.id);
     }
@@ -139,6 +281,10 @@ messageRoutes.get(
     if (req.query.from) {
       c = c.where('from_user', '=', Number(req.query.from));
       if (Number(req.query.from) !== req.user.id) c = c.where('to_user', '=', req.user.id);
+    } else if (req.query.box === 'all') {
+      c = c.where((eb) =>
+        eb.or([eb('to_user', '=', req.user.id), eb('from_user', '=', req.user.id)]),
+      );
     } else {
       c = c.where('to_user', '=', req.user.id);
     }

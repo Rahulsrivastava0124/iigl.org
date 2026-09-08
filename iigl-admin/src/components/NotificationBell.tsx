@@ -15,9 +15,11 @@ import {
 } from '@mui/material';
 import BellIcon from '@mui/icons-material/NotificationsNoneOutlined';
 import MoneyIcon from '@mui/icons-material/PaymentsOutlined';
+import MessageIcon from '@mui/icons-material/ForumOutlined';
 import { useFetch } from '../lib/useFetch';
 import { money, toneColour } from './ui';
 import type { Paged, Transaction } from '../lib/api';
+import type { StaffMessage } from './StaffInbox';
 
 /**
  * The bell, and what is behind it.
@@ -57,11 +59,22 @@ export default function NotificationBell() {
   const pending = useFetch<Paged<Transaction>>(
     '/transactions?status=0&direction=received&per_page=10',
   );
+  /*
+    The other thing that waits on a person: a message their staff have written
+    and nobody has dealt with. Same shape of obligation as an unapproved
+    transaction — somebody asked, and it sits there until you answer — so it
+    belongs behind the same bell rather than on a screen they would have to know
+    to open.
+  */
+  const notes = useFetch<Paged<StaffMessage>>('/messages?open=1&per_page=10');
+
   const rows = pending.data?.data ?? [];
-  const waiting = pending.data?.meta.total ?? 0;
+  const messages = notes.data?.data ?? [];
+  const waiting = (pending.data?.meta.total ?? 0) + (notes.data?.meta.total ?? 0);
 
   useEffect(() => {
     pending.reload();
+    notes.reload();
     setAnchor(null);
   }, [location.pathname]);
 
@@ -102,11 +115,44 @@ export default function NotificationBell() {
         </Box>
         <Divider />
 
-        {rows.length === 0 ? (
+        {messages.length > 0 && (
+          <List dense disablePadding>
+            {messages.map((m) => (
+              <ListItemButton
+                key={`m${m.id}`}
+                onClick={() => go(`/staff/${m.from_user}`)}
+                sx={{ alignItems: 'flex-start', gap: 1.25, py: 1.25 }}
+              >
+                <MessageIcon
+                  fontSize="small"
+                  sx={{ mt: 0.25, color: m.kind === 'request' ? 'warning.main' : 'primary.main' }}
+                />
+                <Box sx={{ minWidth: 0, flex: 1 }}>
+                  <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
+                    <Typography sx={{ fontSize: 13.5, fontWeight: 600 }} noWrap>
+                      {m.from_name ?? 'Somebody'}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
+                      {when(m.created_at)}
+                    </Typography>
+                  </Stack>
+                  <Typography variant="body2" color="text.secondary" noWrap>
+                    {m.kind === 'request' ? 'asks: ' : ''}
+                    {m.body}
+                  </Typography>
+                </Box>
+              </ListItemButton>
+            ))}
+          </List>
+        )}
+
+        {messages.length > 0 && rows.length > 0 && <Divider />}
+
+        {rows.length === 0 && messages.length === 0 ? (
           <Box sx={{ px: 2, py: 3 }}>
             <Typography variant="body2" color="text.secondary">
-              Nothing is waiting on you. Money sent to you appears here until you approve or
-              decline it.
+              Nothing is waiting on you. Money sent to you, and messages your staff write, appear
+              here until you have dealt with them.
             </Typography>
           </Box>
         ) : (
@@ -137,12 +183,16 @@ export default function NotificationBell() {
           </List>
         )}
 
-        {waiting > 0 && (
+        {/* The queue, only while there is money in it: messages are opened on
+            the person who wrote them, which the row above already does. */}
+        {rows.length > 0 && (
           <>
             <Divider />
             <Box sx={{ p: 1, textAlign: 'right' }}>
               <Button size="small" onClick={() => go('/transactions?status=0')}>
-                {waiting > rows.length ? `See all ${waiting}` : 'Open the queue'}
+                {(pending.data?.meta.total ?? 0) > rows.length
+                  ? `See all ${pending.data?.meta.total}`
+                  : 'Open the queue'}
               </Button>
             </Box>
           </>

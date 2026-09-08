@@ -136,7 +136,19 @@ export default function MonthCalendar({
       }
     >
       <Box sx={{ p: 2 }}>
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 1 }}>
+        {/*
+          Seven columns, and they shrink. The gap closes on a narrow panel —
+          half a page beside a list of messages is not the full width this was
+          drawn at — so the cells keep the room instead of the space between
+          them.
+        */}
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+            gap: { xs: 0.5, sm: 1 },
+          }}
+        >
           {WEEKDAYS.map((w) => (
             <Typography
               key={w}
@@ -171,8 +183,8 @@ export default function MonthCalendar({
                   borderColor: tint ? tint.soft : 'divider',
                   borderRadius: 1,
                   bgcolor: tint ? tint.soft : 'transparent',
-                  minHeight: 74,
-                  p: 1,
+                  minHeight: { xs: 58, sm: 74 },
+                  p: { xs: 0.5, sm: 1 },
                   opacity: future ? 0.45 : 1,
                   ...(pickable && {
                     cursor: 'pointer',

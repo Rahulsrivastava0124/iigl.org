@@ -12,6 +12,8 @@ import {
   TableRow,
   TextField,
 } from '@mui/material';
+import MessageCompose from '../components/MessageCompose';
+import MessageIcon from '@mui/icons-material/ForumOutlined';
 import { useToast } from '../components/Toast';
 import { fileUrl } from '../lib/config';
 import { useFetch, useDebounced } from '../lib/useFetch';
@@ -190,6 +192,9 @@ export default function Staff() {
    * round — its password is changed through Reset, which is a different act
    * with a different warning.
    */
+  /** Who a message is being written to: empty is "choose in the dialog". */
+  const [writing, setWriting] = useState<number[] | null>(null);
+
   const [form, setForm] = useState(BLANK_ACCOUNT);
   const clearForm = () => setForm(BLANK_ACCOUNT);
 
@@ -505,27 +510,42 @@ export default function Staff() {
                     />
                   </Grid>
                 )}
-                <Grid size={{ xs: 12, md: 4 }}>
-                  <FileField
-                    label="Profile Photo"
-                    bucket="employee"
-                    value={form.profile_photo}
-                    onChange={(url) => setForm({ ...form, profile_photo: url ?? '' })}
-                    ratio="1 / 1"
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, md: 4 }}>
-                  <FileField
-                    label="Aadhar Photo"
-                    bucket="documentation"
-                    value={form.adhar_photo}
-                    onChange={(url) => setForm({ ...form, adhar_photo: url ?? '' })}
-                    /* Portrait, like every other document scan in the panel: an
-                       Aadhaar card is photographed or scanned upright, and an
-                       unshaped zone renders as a wide bar next to the square
-                       photo field beside it. */
-                    ratio="3 / 4"
-                  />
+                {/*
+                  The attachments, after the fields and in a row of their own.
+
+                  A frame is several times the height of a text input, so among
+                  them each one held its whole grid row open and left the two
+                  columns beside it empty — which is the gap that appeared under
+                  Login Password. Their own cell at the end, sized to the shape
+                  each frame actually wants, and the row adds up.
+                */}
+                <Grid size={12}>
+                  <Grid container spacing={2} sx={{ alignItems: 'flex-start' }}>
+                    <Grid size={{ xs: 6, sm: 4, md: 2 }}>
+                      <FileField
+                        label="Profile Photo"
+                        bucket="employee"
+                        value={form.profile_photo}
+                        onChange={(url) => setForm({ ...form, profile_photo: url ?? '' })}
+                        ratio="1 / 1"
+                        fill
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 6, sm: 4, md: 2 }}>
+                      <FileField
+                        label="Aadhar Photo"
+                        bucket="documentation"
+                        value={form.adhar_photo}
+                        onChange={(url) => setForm({ ...form, adhar_photo: url ?? '' })}
+                        /* Portrait, like every other document scan in the panel:
+                           an Aadhaar card is photographed or scanned upright,
+                           and an unshaped zone renders as a wide bar next to the
+                           square photo field beside it. */
+                        ratio="3 / 4"
+                        fill
+                      />
+                    </Grid>
+                  </Grid>
                 </Grid>
               </Grid>
               <Box
@@ -571,6 +591,15 @@ export default function Staff() {
                 setPage(1);
               }}
             />
+            {/*
+              To one of them, or to all of them. The picker in the dialog does
+              both, so there is no separate "message everybody" — a second
+              control doing the same thing is the one that gets forgotten when
+              the rules change.
+            */}
+            <Button startIcon={<MessageIcon />} onClick={() => setWriting([])}>
+              Message
+            </Button>
             {mayAdd && (
               <Button
                 variant="contained"
@@ -639,6 +668,12 @@ export default function Staff() {
                      */}
                     <RowActions>
                       <IconAction label="View employee" icon={ViewIcon} to={`/staff/${s.id}`} />
+                      <IconAction
+                        label="Message"
+                        icon={MessageIcon}
+                        overflow
+                        onClick={() => setWriting([s.id])}
+                      />
                       {mayEdit && (
                         <>
                           <IconAction
@@ -669,6 +704,9 @@ export default function Staff() {
       </Panel>
 
       {granting && <UserPermissions user={granting} onClose={() => setGranting(null)} />}
+      {writing && (
+        <MessageCompose audience="staff" to={writing} onClose={() => setWriting(null)} />
+      )}
     </>
   );
 }

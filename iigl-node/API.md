@@ -1,6 +1,6 @@
 # IIGL API
 
-218 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
+219 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
 
 The interactive version is at `/docs` when the server is running, and the raw
 document at `/openapi.json`.
@@ -447,10 +447,11 @@ The general enquiry book: questions, visits, leads and complaints.
 
 | Method | Path | Auth | Query | Body | Fails | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
-| GET | `/api/messages` | session | `from`, `open`, `page`, `per_page` | — | 401, 403 | Inbox, or one person’s messages |
-| POST | `/api/messages` | session | — | **body**, kind, about_date | 400, 401, 403 | Write to your employer |
+| GET | `/api/messages` | session | `from`, `box`, `open`, `page`, `per_page` | — | 401, 403 | Inbox, or one person’s messages |
+| POST | `/api/messages` | session | — | **body**, kind, about_date, to | 400, 401, 403 | Write a message, to one person or several |
 | PATCH | `/api/messages/{id}/resolve` | session | — | resolved | 401, 403, 404 | Mark one dealt with |
 | GET | `/api/messages/employer` | session | — | — | 401, 403 | Who this account writes to |
+| GET | `/api/messages/recipients` | session | — | — | 401, 403 | Everybody this account may write to |
 
 ## Settings
 
@@ -464,4 +465,4 @@ The general enquiry book: questions, visits, leads and complaints.
 
 Bold body fields are required.
 
-218 endpoints: 16 public, 202 requiring a session.
+219 endpoints: 16 public, 203 requiring a session.

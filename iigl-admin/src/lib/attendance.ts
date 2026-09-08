@@ -84,3 +84,42 @@ export function attendanceDay(d: Day, holiday?: Holiday): CalendarDay {
       (holiday ? ` · ${holiday.name}, office shut` : ''),
   };
 }
+
+/**
+ * A day somebody has written about, on the calendar.
+ *
+ * A request names a day — leave on the 9th, a punch to correct on the 3rd —
+ * and until now that day looked like every other blank square: the note sat in
+ * a list beside a month that knew nothing about it. This is the mark.
+ *
+ * It never takes a day that already has something on it. Attendance and a
+ * holiday are what happened; a request is what somebody has asked for, and it
+ * is added to the tooltip of those days rather than painted over them.
+ */
+export interface DayNote {
+  about_date: string | null;
+  kind: string;
+  body: string;
+  resolved_at: string | null;
+}
+
+export const noteOn = (notes: DayNote[], date: string) =>
+  notes.filter((n) => String(n.about_date ?? '').slice(0, 10) === date);
+
+/** What the notes on one day add to its tooltip. */
+export const noteTip = (notes: DayNote[]) =>
+  notes
+    .map((n) => `${n.kind === 'request' ? 'Request' : 'Message'}: ${n.body}`)
+    .join(' · ');
+
+export function noteDay(notes: DayNote[]): CalendarDay {
+  const open = notes.some((n) => !n.resolved_at);
+  const request = notes.some((n) => n.kind === 'request');
+  return {
+    // Asked and unanswered reads as waiting; answered is settled. A day that is
+    // only a message keeps the plain tone: nothing is pending on it.
+    tone: open && request ? 'waiting' : 'plain',
+    lines: [notes.length === 1 ? (request ? 'request' : 'message') : `${notes.length} notes`],
+    tooltip: noteTip(notes),
+  };
+}

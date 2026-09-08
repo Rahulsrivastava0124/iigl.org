@@ -85,7 +85,7 @@ interface Item {
   /** Only for an employee; a laboratory sees it in its own group. */
   staffOnly?: boolean;
   /** A permission the matrix has to grant before the entry is shown. */
-  needs?: 'order-create' | 'report-create' | 'attendance-view';
+  needs?: 'order-create' | 'report-create';
 }
 
 /**
@@ -347,12 +347,27 @@ const FIELD_GROUPS: Group[] = [
     ],
   },
   {
-    // Their own working day: the month they punched, and the days the office
-    // was shut. A laboratory sees it too — the same screen, with a person
-    // picker on it — so this is not `staffOnly`.
+    /*
+      Their own working day: the month they punched.
+
+      Staff only. A laboratory has no working day to punch — it is the employer,
+      not an employee — and what it actually needs is one of its people's
+      attendance, which is on that person's page, with the calendar it can
+      correct. A screen called Attendance in the employer's own menu offered it
+      its own empty month.
+
+      No grant. It was behind `attendance.view`, and a laboratory's new role
+      starts with no grants at all — so its holder could punch in from the bar,
+      where the clock asks nobody, and then had nowhere to read back what they
+      had punched. A person who may clock in may see their own month; that is
+      one fact, not two decisions. Somebody *else's* month is a different
+      screen, guarded by `assertEmploys` at the API.
+    */
     label: 'Attendance',
     icon: AttendanceIcon,
-    items: [{ to: '/attendance', label: 'Attendance', end: true, needs: 'attendance-view' }],
+    items: [
+      { to: '/attendance', label: 'Attendance', end: true, staffOnly: true },
+    ],
   },
   {
     label: 'Employee',
@@ -457,13 +472,6 @@ export default function Shell() {
   // A certificate is written against the issuer's laboratory, and head office
   // has none — so this asks "works at a laboratory", not "is senior".
   const canIssue = (user?.roleId ?? -1) >= ROLE.ADMIN && can('report', 'create');
-  /*
-    Attendance is granted, not assumed. A laboratory keeps its own list of what
-    its front desk may open, and until 036 there was no way for it to say
-    anything about this screen at all. The laboratory account itself always has
-    it: it is the one that corrects a day.
-  */
-  const canAttend = isLab || can('attendance', 'view');
   /** May take an order at the counter — the header button and the menu entry. */
   const canCollect = (user?.roleId ?? -1) >= ROLE.ADMIN && can('product_collection', 'create');
 
@@ -604,8 +612,7 @@ export default function Shell() {
                   (!item.labOnly || isLab) &&
                   (!item.staffOnly || !isLab) &&
                   (item.needs !== 'order-create' || canCollect) &&
-                  (item.needs !== 'report-create' || canIssue) &&
-                  (item.needs !== 'attendance-view' || canAttend),
+                  (item.needs !== 'report-create' || canIssue),
               );
               if (items.length === 0) return null;
 

@@ -16,6 +16,8 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import MessageCompose from '../components/MessageCompose';
+import MessageIcon from '@mui/icons-material/ForumOutlined';
 import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { usePermissions } from '../lib/permissions';
@@ -60,6 +62,9 @@ export default function Laboratories() {
   const [search, setSearch] = useState('');
   const rows = all.filter((l) => hits(search, l.id, l.fullname, l.mobile, l.city));
 
+  /** Who a message is being written to: empty is "choose in the dialog". */
+  const [writing, setWriting] = useState<number[] | null>(null);
+
   const [deleting, setDeleting] = useState<Lab | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -100,6 +105,11 @@ export default function Laboratories() {
               value={search}
               onChange={setSearch}
             />
+            {/* To one franchise or to the whole network: the picker in the
+                dialog does both. */}
+            <Button startIcon={<MessageIcon />} onClick={() => setWriting([])}>
+              Message
+            </Button>
             {mayAdd && (
               <Button
                 variant="contained"
@@ -163,6 +173,12 @@ export default function Laboratories() {
                           label="Payments, staff and certificates"
                           icon={ViewIcon}
                           onClick={() => navigate(`/laboratories/${l.id}`)}
+                        />
+                        <IconAction
+                          label="Message"
+                          icon={MessageIcon}
+                          overflow
+                          onClick={() => setWriting([l.id])}
                         />
                         {mayEdit && (
                           <IconAction
@@ -241,6 +257,10 @@ export default function Laboratories() {
             </Button>
           </DialogActions>
         </MuiDialog>
+      )}
+
+      {writing && (
+        <MessageCompose audience="laboratories" to={writing} onClose={() => setWriting(null)} />
       )}
     </>
   );

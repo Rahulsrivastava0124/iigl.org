@@ -431,6 +431,22 @@ head office rather than to a laboratory.
 The panel hides what a role cannot use. The API refuses it. Both are needed: the
 first is courtesy, the second is the boundary.
 
+### A person's own record is not a grant
+
+Attendance was behind `attendance.view`. A laboratory's new role starts with no
+grants at all, so its holder could punch in from the clock in the header — which
+asks nobody — and then had nowhere to read back what they had punched.
+
+Anybody who may clock in may read their own month. That is one fact stated
+twice, not two decisions, and the menu no longer asks. What still needs a grant
+is somebody *else's* month, and that is a different screen: an employer reads
+its people on their pages, guarded by `assertEmploys` at the API. Migration 037
+corrects what the grant's description claims to govern.
+
+The test to apply to the next one: does the permission decide what somebody may
+do *to another person's records*, or does it decide whether they can see their
+own? Only the first is a permission.
+
 ### Two rules that have each been broken once
 
 **Read and write must be guarded alike.** `GET /api/users/{id}` was

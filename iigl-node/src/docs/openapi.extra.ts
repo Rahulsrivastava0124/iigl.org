@@ -1642,6 +1642,7 @@ export const extraPaths: Record<string, unknown> = {
         'Without `from`, what has been written to you. With it, what one person has written — the employee page asks that way, and the employer check decides whether they are yours to read. Anybody may pass their own id to read what they sent.',
       parameters: [
         { name: 'from', in: 'query', schema: { type: 'integer' }, description: 'One writer: yourself, or somebody you employ.' },
+        { name: 'box', in: 'query', schema: { type: 'string', enum: ['in', 'all'], default: 'in' }, description: '`all` is both directions for this account — the whole conversation with whoever they write to and hear from. A reply read apart from what it replies to is half a sentence.' },
         { name: 'open', in: 'query', schema: { type: 'string', enum: ['1'] }, description: 'Only what has not been dealt with.' },
         { name: 'page', in: 'query', schema: { type: 'integer' } },
         { name: 'per_page', in: 'query', schema: { type: 'integer', maximum: 200 } },
@@ -1654,21 +1655,27 @@ export const extraPaths: Record<string, unknown> = {
     },
     post: {
       tags: ['Messages'],
-      summary: 'Write to your employer',
+      summary: 'Write a message, to one person or several',
       description:
-        'The Laravel sidebars drew a Message menu and never built it — both entries are `href="#"`. This is the whole of it: one line from an employee to the person who employs them, read beside the attendance it is usually about.\n\nThere is no recipient in the body. Staff have exactly one employer, and a field for it would be a field to get wrong; an account nobody employs is told there is nobody to write to rather than having the message go nowhere.\n\nA `request` expects something to happen — a correction, a day off — and a `message` does not. The reader’s list is coloured by the difference, so it is asked rather than guessed from the words.',
+        'The Laravel sidebars drew a Message menu and never built it — both entries are `href="#"`. This is the whole of it, in both directions.\n\n**Upward**, from staff: no recipient in the body. They have exactly one employer, and a field for it would be a field to get wrong; an account nobody employs is told there is nobody to write to rather than having the message go nowhere.\n\n**Downward**, from an employer: `to` names them. Head office may write to any laboratory or employee, a laboratory to its own staff, and nobody sideways — checked here rather than trusted from the body. `GET /api/messages/recipients` is the same rule, asked in advance.\n\nOne row is written per recipient, so each is dealt with — or not — on its own: a single row addressed to nine people is one that eight of them cannot answer. At most 100 at a time.\n\nA `request` expects something to happen — a correction, a day off — and a `message` does not. The reader’s list is coloured by the difference, so it is asked rather than guessed from the words.',
       requestBody: body(
         {
           body: { type: 'string', maxLength: 2000 },
           kind: { type: 'string', enum: ['message', 'request'], default: 'message' },
           about_date: { type: ['string', 'null'], description: 'The day it concerns, as YYYY-MM-DD, when it concerns one.' },
+          to: {
+            type: 'array',
+            items: { type: 'integer' },
+            description: 'Who it is for. Omit it and it goes to your employer, which is what staff do.',
+          },
         },
         ['body'],
       ),
       responses: {
-        201: ok('Written.'),
-        400: err('Nothing written, too long, an unknown kind, a malformed date, or nobody to write to.'),
+        201: ok('Written. `sent` is how many rows that came to.'),
+        400: err('Nothing written, too long, an unknown kind, a malformed date, too many recipients, or nobody to write to.'),
         ...guarded,
+        403: err('That account is not one of your employees.'),
       },
     },
   },
@@ -1687,6 +1694,16 @@ export const extraPaths: Record<string, unknown> = {
         ...guarded,
         403: err('That message was not written to you.'),
       },
+    },
+  },
+
+  '/api/messages/recipients': {
+    get: {
+      tags: ['Messages'],
+      summary: 'Everybody this account may write to',
+      description:
+        'Head office: every laboratory and everybody they employ. A laboratory: its own staff. Staff: the one person who employs them, which the panel names rather than lists.\n\nThe same rule `POST /api/messages` enforces on the way in, asked in advance so the compose box has something to select from.',
+      responses: { 200: ok('The people, with their employee ID and employer where there is one.'), ...guarded },
     },
   },
 

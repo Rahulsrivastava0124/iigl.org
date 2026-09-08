@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
 import {
   Box,
+  Button,
   Chip,
   List,
   ListItem,
@@ -7,6 +9,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
+import AddIcon from '@mui/icons-material/AddOutlined';
 import DoneIcon from '@mui/icons-material/DoneOutlined';
 import UndoIcon from '@mui/icons-material/UndoOutlined';
 import { api } from '../lib/api';
@@ -40,12 +43,36 @@ export interface StaffMessage {
 
 const day = (v: string | null) => String(v ?? '').slice(0, 10);
 
-export default function StaffInbox({ from, title = 'Messages' }: { from: number; title?: string }) {
+export default function StaffInbox({
+  from,
+  /** Both directions for one account, rather than one person's writing. */
+  conversation = false,
+  title = 'Messages',
+  /** Pressing + . Given, the panel offers one; absent, it is read-only. */
+  onCompose,
+  /** The loaded messages, for a caller that draws them somewhere else too. */
+  onRows,
+  /**
+   * Reading your own. Marking a request dealt with is the reader's, not the
+   * writer's — the API refuses it either way — so the control is not offered.
+   */
+  own = false,
+}: {
+  from: number;
+  conversation?: boolean;
+  title?: string;
+  onCompose?: () => void;
+  onRows?: (rows: StaffMessage[]) => void;
+  own?: boolean;
+}) {
   const toast = useToast();
   const { data, loading, error, reload } = useFetch<Paged<StaffMessage>>(
-    `/messages?from=${from}&per_page=50`,
+    conversation ? '/messages?box=all&per_page=50' : `/messages?from=${from}&per_page=50`,
   );
   const rows = data?.data ?? [];
+  // The same rows the calendar beside this marks its days from, handed up so
+  // the two cannot show different months of the same list.
+  useEffect(() => onRows?.(rows), [data]);
   const open = rows.filter((m) => !m.resolved_at).length;
 
   const resolve = async (m: StaffMessage) => {
@@ -62,12 +89,19 @@ export default function StaffInbox({ from, title = 'Messages' }: { from: number;
       title={title}
       subtitle={open > 0 ? `${open} open` : undefined}
       count={rows.length ? `${rows.length} in all` : undefined}
+      actions={
+        onCompose ? (
+          <Button size="small" startIcon={<AddIcon />} onClick={onCompose}>
+            Write
+          </Button>
+        ) : undefined
+      }
     >
       <TableFrame
         loading={loading}
         error={error}
         empty={rows.length === 0}
-        emptyText="Nothing written yet."
+        emptyText={own ? 'You have not written anything yet.' : 'Nothing written yet.'}
       >
         <List dense disablePadding sx={{ maxHeight: 520, overflowY: 'auto' }}>
           {rows.map((m) => (
@@ -76,18 +110,33 @@ export default function StaffInbox({ from, title = 'Messages' }: { from: number;
               divider
               sx={{ alignItems: 'flex-start', gap: 1, opacity: m.resolved_at ? 0.6 : 1 }}
               secondaryAction={
-                <RowActions>
-                  <IconAction
-                    label={m.resolved_at ? 'Reopen' : 'Mark dealt with'}
-                    icon={m.resolved_at ? UndoIcon : DoneIcon}
-                    onClick={() => resolve(m)}
+                own ? (
+                  // What became of it, rather than a control they cannot use.
+                  <StateChip
+                    tone={m.resolved_at ? 'settled' : 'waiting'}
+                    label={m.resolved_at ? 'Dealt with' : 'Waiting'}
                   />
-                </RowActions>
+                ) : (
+                  <RowActions>
+                    <IconAction
+                      label={m.resolved_at ? 'Reopen' : 'Mark dealt with'}
+                      icon={m.resolved_at ? UndoIcon : DoneIcon}
+                      onClick={() => resolve(m)}
+                    />
+                  </RowActions>
+                )
               }
             >
               <ListItemText
                 primary={
                   <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 0.25 }}>
+                    {/* Whose words these are. Only worth saying where the list
+                        holds both sides of a conversation. */}
+                    {conversation && (
+                      <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
+                        {m.from_user === from ? 'You' : (m.from_name ?? 'Them')}
+                      </Typography>
+                    )}
                     <StateChip
                       tone={m.kind === 'request' ? 'waiting' : 'plain'}
                       label={m.kind === 'request' ? 'Request' : 'Message'}

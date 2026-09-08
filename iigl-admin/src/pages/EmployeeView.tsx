@@ -16,9 +16,9 @@ import { fileUrl } from '../lib/config';
 import { useFetch } from '../lib/useFetch';
 import MonthCalendar, { monthRange, thisMonth } from '../components/MonthCalendar';
 import { Panel, Tile, YesNo } from '../components/ui';
-import { attendanceDay, dayKey, holidayDay, hours, isOpen, minutesWorked } from '../lib/attendance';
+import { attendanceDay, dayKey, holidayDay, hours, isOpen, minutesWorked, noteDay, noteOn, noteTip } from '../lib/attendance';
 import AttendanceEdit from '../components/AttendanceEdit';
-import StaffInbox from '../components/StaffInbox';
+import StaffInbox, { type StaffMessage } from '../components/StaffInbox';
 import SalaryHistory from '../components/SalaryHistory';
 import { useAuth } from '../lib/auth';
 import type { Day, Holiday } from '../lib/attendance';
@@ -116,6 +116,8 @@ export default function EmployeeView() {
   const mayCorrect = Boolean(user && p && user.id !== p.id);
   /** The day being corrected or written, as a date. Its record may not exist. */
   const [editing, setEditing] = useState<string | null>(null);
+  /** Their messages, so the calendar can mark the days they are about. */
+  const [messages, setMessages] = useState<StaffMessage[]>([]);
 
   const roleName =
     p && p.role_id !== null
@@ -216,10 +218,25 @@ export default function EmployeeView() {
         dayFor={(date) => {
           const record = byDate.get(date);
           const shut = holidayOn.get(date);
-          // Attendance wins the colour: somebody who came in on a holiday
-          // worked, and a pink square would say they did not.
-          if (record) return attendanceDay(record, shut);
-          return shut ? holidayDay(shut) : null;
+          const notes = noteOn(messages, date);
+
+          /*
+            What happened outranks what was asked for: attendance and a holiday
+            are facts about the day, a request is somebody's word about it. On a
+            day that has both, the request joins the tooltip; on an empty one it
+            is the only thing there is to show, and it is the day the employer
+            is being asked to do something about.
+          */
+          const said = notes.length > 0 ? ` · ${noteTip(notes)}` : '';
+          if (record) {
+            const day = attendanceDay(record, shut);
+            return { ...day, tooltip: `${day.tooltip ?? ''}${said}` };
+          }
+          if (shut) {
+            const day = holidayDay(shut);
+            return { ...day, tooltip: `${day.tooltip ?? ''}${said}` };
+          }
+          return notes.length > 0 ? noteDay(notes) : null;
         }}
         /*
           Any day that has already happened, recorded or not. A day nobody
@@ -245,7 +262,12 @@ export default function EmployeeView() {
             Friday off" — and it sits beside the attendance because that is
             nearly always what it is about.
           */}
-          <StaffInbox from={Number(id)} title="Messages and requests" />
+          <StaffInbox
+            from={Number(id)}
+            title="Messages and requests"
+            /* The calendar marks the days they name, from these same rows. */
+            onRows={setMessages}
+          />
         </Grid>
       </Grid>
 

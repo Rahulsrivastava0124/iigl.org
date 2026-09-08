@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Button, MenuItem, Stack, TextField, Typography } from '@mui/material';
+import { Box, Button, Grid, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import LoginIcon from '@mui/icons-material/LoginOutlined';
 import LogoutIcon from '@mui/icons-material/LogoutOutlined';
 import BreakIcon from '@mui/icons-material/FreeBreakfastOutlined';
@@ -10,18 +10,11 @@ import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
 import MonthCalendar, { monthRange, thisMonth } from '../components/MonthCalendar';
-import { Panel, StateChip } from '../components/ui';
+import { ConfirmDialog, Panel, StateChip } from '../components/ui';
 import MessageCompose from '../components/MessageCompose';
+import StaffInbox, { type StaffMessage } from '../components/StaffInbox';
 import MessageIcon from '@mui/icons-material/ForumOutlined';
-import {
-  attendanceDay,
-  dayKey,
-  holidayDay,
-  hours,
-  isOpen,
-  minutesWorked,
-  time,
-} from '../lib/attendance';
+import { attendanceDay, dayKey, holidayDay, hours, isOpen, minutesWorked, noteDay, noteOn, noteTip, time } from '../lib/attendance';
 import type { Day, Holiday } from '../lib/attendance';
 import type { Paged } from '../lib/api';
 
@@ -62,6 +55,8 @@ export default function Attendance() {
   const [month, setMonth] = useState(thisMonth());
   /** The write-to-your-employer dialog. */
   const [writing, setWriting] = useState(false);
+  /** The messages beside the calendar, so the calendar can mark their days. */
+  const [messages, setMessages] = useState<StaffMessage[]>([]);
   const { from, to, days: daysInMonth } = monthRange(month);
 
   const today = useFetch<{ data: Today }>('/attendance/today');
@@ -77,19 +72,37 @@ export default function Attendance() {
 
   const [busy, setBusy] = useState(false);
 
-  const act = async (path: string, body: unknown, done: string) => {
+  /*
+    Asked before it is done. Each of these writes a time only their employer can
+    change afterwards, so a misplaced press is somebody else's correction.
+  */
+  const [asking, setAsking] = useState<{
+    path: string;
+    body: unknown;
+    done: string;
+    title: string;
+    message: string;
+    label: string;
+  } | null>(null);
+
+  const act = async (ask: NonNullable<typeof asking>) => {
     setBusy(true);
     try {
-      await api.post(path, body);
-      toast.ok(done);
+      await api.post(ask.path, ask.body);
+      toast.ok(ask.done);
       today.reload();
       if (empId === 'me') history.reload();
     } catch (e) {
       toast.error(messageOf(e));
     } finally {
       setBusy(false);
+      setAsking(null);
     }
   };
+
+  /** Now, to the minute — the time the answer is about to record. */
+  const clock = () =>
+    new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
   const t = today.data?.data;
   const rows = history.data?.data ?? [];
@@ -131,34 +144,71 @@ export default function Attendance() {
                 </Stack>
               </div>
 
+              {/*
+                One colour each, and the same three words the clock in the bar
+                uses. They are pressed in the same day by the same person, and
+                two names for one act reads as two acts.
+
+                Grey to start, green while working, red to close: the middle
+                one is the state somebody is in for most of the day, and the
+                last is the one there is no undoing without their employer.
+              */}
               <Stack direction="row" spacing={1}>
                 <Button
                   variant="contained"
+                  color="inherit"
                   startIcon={<LoginIcon />}
                   disabled={busy || !t.can_clock_in}
-                  onClick={() => act('/attendance/clock-in', {}, 'Clocked in.')}
+                  onClick={() =>
+                    setAsking({
+                      path: '/attendance/clock-in',
+                      body: {},
+                      done: 'Punched in. Have a good day.',
+                      title: 'Punch in',
+                      message: `Start your day at ${clock()}?`,
+                      label: 'Punch in',
+                    })
+                  }
                 >
-                  Clock in
+                  Punch in
                 </Button>
                 <Button
+                  variant="contained"
+                  color="success"
                   startIcon={<BreakIcon />}
                   disabled={busy || !t.record || !t.can_clock_out}
                   onClick={() =>
-                    act(
-                      '/attendance/break',
-                      { on_break: !t.on_break },
-                      t.on_break ? 'Break ended.' : 'Break started.',
-                    )
+                    setAsking({
+                      path: '/attendance/break',
+                      body: { on_break: !t.on_break },
+                      done: t.on_break ? 'Back from break.' : 'On a break.',
+                      title: t.on_break ? 'End break' : 'Break',
+                      message: t.on_break
+                        ? `Back to work at ${clock()}?`
+                        : `Start a break at ${clock()}?`,
+                      label: t.on_break ? 'End break' : 'Break',
+                    })
                   }
                 >
-                  {t.on_break ? 'End break' : 'Start break'}
+                  {t.on_break ? 'End break' : 'Break'}
                 </Button>
                 <Button
+                  variant="contained"
+                  color="error"
                   startIcon={<LogoutIcon />}
                   disabled={busy || !t.can_clock_out}
-                  onClick={() => act('/attendance/clock-out', {}, 'Clocked out.')}
+                  onClick={() =>
+                    setAsking({
+                      path: '/attendance/clock-out',
+                      body: {},
+                      done: 'Punched out. See you tomorrow.',
+                      title: 'Punch out',
+                      message: `Close the day at ${clock()}? Only your employer can change it afterwards.`,
+                      label: 'Punch out',
+                    })
+                  }
                 >
-                  Clock out
+                  Punch out
                 </Button>
                 {/*
                   The clock records now and nothing else, so the day somebody
@@ -179,8 +229,31 @@ export default function Attendance() {
         </Panel>
       )}
 
-      {writing && <MessageCompose onClose={() => setWriting(false)} />}
+      {writing && <MessageCompose templates onClose={() => setWriting(false)} />}
 
+      <ConfirmDialog
+        open={Boolean(asking)}
+        danger={false}
+        title={asking?.title ?? ''}
+        message={asking?.message ?? ''}
+        confirmLabel={asking?.label ?? 'Confirm'}
+        busy={busy}
+        onClose={() => setAsking(null)}
+        onConfirm={() => asking && act(asking)}
+      />
+
+      {/*
+        Half and half: the month on one side, what they have written on the
+        other. The two belong together — nearly every message is about a day on
+        that grid — and neither needs the whole width to be read.
+      */}
+      <Grid container spacing={2} sx={{ alignItems: 'flex-start' }}>
+        {/*
+          Seven across against a list of lines: the calendar needs the wider
+          half, or a month of two-digit dates wraps inside cells too narrow to
+          hold the times they carry.
+        */}
+        <Grid size={{ xs: 12, lg: 7 }}>
       <MonthCalendar
         value={month}
         onChange={setMonth}
@@ -207,10 +280,24 @@ export default function Attendance() {
         dayFor={(date) => {
           const record = byDate.get(date);
           const shut = holidayOn.get(date);
-          // Attendance wins the colour: somebody who came in on a holiday
-          // worked, and a pink square would say they did not.
-          if (record) return attendanceDay(record, shut);
-          return shut ? holidayDay(shut) : null;
+          const notes = noteOn(messages, date);
+
+          /*
+            What happened outranks what was asked for. Attendance and a holiday
+            are facts about the day; a request is somebody's word about it, so
+            on a day that already has one it is added to the tooltip rather than
+            painted over the colour.
+          */
+          const said = notes.length > 0 ? ` · ${noteTip(notes)}` : '';
+          if (record) {
+            const day = attendanceDay(record, shut);
+            return { ...day, tooltip: `${day.tooltip ?? ''}${said}` };
+          }
+          if (shut) {
+            const day = holidayDay(shut);
+            return { ...day, tooltip: `${day.tooltip ?? ''}${said}` };
+          }
+          return notes.length > 0 ? noteDay(notes) : null;
         }}
         /* No legend: the cells carry their own times, and the colour follows
            them. The note below is the month's own summary, which says
@@ -229,6 +316,24 @@ export default function Attendance() {
                   : '')
         }
       />
+        </Grid>
+
+        <Grid size={{ xs: 12, lg: 5 }}>
+          {/* Their own: what they asked for, and whether it has been dealt
+              with. Marking one done is their employer's, so it is shown as a
+              state rather than offered as a control. */}
+          <StaffInbox
+            from={user?.id ?? 0}
+            conversation
+            own
+            title="Messages"
+            onCompose={() => setWriting(true)}
+            /* The calendar marks the days these are about, from the same rows
+               rather than a second read of the same list. */
+            onRows={setMessages}
+          />
+        </Grid>
+      </Grid>
     </>
   );
 }
