@@ -102,7 +102,11 @@ const PUBLIC_COLUMNS = [
   // The office landline, with its STD code. Not the alternate mobile: the
   // printed franchisee form asks for both, in two different boxes.
   'office_tel',
+  // The address the account signs in with, and where a password reset goes —
+  // a person's mailbox. `official_email` beside it is the franchise's own, the
+  // one printed on paper and read by whoever is at the office.
   'email',
+  'official_email',
   'address',
   'city',
   'state',
@@ -175,6 +179,7 @@ async function currentEmployment(userId: number) {
       'employements.parent_id as lab_empid',
       'employements.joining_date as joining_date',
       'employements.salary as salary',
+      'employements.week_off as week_off',
       'employer.id as lab_id',
       'employer.fullname as lab_name',
       'employer.mobile as lab_mobile',
@@ -937,6 +942,7 @@ userRoutes.get(
           'employer.role_id as employer_role_id',
           'employements.joining_date as joining_date',
           'employements.salary as salary',
+          'employements.week_off as week_off',
           'employements.is_working as is_working',
         ])
         .orderBy('users.fullname')
@@ -946,7 +952,61 @@ userRoutes.get(
       base().select(db.fn.countAll().as('n')).executeTakeFirstOrThrow(),
     ]);
 
-    res.json(paged(rows, Number(count.n), p));
+    /*
+      Where each of them is today: at work, on leave, or not punched in.
+
+      Two grouped queries over the page's own ids rather than a column on the
+      join — attendance is one row per person per day and a message is many, so
+      either as a join would multiply the page out. Read here rather than from
+      a second endpoint because the list is already the thing being drawn and a
+      badge that arrives a moment later is a badge that flickers.
+
+      **Leave beats attendance.** Somebody who asked for the day off and then
+      came in anyway is at work, and the green says so; the ordering below puts
+      attendance first for exactly that reason.
+    */
+    const ids = rows.map((r) => Number(r.id));
+    const [punched, onLeave] = ids.length
+      ? await Promise.all([
+          db
+            .selectFrom('attendances')
+            .select('empId')
+            .where('empId', 'in', ids)
+            .where('date', '=', new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00`))
+            .execute(),
+          db
+            .selectFrom('staff_messages')
+            .select('from_user')
+            .where('from_user', 'in', ids)
+            .where('topic', '=', 'leave')
+            .where(
+              'about_date',
+              '=',
+              new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00`),
+            )
+            .execute(),
+        ])
+      : [[], []];
+
+    // Punched in at all — still working or gone home, both are present. What
+    // the badge answers is whether somebody turned up.
+    const present = new Set(punched.map((a) => Number(a.empId)));
+    const leave = new Set(onLeave.map((m) => Number(m.from_user)));
+
+    res.json(
+      paged(
+        rows.map((r) => ({
+          ...r,
+          today: present.has(Number(r.id))
+            ? 'present'
+            : leave.has(Number(r.id))
+              ? 'leave'
+              : 'absent',
+        })),
+        Number(count.n),
+        p,
+      ),
+    );
   }),
 );
 
@@ -1057,6 +1117,7 @@ userRoutes.post(
             joining_date: req.body?.joining_date,
             salary: req.body?.salary,
             remark: req.body?.remark,
+            week_off: req.body?.week_off,
           },
           trx,
         ),
@@ -1099,6 +1160,7 @@ const SELF_EDITABLE = [
   'alt_mobile',
   'office_tel',
   'email',
+  'official_email',
   'address',
   'city',
   'state',
@@ -1562,10 +1624,36 @@ async function setEmployer(userId: number, parentEmpid: string | null, exec: Exe
  * its own staff hold `parent_id` = head office's empid, and the staff screen
  * reads them back by the employer's role.
  */
+/**
+ * The days of the week somebody is off, as stored.
+ *
+ * `0`–`6`, Sunday first — the numbering `Date.getDay()` and MySQL's `DAYOFWEEK`
+ * both count in, so nothing has to translate. Sorted and de-duplicated, so
+ * "0,0,6" and "6,0" are one answer written twice.
+ *
+ * Empty means no fixed day off, which is what every row said before this
+ * column existed. NULL rather than '' so the two cannot both mean it.
+ */
+function weekOff(given: unknown): string | null {
+  const list = Array.isArray(given) ? given : String(given ?? '').split(',');
+  const days = [
+    ...new Set(
+      list
+        .map((v) => String(v).trim())
+        // Blanks dropped before Number, not after: `Number('')` is 0, so ''
+        // would be stored as Sunday.
+        .filter(Boolean)
+        .map(Number)
+        .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6),
+    ),
+  ].sort((a, b) => a - b);
+  return days.length ? days.join(',') : null;
+}
+
 async function employ(
   userId: number,
   employerId: number,
-  details: { joining_date?: unknown; salary?: unknown; remark?: unknown } = {},
+  details: { joining_date?: unknown; salary?: unknown; remark?: unknown; week_off?: unknown } = {},
   exec: Exec = db,
 ): Promise<number> {
   if (!Number.isInteger(employerId) || employerId < 1) {
@@ -1614,6 +1702,7 @@ async function employ(
       parent_id: employer.empid,
       joining_date: String(details.joining_date ?? new Date().toISOString().slice(0, 10)),
       salary: String(details.salary ?? '0'),
+      week_off: weekOff(details.week_off),
       is_working: '1',
       leave_date: '',
       remark: String(details.remark ?? ''),
@@ -1645,6 +1734,7 @@ userRoutes.post(
       joining_date: req.body?.joining_date,
       salary: req.body?.salary,
       remark: req.body?.remark,
+      week_off: req.body?.week_off,
     });
 
     res.status(201).json({ data: { id } });
@@ -1691,6 +1781,7 @@ userRoutes.patch(
       patch.joining_date = joining;
     }
     if (req.body?.remark !== undefined) patch.remark = String(req.body.remark ?? '');
+    if (req.body?.week_off !== undefined) patch.week_off = weekOff(req.body.week_off);
 
     if (Object.keys(patch).length === 1) throw badRequest('Nothing to update.');
 

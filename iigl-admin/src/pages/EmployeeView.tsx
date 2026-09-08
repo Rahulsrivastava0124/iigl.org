@@ -5,7 +5,6 @@ import {
   Avatar,
   Box,
   Grid,
-  Stack,
   Typography,
 } from '@mui/material';
 import PresentIcon from '@mui/icons-material/EventAvailableOutlined';
@@ -16,7 +15,7 @@ import { fileUrl } from '../lib/config';
 import { useFetch } from '../lib/useFetch';
 import MonthCalendar, { monthRange, thisMonth } from '../components/MonthCalendar';
 import { Panel, Tile, YesNo } from '../components/ui';
-import { attendanceDay, dayKey, holidayDay, hours, isOpen, minutesWorked, noteDay, noteOn, noteTip } from '../lib/attendance';
+import { attendanceDay, dayKey, holidayDay, hours, isOpen, minutesWorked, noteDay, noteOn, noteTip, weekOffDay, weekOffDays } from '../lib/attendance';
 import AttendanceEdit from '../components/AttendanceEdit';
 import StaffInbox, { type StaffMessage } from '../components/StaffInbox';
 import SalaryHistory from '../components/SalaryHistory';
@@ -29,6 +28,8 @@ interface Employment {
   lab_empid: string;
   joining_date: string;
   salary: string;
+  /** The days of the week this posting is off, `"0,6"` style. */
+  week_off: string | null;
   lab_id: number | null;
   lab_name: string | null;
   lab_mobile: string | null;
@@ -119,6 +120,9 @@ export default function EmployeeView() {
   /** Their messages, so the calendar can mark the days they are about. */
   const [messages, setMessages] = useState<StaffMessage[]>([]);
 
+  /** The days of the week this posting is off, as day numbers. */
+  const weekOff = weekOffDays(person.data?.data?.employment?.week_off);
+
   const roleName =
     p && p.role_id !== null
       ? (roles.data?.data.find((r) => r.id === p.role_id)?.role_name ?? `role ${p.role_id}`)
@@ -126,31 +130,56 @@ export default function EmployeeView() {
 
   return (
     <>
-      <Panel title="Employee" sx={{ mb: 2 }}>
-        <Stack
-          direction={{ xs: 'column', md: 'row' }}
-          spacing={2}
-          sx={{ p: 2, alignItems: { md: 'center' } }}
-        >
-          <Avatar
-            src={fileUrl(p?.profile_photo) ?? undefined}
-            sx={{ width: 56, height: 56, bgcolor: 'primary.main', fontSize: 18 }}
-          >
-            {initials(p?.fullname ?? '')}
-          </Avatar>
-          <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Typography sx={{ fontSize: 18, fontWeight: 600 }}>
+      {/*
+        One row, not a card with a header over it.
+
+        The identifiers under the name — employee ID, mobile, address — were the
+        only thing keeping this two rows deep, and none of them is why anybody
+        opens this page: they came here for the month, and the strip is the
+        answer to "whose month is this". They are all on the record itself,
+        which is one click away.
+      */}
+      <Panel
+        title="Employee"
+        subtitle={
+          /*
+            Inline, not inline-flex.
+
+            The header aligns its title and subtitle on the text baseline. An
+            inline-flex box takes its baseline from its first item, which was
+            the avatar — so the *bottom of the photograph* lined up with the
+            bottom of "Employee" and the name floated above it. Left inline,
+            the box's baseline is the name's own, and the avatar is centred
+            against it by `verticalAlign` like any other inline image.
+          */
+          <Box component="span">
+            <Avatar
+              src={fileUrl(p?.profile_photo) ?? undefined}
+              sx={{
+                width: 26,
+                height: 26,
+                mr: 1,
+                display: 'inline-flex',
+                verticalAlign: 'middle',
+                bgcolor: 'primary.main',
+                fontSize: 11,
+              }}
+            >
+              {initials(p?.fullname ?? '')}
+            </Avatar>
+            <Box
+              component="span"
+              sx={{ verticalAlign: 'middle', fontSize: 15, fontWeight: 600, color: 'text.primary' }}
+            >
               {p?.fullname ?? (person.loading ? 'Loading…' : 'Employee')}
-            </Typography>
-            <Typography variant="caption" color="text.secondary" className="mono">
-              {p?.empid || '—'} · {p?.mobile ?? '—'}
-              {p?.email ? ` · ${p.email}` : ''}
-            </Typography>
+            </Box>
           </Box>
+        }
+        actions={
           <Box
             sx={{
               display: 'grid',
-              gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(5, auto)' },
+              gridTemplateColumns: { xs: 'repeat(3, auto)', md: 'repeat(5, auto)' },
               gap: 2,
             }}
           >
@@ -166,8 +195,9 @@ export default function EmployeeView() {
               <YesNo on={p?.is_active ?? 0} />
             </Fact>
           </Box>
-        </Stack>
-      </Panel>
+        }
+        sx={{ mb: 2 }}
+      />
 
       <Box
         sx={{
@@ -219,6 +249,7 @@ export default function EmployeeView() {
           const record = byDate.get(date);
           const shut = holidayOn.get(date);
           const notes = noteOn(messages, date);
+          const off = weekOff.has(new Date(`${date}T00:00:00`).getDay());
 
           /*
             What happened outranks what was asked for: attendance and a holiday
@@ -226,14 +257,25 @@ export default function EmployeeView() {
             day that has both, the request joins the tooltip; on an empty one it
             is the only thing there is to show, and it is the day the employer
             is being asked to do something about.
+
+            A week off ranks under both and over a note. Somebody who came in
+            on their day off worked, and the green says so; the office being
+            shut is the stronger reason nobody was here.
           */
           const said = notes.length > 0 ? ` · ${noteTip(notes)}` : '';
           if (record) {
             const day = attendanceDay(record, shut);
-            return { ...day, tooltip: `${day.tooltip ?? ''}${said}` };
+            return {
+              ...day,
+              tooltip: `${day.tooltip ?? ''}${off ? ' · their week off' : ''}${said}`,
+            };
           }
           if (shut) {
             const day = holidayDay(shut);
+            return { ...day, tooltip: `${day.tooltip ?? ''}${said}` };
+          }
+          if (off) {
+            const day = weekOffDay();
             return { ...day, tooltip: `${day.tooltip ?? ''}${said}` };
           }
           return notes.length > 0 ? noteDay(notes) : null;

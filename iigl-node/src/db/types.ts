@@ -36,6 +36,23 @@ export interface Attendances {
   updated_at: Date | null;
 }
 
+export interface AttributeMasters {
+  attr_name: string;
+  category_id: number;
+  created_at: Date | null;
+  id: Generated<number>;
+  updated_at: Date | null;
+}
+
+export interface AttributeMasterValues {
+  created_at: Date | null;
+  id: Generated<number>;
+  master_id: number;
+  order_no: Generated<number>;
+  updated_at: Date | null;
+  value_name: string;
+}
+
 export interface Attributes {
   attr_name: string;
   category_id: number;
@@ -212,6 +229,7 @@ export interface Employements {
   salary: string;
   updated_at: Date | null;
   user_id: number;
+  week_off: string | null;
 }
 
 export interface Enquiries {
@@ -493,12 +511,15 @@ export interface StaffMessages {
   about_date: Date | null;
   body: string;
   created_at: Date | null;
+  decision: string | null;
   from_user: number;
   id: Generated<number>;
   kind: Generated<string>;
+  reply_to: number | null;
   resolved_at: Date | null;
   resolved_by: number | null;
   to_user: number;
+  topic: string | null;
   updated_at: Date | null;
 }
 
@@ -686,6 +707,7 @@ export interface Users {
   is_active: number;
   mobile: string;
   office_tel: string | null;
+  official_email: string | null;
   owner_name: string | null;
   pan_no: string | null;
   pan_photo: string | null;
@@ -721,6 +743,8 @@ export interface Websites {
 
 export interface DB {
   attendances: Attendances;
+  attribute_master_values: AttributeMasterValues;
+  attribute_masters: AttributeMasters;
   attribute_values: AttributeValues;
   attributes: Attributes;
   banners: Banners;

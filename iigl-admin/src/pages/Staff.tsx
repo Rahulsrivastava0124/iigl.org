@@ -3,7 +3,9 @@ import {
   Avatar,
   Box,
   Button,
+  Checkbox,
   Grid,
+  IconButton,
   MenuItem,
   Table,
   TableBody,
@@ -11,6 +13,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
 } from '@mui/material';
 import MessageCompose from '../components/MessageCompose';
 import MessageIcon from '@mui/icons-material/ForumOutlined';
@@ -20,7 +23,7 @@ import { useFetch, useDebounced } from '../lib/useFetch';
 import { usePermissions } from '../lib/permissions';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import { hint, DateField, IconAction, Pager, Panel, PasswordField, RowActions, SearchField, TableFrame, YesNo } from '../components/ui';
+import { hint, ConfirmDialog, DateField, IconAction, Pager, Panel, PasswordField, RowActions, SearchField, StateChip, TableFrame, todayState } from '../components/ui';
 import FileField from '../components/FileField';
 import type { Paged } from '../lib/api';
 import { isLab, isSuper, ROLE } from '../lib/portal';
@@ -30,6 +33,8 @@ import ViewIcon from '@mui/icons-material/VisibilityOutlined';
 
 import PermissionsIcon from '@mui/icons-material/KeyOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
+import ActiveIcon from '@mui/icons-material/ToggleOnOutlined';
+import InactiveIcon from '@mui/icons-material/ToggleOffOutlined';
 import UserPermissions from '../components/UserPermissions';
 
 interface StaffRow {
@@ -55,6 +60,11 @@ interface StaffRow {
   joining_date: string;
   /** On the employment, not the account: what this posting pays. */
   salary: string;
+  /**
+   * Where they are today: `present`, `leave`, or `absent` for nobody having
+   * punched in. Read off attendance and the leave requests naming today.
+   */
+  today: string | null;
 }
 
 /** Get initials from name (first letter of first and last name) */
@@ -96,8 +106,15 @@ interface Account {
   profile_photo: string | null;
   adhar_photo: string | null;
   role_id: number | null;
-  employment: { joining_date: string; salary: string } | null;
+  employment: { joining_date: string; salary: string; week_off: string | null } | null;
 }
+
+/**
+ * The days of the week, numbered as `Date.getDay()` numbers them and as the
+ * column stores them — Sunday 0 through Saturday 6, so nothing translates
+ * between the form, the API and the calendar.
+ */
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 const BLANK_ACCOUNT = {
   open: false,
@@ -129,6 +146,12 @@ const BLANK_ACCOUNT = {
   // same breath as the name, and the API takes them on the create.
   salary: '',
   joining_date: '',
+  /*
+    Which days they are off every week. Several, because a five-day week is two
+    — and an empty list is "no fixed day off", which is what every employment
+    said before there was anywhere to record one.
+  */
+  week_off: [] as number[],
 };
 
 export default function Staff() {
@@ -235,6 +258,14 @@ export default function Staff() {
             ? String(Number(a.employment.salary))
             : '',
         joining_date: String(a.employment?.joining_date ?? '').slice(0, 10),
+        week_off: String(a.employment?.week_off ?? '')
+          .split(',')
+          .map((n) => n.trim())
+          // Before Number, not after — `Number('')` is 0, which would open the
+          // form with Sunday ticked for everybody who has no day off.
+          .filter(Boolean)
+          .map(Number)
+          .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6),
       });
     } catch (e) {
       toast.error(messageOf(e));
@@ -271,12 +302,14 @@ export default function Staff() {
         // The salary and the joining date are on the employment, which is a
         // different row and a different endpoint. Sent only when one of them
         // was filled in, so editing a name does not rewrite somebody's terms.
-        if (form.salary !== '' || form.joining_date !== '') {
-          await api.patch(`/users/${form.id}/employment`, {
-            ...(form.salary !== '' ? { salary: Number(form.salary) } : {}),
-            ...(form.joining_date !== '' ? { joining_date: form.joining_date } : {}),
-          });
-        }
+        // `week_off` always goes, unlike the two beside it: an empty list is
+        // an answer — "no fixed day off" — and skipping it when empty would
+        // make clearing somebody's day off impossible.
+        await api.patch(`/users/${form.id}/employment`, {
+          ...(form.salary !== '' ? { salary: Number(form.salary) } : {}),
+          ...(form.joining_date !== '' ? { joining_date: form.joining_date } : {}),
+          week_off: form.week_off,
+        });
         toast.ok(`${form.fullname} updated.`);
       } else {
         const res = await api.post<{ data: { id: number } }>('/users', {
@@ -288,6 +321,7 @@ export default function Staff() {
           // employment travel with it.
           salary: form.salary === '' ? 0 : Number(form.salary),
           joining_date: form.joining_date || undefined,
+          week_off: form.week_off,
         });
         // Update with additional fields
         const id = res.data.id;
@@ -317,13 +351,39 @@ export default function Staff() {
     }
   };
 
-  const endEmployment = async (row: StaffRow) => {
+  const toggleActive = async (row: StaffRow) => {
     try {
-      await api.post(`/users/${row.id}/employment/end`, {});
-      toast.ok(`${row.fullname} is no longer employed.`);
+      await api.patch(`/users/${row.id}/active`, { is_active: !row.is_active });
+      toast.ok(`${row.fullname} ${row.is_active ? 'deactivated' : 'activated'}.`);
       reload();
     } catch (e) {
       toast.error(messageOf(e));
+    }
+  };
+
+  /*
+    Deleting the account, which is not ending the employment beside it.
+
+    Ending an employment leaves the person and their work where they are and
+    says they no longer work here. This removes the account — and the API
+    refuses while any student, order or employment still points at it, which is
+    why the dialog can promise that nothing they touched is at risk.
+  */
+  const [deleting, setDeleting] = useState<StaffRow | null>(null);
+  const [deletingBusy, setDeletingBusy] = useState(false);
+
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    setDeletingBusy(true);
+    try {
+      await api.del(`/users/${deleting.id}`);
+      toast.ok(`${deleting.fullname} deleted.`);
+      setDeleting(null);
+      reload();
+    } catch (e) {
+      toast.error(messageOf(e));
+    } finally {
+      setDeletingBusy(false);
     }
   };
 
@@ -499,6 +559,39 @@ export default function Staff() {
                     helperText={form.id ? undefined : 'Blank is today.'}
                   />
                 </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <TextField
+                    select
+                    label="Week Off"
+                    value={form.week_off}
+                    onChange={(e) => {
+                      const given = e.target.value as unknown as number[] | string;
+                      const days = typeof given === 'string' ? given.split(',') : given;
+                      setForm({ ...form, week_off: days.map(Number).filter((n) => n >= 0) });
+                    }}
+                    slotProps={{
+                      select: {
+                        multiple: true,
+                        renderValue: (chosen) =>
+                          (chosen as number[]).length
+                            ? (chosen as number[])
+                                .slice()
+                                .sort((a, b) => a - b)
+                                .map((d) => WEEKDAYS[d])
+                                .join(', ')
+                            : 'None',
+                      },
+                    }}
+                    helperText="Days they are off every week. Blank is none."
+                  >
+                    {WEEKDAYS.map((name, day) => (
+                      <MenuItem key={day} value={day}>
+                        <Checkbox size="small" checked={form.week_off.includes(day)} />
+                        {name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
                 {!form.id && (
                   <Grid size={{ xs: 12, md: 4 }}>
                     <PasswordField
@@ -623,6 +716,7 @@ export default function Staff() {
                 <TableCell>Mobile</TableCell>
                 <TableCell>Role</TableCell>
                 <TableCell>Joined</TableCell>
+                <TableCell>Today</TableCell>
                 <TableCell>Active</TableCell>
                 <TableCell />
               </TableRow>
@@ -658,7 +752,36 @@ export default function Staff() {
                   <TableCell>{roleName(s.role_id)}</TableCell>
                   <TableCell>{s.joining_date}</TableCell>
                   <TableCell>
-                    <YesNo on={s.is_active} />
+                    <StateChip {...todayState(s.today)} />
+                  </TableCell>
+                  <TableCell>
+                    {/*
+                      A switch rather than a Yes/No badge: the answer was
+                      already on the screen, and what somebody opens this list
+                      to do about it was three clicks away through Edit.
+                    */}
+                    <Tooltip title={s.is_active ? 'Deactivate' : 'Activate'}>
+                      <span>
+                        <IconButton
+                          size="small"
+                          disabled={!mayEdit}
+                          onClick={() => toggleActive(s)}
+                          sx={{
+                            color: s.is_active ? 'success.main' : 'error.main',
+                            '&:hover': {
+                              bgcolor: s.is_active ? 'success.main' : 'error.main',
+                              color: 'common.white',
+                            },
+                          }}
+                        >
+                          {s.is_active ? (
+                            <ActiveIcon fontSize="small" />
+                          ) : (
+                            <InactiveIcon fontSize="small" />
+                          )}
+                        </IconButton>
+                      </span>
+                    </Tooltip>
                   </TableCell>
                   <TableCell>
                     {/*
@@ -686,11 +809,15 @@ export default function Staff() {
                             icon={PermissionsIcon}
                             onClick={() => setGranting(s)}
                           />
+                          {/* In the overflow, not the row: deleting an account
+                              is rarer than every other action here and should
+                              not sit a mis-click from Edit. */}
                           <IconAction
-                            label="End employment"
+                            label="Delete account"
                             icon={DeleteIcon}
                             danger
-                            onClick={() => endEmployment(s)}
+                            overflow
+                            onClick={() => setDeleting(s)}
                           />
                         </>
                       )}
@@ -702,6 +829,22 @@ export default function Staff() {
           </Table>
         </TableFrame>
       </Panel>
+
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        title="Delete account"
+        message={
+          <>
+            Delete <strong>{deleting?.fullname}</strong>
+            {deleting?.empid ? ` (${deleting.empid})` : ''}? This removes the account itself, not
+            just their employment.
+          </>
+        }
+        warning="Refused while any student, order or employment still points at them — end the employment instead."
+        onClose={() => setDeleting(null)}
+        onConfirm={confirmDelete}
+        busy={deletingBusy}
+      />
 
       {granting && <UserPermissions user={granting} onClose={() => setGranting(null)} />}
       {writing && (

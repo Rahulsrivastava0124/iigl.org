@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Button, Grid, MenuItem, Stack, TextField, Typography } from '@mui/material';
+import { Box, Button, Grid, MenuItem, Stack, TextField } from '@mui/material';
 import LoginIcon from '@mui/icons-material/LoginOutlined';
 import LogoutIcon from '@mui/icons-material/LogoutOutlined';
 import BreakIcon from '@mui/icons-material/FreeBreakfastOutlined';
@@ -14,7 +14,7 @@ import { ConfirmDialog, Panel, StateChip } from '../components/ui';
 import MessageCompose from '../components/MessageCompose';
 import StaffInbox, { type StaffMessage } from '../components/StaffInbox';
 import MessageIcon from '@mui/icons-material/ForumOutlined';
-import { attendanceDay, dayKey, holidayDay, hours, isOpen, minutesWorked, noteDay, noteOn, noteTip, time } from '../lib/attendance';
+import { attendanceDay, dayKey, holidayDay, hours, isOpen, minutesWorked, noteDay, noteOn, noteTip, time, weekOffDay, weekOffDays } from '../lib/attendance';
 import type { Day, Holiday } from '../lib/attendance';
 import type { Paged } from '../lib/api';
 
@@ -29,6 +29,8 @@ interface Today {
 interface StaffRow {
   id: number;
   fullname: string;
+  /** The days of the week their posting is off, `"0,6"` style. */
+  week_off: string | null;
 }
 
 /**
@@ -68,6 +70,23 @@ export default function Attendance() {
 
   /* The days the office was shut: head office's list and this laboratory's. */
   const holidays = useFetch<{ data: Holiday[] }>(`/holidays?from=${from}&to=${to}`);
+
+  /*
+    Which days of the week this posting is off.
+
+    Read from the staff list when somebody else's month is on screen — it
+    already carries every posting on the page — and from `/users/me` when it is
+    your own, which is the one case that list does not cover: staff cannot read
+    it, and it is the only screen they open.
+  */
+  const mine = useFetch<{ data: { employment: { week_off: string | null } | null } }>(
+    empId === 'me' ? '/users/me' : null,
+  );
+  const weekOff = weekOffDays(
+    empId === 'me'
+      ? mine.data?.data.employment?.week_off
+      : (staff.data?.data ?? []).find((r) => String(r.id) === empId)?.week_off,
+  );
   const holidayOn = new Map((holidays.data?.data ?? []).map((h) => [h.date, h]));
 
   const [busy, setBusy] = useState(false);
@@ -112,121 +131,120 @@ export default function Attendance() {
 
   return (
     <>
+      {/*
+        One row: the day, where it stands, and the three buttons that change
+        it. It was a titled panel with a body under it, which is two rows and a
+        rule for a line of text and four controls — the shape a table wants,
+        over something that is not one.
+
+        `Panel`'s header is already "one row, always", so this is that header
+        and nothing else.
+      */}
       {t && (
-        <Panel title="Today" sx={{ mb: 2 }}>
-          <Box sx={{ p: 2.5 }}>
-            <Stack
-              direction="row"
-              spacing={2}
-              sx={{ alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}
-            >
-              <div>
-                <Typography variant="overline" color="text.secondary" sx={{ display: 'block' }}>
-                  Today · {t.date}
-                </Typography>
-                <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mt: 0.5 }}>
-                  {t.record ? (
-                    <>
-                      <Typography className="tabular" sx={{ fontSize: 18, fontWeight: 600 }}>
-                        {time(t.record.clockIn)}
-                        {t.record.clockOut && t.record.clockOut !== '00:00:00'
-                          ? ` — ${time(t.record.clockOut)}`
-                          : ''}
-                      </Typography>
-                      {t.on_break && <StateChip tone="waiting" label="On break" />}
-                      {!t.can_clock_out && !t.can_clock_in && (
-                        <StateChip tone="settled" label="Day closed" />
-                      )}
-                    </>
-                  ) : (
-                    <Typography color="text.secondary">Not clocked in.</Typography>
+        <Panel
+          title="Today"
+          subtitle={
+            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+              <Box component="span" className="tabular">
+                {t.date}
+              </Box>
+              {t.record ? (
+                <>
+                  <Box
+                    component="span"
+                    className="tabular"
+                    sx={{ fontSize: 15, fontWeight: 600, color: 'text.primary' }}
+                  >
+                    {time(t.record.clockIn)}
+                    {t.record.clockOut && t.record.clockOut !== '00:00:00'
+                      ? ` \u2014 ${time(t.record.clockOut)}`
+                      : ''}
+                  </Box>
+                  {t.on_break && <StateChip tone="waiting" label="On break" />}
+                  {!t.can_clock_out && !t.can_clock_in && (
+                    <StateChip tone="settled" label="Day closed" />
                   )}
-                </Stack>
-              </div>
-
+                </>
+              ) : (
+                <Box component="span">Not clocked in.</Box>
+              )}
+            </Box>
+          }
+          actions={
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant="contained"
+                color="inherit"
+                startIcon={<LoginIcon />}
+                disabled={busy || !t.can_clock_in}
+                onClick={() =>
+                  setAsking({
+                    path: '/attendance/clock-in',
+                    body: {},
+                    done: 'Punched in. Have a good day.',
+                    title: 'Punch in',
+                    message: `Start your day at ${clock()}?`,
+                    label: 'Punch in',
+                  })
+                }
+              >
+                Punch in
+              </Button>
+              <Button
+                variant="contained"
+                color="success"
+                startIcon={<BreakIcon />}
+                disabled={busy || !t.record || !t.can_clock_out}
+                onClick={() =>
+                  setAsking({
+                    path: '/attendance/break',
+                    body: { on_break: !t.on_break },
+                    done: t.on_break ? 'Back from break.' : 'On a break.',
+                    title: t.on_break ? 'End break' : 'Break',
+                    message: t.on_break
+                      ? `Back to work at ${clock()}?`
+                      : `Start a break at ${clock()}?`,
+                    label: t.on_break ? 'End break' : 'Break',
+                  })
+                }
+              >
+                {t.on_break ? 'End break' : 'Break'}
+              </Button>
+              <Button
+                variant="contained"
+                color="error"
+                startIcon={<LogoutIcon />}
+                disabled={busy || !t.can_clock_out}
+                onClick={() =>
+                  setAsking({
+                    path: '/attendance/clock-out',
+                    body: {},
+                    done: 'Punched out. See you tomorrow.',
+                    title: 'Punch out',
+                    message: `Close the day at ${clock()}? Only your employer can change it afterwards.`,
+                    label: 'Punch out',
+                  })
+                }
+              >
+                Punch out
+              </Button>
               {/*
-                One colour each, and the same three words the clock in the bar
-                uses. They are pressed in the same day by the same person, and
-                two names for one act reads as two acts.
-
-                Grey to start, green while working, red to close: the middle
-                one is the state somebody is in for most of the day, and the
-                last is the one there is no undoing without their employer.
+                The clock records now and nothing else, so the day somebody
+                forgot to punch out of cannot be fixed from here — only their
+                employer may change a record. What they can do is say so, and
+                this is where they say it.
               */}
-              <Stack direction="row" spacing={1}>
-                <Button
-                  variant="contained"
-                  color="inherit"
-                  startIcon={<LoginIcon />}
-                  disabled={busy || !t.can_clock_in}
-                  onClick={() =>
-                    setAsking({
-                      path: '/attendance/clock-in',
-                      body: {},
-                      done: 'Punched in. Have a good day.',
-                      title: 'Punch in',
-                      message: `Start your day at ${clock()}?`,
-                      label: 'Punch in',
-                    })
-                  }
-                >
-                  Punch in
+              {/* Granted, like everything else a laboratory decides about
+                  its front desk. */}
+              {canMessage && (
+                <Button startIcon={<MessageIcon />} onClick={() => setWriting(true)}>
+                  Message employer
                 </Button>
-                <Button
-                  variant="contained"
-                  color="success"
-                  startIcon={<BreakIcon />}
-                  disabled={busy || !t.record || !t.can_clock_out}
-                  onClick={() =>
-                    setAsking({
-                      path: '/attendance/break',
-                      body: { on_break: !t.on_break },
-                      done: t.on_break ? 'Back from break.' : 'On a break.',
-                      title: t.on_break ? 'End break' : 'Break',
-                      message: t.on_break
-                        ? `Back to work at ${clock()}?`
-                        : `Start a break at ${clock()}?`,
-                      label: t.on_break ? 'End break' : 'Break',
-                    })
-                  }
-                >
-                  {t.on_break ? 'End break' : 'Break'}
-                </Button>
-                <Button
-                  variant="contained"
-                  color="error"
-                  startIcon={<LogoutIcon />}
-                  disabled={busy || !t.can_clock_out}
-                  onClick={() =>
-                    setAsking({
-                      path: '/attendance/clock-out',
-                      body: {},
-                      done: 'Punched out. See you tomorrow.',
-                      title: 'Punch out',
-                      message: `Close the day at ${clock()}? Only your employer can change it afterwards.`,
-                      label: 'Punch out',
-                    })
-                  }
-                >
-                  Punch out
-                </Button>
-                {/*
-                  The clock records now and nothing else, so the day somebody
-                  forgot to punch out of cannot be fixed from here — only their
-                  employer may change a record. What they can do is say so, and
-                  this is where they say it.
-                */}
-                {/* Granted, like everything else a laboratory decides about
-                    its front desk. */}
-                {canMessage && (
-                  <Button startIcon={<MessageIcon />} onClick={() => setWriting(true)}>
-                    Message employer
-                  </Button>
-                )}
-              </Stack>
+              )}
             </Stack>
-          </Box>
-        </Panel>
+          }
+          sx={{ mb: 2 }}
+        />
       )}
 
       {writing && <MessageCompose templates onClose={() => setWriting(false)} />}
@@ -281,20 +299,32 @@ export default function Attendance() {
           const record = byDate.get(date);
           const shut = holidayOn.get(date);
           const notes = noteOn(messages, date);
+          const off = weekOff.has(new Date(`${date}T00:00:00`).getDay());
 
           /*
             What happened outranks what was asked for. Attendance and a holiday
             are facts about the day; a request is somebody's word about it, so
             on a day that already has one it is added to the tooltip rather than
             painted over the colour.
+
+            A week off ranks under both and over a note. Somebody who came in on
+            their day off worked, and the green says so; the office being shut
+            is the stronger reason nobody was here.
           */
           const said = notes.length > 0 ? ` · ${noteTip(notes)}` : '';
           if (record) {
             const day = attendanceDay(record, shut);
-            return { ...day, tooltip: `${day.tooltip ?? ''}${said}` };
+            return {
+              ...day,
+              tooltip: `${day.tooltip ?? ''}${off ? ' · week off' : ''}${said}`,
+            };
           }
           if (shut) {
             const day = holidayDay(shut);
+            return { ...day, tooltip: `${day.tooltip ?? ''}${said}` };
+          }
+          if (off) {
+            const day = weekOffDay();
             return { ...day, tooltip: `${day.tooltip ?? ''}${said}` };
           }
           return notes.length > 0 ? noteDay(notes) : null;

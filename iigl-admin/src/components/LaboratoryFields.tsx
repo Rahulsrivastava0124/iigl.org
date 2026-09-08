@@ -71,7 +71,11 @@ export interface LabForm {
   mobile: string;
   office_tel: string;
   alt_mobile: string;
+  /** The owner's own address: what the account signs in with, and where a
+   *  password reset goes. */
   email: string;
+  /** The franchise's address — printed on paper, often a shared inbox. */
+  official_email: string;
   fax: string;
   gst_no: string;
   address: string;
@@ -115,6 +119,7 @@ export const BLANK_LAB: LabForm = {
   office_tel: '',
   alt_mobile: '',
   email: '',
+  official_email: '',
   fax: '',
   gst_no: '',
   address: '',
@@ -223,6 +228,7 @@ export function labPatch(form: LabForm): Record<string, string | number | null |
     office_tel: text(form.office_tel),
     alt_mobile: text(form.alt_mobile),
     email: text(form.email),
+    official_email: text(form.official_email),
     fax: text(form.fax),
     gst_no: text(form.gst_no),
     address: text(form.address),
@@ -552,16 +558,17 @@ export default function LaboratoryFields({ form, set, extra }: Props) {
 
   return (
     <Grid container spacing={2}>
-      {/* ---------------------------------------------- applicant's detail */}
-      <Grid size={cell}>
-        <TextField
-          label="Laboratory Name"
-          placeholder="Eg. Sri Jewelery & Lab"
-          value={form.fullname}
-          onChange={(e) => set('fullname', e.target.value)}
-          required
-        />
-      </Grid>
+      {/*
+        The owner, then the laboratory.
+
+        Two sets of answers, asked in that order because that is how the two
+        are known: a franchise is a person first — whose name, number and
+        mailbox the account belongs to — and a business second, with a name
+        over the door, an office line and an inbox anybody there can read.
+        One box asked for both and whichever was typed, the other was lost.
+      */}
+
+      {/* --------------------------------------------------------- the owner */}
       <Grid size={cell}>
         <TextField
           label="Owner Name"
@@ -573,77 +580,63 @@ export default function LaboratoryFields({ form, set, extra }: Props) {
       </Grid>
       <Grid size={cell}>
         <TextField
-          label="Mobile"
+          label="Contact No."
           placeholder="Eg. 9875642310"
           value={form.mobile}
           onChange={(e) => set('mobile', e.target.value)}
           slotProps={{
             htmlInput: { maxLength: 10, inputMode: 'numeric' },
-            ...hint('Ten digits. The printed form gives each one its own box.'),
+            ...hint('Ten digits. This is the number the account signs in with.'),
           }}
           required
         />
       </Grid>
       <Grid size={cell}>
         <TextField
-          label="Official Email"
+          label="Email"
           type="email"
-          placeholder="Eg. lab@example.com"
+          placeholder="Eg. ramesh@example.com"
           value={form.email}
           onChange={(e) => set('email', e.target.value)}
+          slotProps={hint('The owner\u2019s own mailbox. A password reset link goes here, so it has to be one a person reads.')}
           required
         />
       </Grid>
+      {placeField(
+        'City',
+        'city',
+        districtRows,
+        (value) => set('city', value),
+        'The districts of the state named below, from Master › District. Most towns are not on it — type the name and take the Add option, which puts it there for the next form too.',
+        {
+          path: 'districts',
+          parent: { column: 'state_id', id: stateRow?.id },
+          reload: districts.reload,
+        },
+      )}
+      {placeField(
+        'State',
+        'state',
+        stateRows,
+        (value) => {
+          set('state', value);
+          if (form.city) set('city', '');
+        },
+        'The states of the country named below, from Master › State. Type a new one and take the Add option; the country is India unless it is changed, so the list is usually already right.',
+        {
+          path: 'states',
+          parent: { column: 'country_id', id: countryRow?.id },
+          reload: states.reload,
+        },
+      )}
       <Grid size={cell}>
         <TextField
-          label="GST No"
-          placeholder="Eg. 22XXXXXXXXXXXXXXX"
-          value={form.gst_no}
-          onChange={(e) => set('gst_no', e.target.value)}
-          required
+          label="Pin Code"
+          placeholder="Eg. 800020"
+          value={form.pincode}
+          onChange={(e) => set('pincode', e.target.value)}
         />
       </Grid>
-      <Grid size={cell}>
-        <TextField
-          label="FAX No"
-          placeholder="Eg. 9879854465"
-          value={form.fax}
-          onChange={(e) => set('fax', e.target.value)}
-        />
-      </Grid>
-      <Grid size={cell}>
-        <TextField
-          label="Office Tel No."
-          placeholder="Eg. 0612-2345678"
-          value={form.office_tel}
-          onChange={(e) => set('office_tel', e.target.value)}
-          slotProps={hint('STD code first, then the number — "0612-2345678". The form prints the code in its own box.')}
-        />
-      </Grid>
-      <Grid size={cell}>
-        <TextField
-          label="Alt Mobile"
-          placeholder="Eg. 9875642310"
-          value={form.alt_mobile}
-          onChange={(e) => set('alt_mobile', e.target.value)}
-        />
-      </Grid>
-      <Grid size={cell}>
-        <TextField
-          label="Permanent Address"
-          placeholder="Full address"
-          value={form.address}
-          onChange={(e) => set('address', e.target.value)}
-        />
-      </Grid>
-      {/*
-        Country, then state, then district: each narrows the next, so they are
-        asked in that order rather than in the paper form's, where country is
-        last and would re-open the two answers above it.
-
-        Changing one clears what hangs off it. A state left over from the
-        previous country is worse than an empty box: it reads as an answer.
-      */}
       {placeField(
         'Country',
         'country',
@@ -656,39 +649,67 @@ export default function LaboratoryFields({ form, set, extra }: Props) {
         'From Master › Country. Type a country that is not listed and take the Add option to put it on the list.',
         { path: 'countries', reload: countries.reload },
       )}
-      {placeField(
-        'State',
-        'state',
-        stateRows,
-        (value) => {
-          set('state', value);
-          if (form.city) set('city', '');
-        },
-        'The states of the country chosen above, from Master › State. Type a new one and take the Add option; choose the country first, or it is kept on this record only.',
-        {
-          path: 'states',
-          parent: { column: 'country_id', id: countryRow?.id },
-          reload: states.reload,
-        },
-      )}
-      {placeField(
-        'Town / City',
-        'city',
-        districtRows,
-        (value) => set('city', value),
-        'The districts of the state chosen above, from Master › District. Most towns are not on it — type the name and take the Add option, which puts it there for the next form too.',
-        {
-          path: 'districts',
-          parent: { column: 'state_id', id: stateRow?.id },
-          reload: districts.reload,
-        },
-      )}
+
+      {/* ---------------------------------------------------- the laboratory */}
       <Grid size={cell}>
         <TextField
-          label="Pin Code"
-          placeholder="Eg. 800020"
-          value={form.pincode}
-          onChange={(e) => set('pincode', e.target.value)}
+          label="Lab Name"
+          placeholder="Eg. Sri Jewelery & Lab"
+          value={form.fullname}
+          onChange={(e) => set('fullname', e.target.value)}
+          required
+        />
+      </Grid>
+      <Grid size={cell}>
+        <TextField
+          label="Official Email"
+          type="email"
+          placeholder="Eg. lab@example.com"
+          value={form.official_email}
+          onChange={(e) => set('official_email', e.target.value)}
+          slotProps={hint('The franchise\u2019s own address, printed on the form. Sign-in and password reset use the owner\u2019s above, not this one.')}
+        />
+      </Grid>
+      <Grid size={cell}>
+        <TextField
+          label="FAX"
+          placeholder="Eg. 9879854465"
+          value={form.fax}
+          onChange={(e) => set('fax', e.target.value)}
+        />
+      </Grid>
+      <Grid size={cell}>
+        <TextField
+          label="Contact"
+          placeholder="Eg. 0612-2345678"
+          value={form.office_tel}
+          onChange={(e) => set('office_tel', e.target.value)}
+          slotProps={hint('The office line. STD code first, then the number \u2014 "0612-2345678". The printed form gives the code its own box.')}
+        />
+      </Grid>
+      <Grid size={cell}>
+        <TextField
+          label="Alt Contact"
+          placeholder="Eg. 9875642310"
+          value={form.alt_mobile}
+          onChange={(e) => set('alt_mobile', e.target.value)}
+        />
+      </Grid>
+      <Grid size={cell}>
+        <TextField
+          label="Lab Address"
+          placeholder="Full address"
+          value={form.address}
+          onChange={(e) => set('address', e.target.value)}
+        />
+      </Grid>
+      <Grid size={cell}>
+        <TextField
+          label="GST No"
+          placeholder="Eg. 22XXXXXXXXXXXXXXX"
+          value={form.gst_no}
+          onChange={(e) => set('gst_no', e.target.value)}
+          required
         />
       </Grid>
 

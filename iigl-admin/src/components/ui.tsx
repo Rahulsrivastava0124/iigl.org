@@ -93,6 +93,24 @@ export function attendanceState(closed: boolean): { tone: Tone; label: string } 
   return closed ? { tone: 'settled', label: 'Closed' } : { tone: 'waiting', label: 'Open' };
 }
 
+/**
+ * Where somebody is today, for the Employee list.
+ *
+ * Three states and three colours, because the absence of a punch and a day off
+ * are not the same news: grey is nobody has punched in — which at nine in the
+ * morning means nothing and at four means something — green is they are here,
+ * and red is they asked for the day.
+ *
+ * Leave is only known where the request was written from the Leave template;
+ * one typed from scratch is a request about a day and says nothing about which
+ * kind, so it reads as grey rather than guessing.
+ */
+export function todayState(state: string | null | undefined): { tone: Tone; label: string } {
+  if (state === 'present') return { tone: 'settled', label: 'Present' };
+  if (state === 'leave') return { tone: 'refused', label: 'Leave' };
+  return { tone: 'plain', label: 'Not punched' };
+}
+
 /** How many certificates on an order item are still to be written. */
 export function remainingState(left: number): { tone: Tone; label: string } {
   return left > 0
@@ -399,7 +417,11 @@ export function Panel({
    */
   footer?: ReactNode;
   actions?: ReactNode;
-  children: ReactNode;
+  /**
+   * Optional, for the panel that is only its header — a strip of state and the
+   * controls that change it, with no table under it.
+   */
+  children?: ReactNode;
   /** Spacing around the panel. It carries none of its own. */
   sx?: object;
 }) {
@@ -420,7 +442,10 @@ export function Panel({
             flexWrap: 'nowrap',
             px: 2,
             py: 1.25,
-            borderBottom: 1,
+            // The rule separates the header from what is under it. With
+            // nothing under it there is nothing to separate, and the line
+            // reads as a table that failed to load.
+            borderBottom: children ? 1 : 0,
             borderColor: 'divider',
           }}
         >

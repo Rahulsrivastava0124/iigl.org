@@ -86,6 +86,41 @@ export function attendanceDay(d: Day, holiday?: Holiday): CalendarDay {
 }
 
 /**
+ * The days of the week a posting is off, as the employment stores them.
+ *
+ * `"0,6"` for Sunday and Saturday — `Date.getDay()` numbering, which is what
+ * the column holds so that nothing has to translate. Anything unparseable
+ * reads as no fixed day off, the same as an empty column.
+ */
+export const weekOffDays = (stored: string | null | undefined): Set<number> =>
+  new Set(
+    String(stored ?? '')
+      .split(',')
+      .map((n) => n.trim())
+      // Blanks dropped before Number, not after: `Number('')` is 0, so an
+      // empty column parsed as Sunday and every posting with no fixed day off
+      // was shown one.
+      .filter(Boolean)
+      .map(Number)
+      .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6),
+  );
+
+/**
+ * A day this person is off every week, as a calendar cell.
+ *
+ * Slate, and named. It is not an absence — nobody was asked to come in — and
+ * left as the blank square an absence leaves, a weekly day off is queried as
+ * one at the end of every month.
+ *
+ * Not the holiday pink: a holiday is the office shut for everybody, this is one
+ * person's own week. They read alike at a glance and mean different things to
+ * whoever is asking why somebody was not here.
+ */
+export function weekOffDay(): CalendarDay {
+  return { tone: 'plain', lines: ['week off'], tooltip: 'Week off' };
+}
+
+/**
  * A day somebody has written about, on the calendar.
  *
  * A request names a day — leave on the 9th, a punch to correct on the 3rd —

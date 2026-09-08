@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  Autocomplete,
   Button,
   Checkbox,
+  Chip,
   FormControlLabel,
   FormGroup,
   MenuItem,
@@ -31,6 +33,7 @@ import {
   YesNo,
 } from '../components/ui';
 import type { Attribute, Category, PageMeta, Subcategory } from '../lib/api';
+import type { AttributeMaster } from './AttributeMaster';
 import AddIcon from '@mui/icons-material/AddOutlined';
 import EditIcon from '@mui/icons-material/EditOutlined';
 import ValuesIcon from '@mui/icons-material/ListAltOutlined';
@@ -50,6 +53,14 @@ interface AttributeValue {
 const BLANK_VALUE = {
   open: false,
   id: undefined as number | undefined,
+  /*
+    Several at once when adding, one when renaming.
+
+    A grade scale is seven values and the old form took them one at a time,
+    with the branch re-chosen on every pass. Editing stays single because it
+    renames one row — there is no such thing as renaming seven at once.
+  */
+  names: [] as string[],
   value_name: '',
   description: '',
   icon: null as string | null,
@@ -133,6 +144,31 @@ export default function Attributes() {
   );
   const valueRows = values.data?.data ?? [];
 
+  /*
+    The master list for this category, and what it offers for the attribute in
+    hand.
+
+    Matched on the attribute's **name**, not its id: a master belongs to a
+    category and the attribute belongs to a subcategory below it, which is the
+    whole point — one "Colour" list serving every subcategory that grades
+    colour. An attribute with no master offers nothing, and the field is then
+    exactly the free-text box it was before.
+  */
+  const masters = useFetch<{ data: AttributeMaster[] }>(
+    chosenCat ? `/catalog/attribute-masters?category_id=${chosenCat}` : null,
+  );
+  const attrName = rows.find((a) => String(a.id) === attrId)?.attr_name ?? '';
+  const masterValues =
+    (masters.data?.data ?? [])
+      .find((m) => m.attr_name.toLowerCase() === attrName.toLowerCase())
+      ?.values.map((v) => v.value_name) ?? [];
+  // What this attribute already carries, so the list does not offer it again.
+  const alreadyHeld = new Set(
+    valueRows
+      .filter((v) => String(v.attr_id) === attrId)
+      .map((v) => v.value_name.toLowerCase()),
+  );
+
   const nameOf = {
     category: (id: number) => cats.find((c) => c.id === id)?.name ?? '—',
     subcategory: (id: number) => allSubs.find((x) => x.id === id)?.name ?? '—',
@@ -203,22 +239,53 @@ export default function Attributes() {
   };
 
   const saveValue = async () => {
-    if (!valueForm.value_name.trim()) return;
     if (!attrId) return toast.error('Choose the attribute this value belongs to.');
     setBusy(true);
     try {
-      const body = {
-        attr_id: Number(attrId),
-        value_name: valueForm.value_name.trim(),
-        description: valueForm.description.trim(),
-        icon: valueForm.icon,
-      };
       if (valueForm.id) {
-        await api.patch(`/admin/attribute-values/${valueForm.id}`, body);
+        if (!valueForm.value_name.trim()) return;
+        await api.patch(`/admin/attribute-values/${valueForm.id}`, {
+          attr_id: Number(attrId),
+          value_name: valueForm.value_name.trim(),
+          description: valueForm.description.trim(),
+          icon: valueForm.icon,
+        });
         toast.ok('Value updated.');
       } else {
-        await api.post('/admin/attribute-values', body);
-        toast.ok(`${body.value_name} added.`);
+        if (!valueForm.names.length) return toast.error('Choose or type at least one value.');
+        /*
+          One request for the whole list. Sent to the bulk endpoint rather than
+          looped here: a name the attribute already carries is skipped there,
+          where a loop would create the first four, refuse the fifth and leave
+          somebody to work out which of the seven landed.
+        */
+        const { data } = await api.post<{ data: { added: number; skipped: number } }>(
+          '/admin/attribute-values/bulk',
+          { attr_id: Number(attrId), values: valueForm.names },
+        );
+        // A description or a picture applies to each of them, and the bulk
+        // endpoint deliberately takes neither — so they are written after, and
+        // only when there is something to write.
+        const extra = {
+          ...(valueForm.description.trim() ? { description: valueForm.description.trim() } : {}),
+          ...(valueForm.icon ? { icon: valueForm.icon } : {}),
+        };
+        if (Object.keys(extra).length && data.added) {
+          const fresh = await api.get<{ data: AttributeValue[] }>(
+            `/catalog/attribute-values?attr_id=${attrId}&per_page=200`,
+          );
+          const chosen = new Set(valueForm.names.map((n) => n.toLowerCase()));
+          await Promise.all(
+            fresh.data
+              .filter((v) => chosen.has(v.value_name.toLowerCase()))
+              .map((v) => api.patch(`/admin/attribute-values/${v.id}`, extra)),
+          );
+        }
+        toast.ok(
+          data.skipped
+            ? `${data.added} added, ${data.skipped} already there.`
+            : `${data.added} value${data.added === 1 ? '' : 's'} added.`,
+        );
       }
       setValueForm(BLANK_VALUE);
       values.reload();
@@ -308,7 +375,13 @@ export default function Attributes() {
             title={valueForm.id ? 'Edit value' : 'Add value'}
             onClose={() => setValueForm(BLANK_VALUE)}
             onSubmit={saveValue}
-            submitLabel={valueForm.id ? 'Save changes' : 'Add value'}
+            submitLabel={
+              valueForm.id
+                ? 'Save changes'
+                : valueForm.names.length > 1
+                  ? `Add ${valueForm.names.length} values`
+                  : 'Add value'
+            }
             busy={busy}
           >
             {branchFilters()}
@@ -329,17 +402,66 @@ export default function Attributes() {
                 </MenuItem>
               ))}
             </TextField>
-            <TextField
-              label="Value"
-              value={valueForm.value_name}
-              onChange={(e) => setValueForm({ ...valueForm, value_name: e.target.value })}
-              required
-              autoFocus
-            />
+            {valueForm.id ? (
+              <TextField
+                label="Value"
+                value={valueForm.value_name}
+                onChange={(e) => setValueForm({ ...valueForm, value_name: e.target.value })}
+                required
+                autoFocus
+              />
+            ) : (
+              /*
+                Pick several from the master list, or type ones that are not on
+                it — `freeSolo`, so the field is still the free-text box it was
+                for an attribute no master covers.
+
+                Values this attribute already carries are filtered out of the
+                options rather than shown and refused: the list is there so
+                nobody has to check first.
+              */
+              <Autocomplete
+                multiple
+                freeSolo
+                options={masterValues.filter((v) => !alreadyHeld.has(v.toLowerCase()))}
+                value={valueForm.names}
+                onChange={(_, v) =>
+                  setValueForm({
+                    ...valueForm,
+                    names: (v as string[]).map((one) => one.trim()).filter(Boolean),
+                  })
+                }
+                renderValue={(chosen, getProps) =>
+                  (chosen as string[]).map((value, i) => (
+                    <Chip size="small" label={value} {...getProps({ index: i })} key={value} />
+                  ))
+                }
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Values"
+                    placeholder={
+                      masterValues.length
+                        ? 'Choose from the master list, or type your own'
+                        : 'Type a value and press Enter'
+                    }
+                    autoFocus
+                    helperText={
+                      !attrId
+                        ? 'Choose an attribute first.'
+                        : masterValues.length
+                          ? `${masterValues.length} on the master list for ${attrName}.`
+                          : `No master list for ${attrName || 'this attribute'} \u2014 type the values, or build one under Attributes Master.`
+                    }
+                  />
+                )}
+              />
+            )}
             <TextField
               label="Description"
               value={valueForm.description}
               onChange={(e) => setValueForm({ ...valueForm, description: e.target.value })}
+              helperText={valueForm.id ? undefined : 'Applies to every value added here. Usually left empty when adding several.'}
             />
             <FileField
               label="Image"
@@ -426,6 +548,7 @@ export default function Attributes() {
                             setValueForm({
                               open: true,
                               id: v.id,
+                              names: [],
                               value_name: v.value_name,
                               description: v.description ?? '',
                               icon: v.icon,

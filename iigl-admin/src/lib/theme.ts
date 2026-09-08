@@ -249,7 +249,29 @@ export const theme = createTheme({
     MuiPopover: { styleOverrides: { paper: floating } },
     MuiTableCell: {
       styleOverrides: {
-        root: { paddingTop: 9, paddingBottom: 9, whiteSpace: 'nowrap' },
+        /*
+          Ten either side, not Material's sixteen.
+
+          These tables are eleven columns wide — a customer, a mobile, a status,
+          two counts, two amounts and who it is with — and six pixels a side
+          across eleven columns is over a hundred pixels of nothing, which is
+          the difference between a row that fits and one that scrolls its last
+          column out of sight. The rows keep their vertical room, which is what
+          makes a list scannable; it is the gaps between columns that were
+          paying for it.
+
+          The outer edges keep the full sixteen, so the first and last columns
+          sit in from the panel's border rather than against it.
+        */
+        root: {
+          paddingTop: 9,
+          paddingBottom: 9,
+          paddingLeft: 10,
+          paddingRight: 10,
+          whiteSpace: 'nowrap',
+          '&:first-of-type': { paddingLeft: 16 },
+          '&:last-child': { paddingRight: 16 },
+        },
         // Every row in the panel is separated, and by the same line.
         body: { borderBottom: `1px solid ${BRAND.tableRule}` },
         head: {

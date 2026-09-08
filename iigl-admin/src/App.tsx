@@ -20,6 +20,7 @@ import LaboratoryEdit from './pages/LaboratoryEdit';
 import Staff from './pages/Staff';
 import Categories from './pages/Categories';
 import Attributes from './pages/Attributes';
+import AttributeMaster from './pages/AttributeMaster';
 import Pricing from './pages/Pricing';
 import Roles from './pages/Roles';
 import RoleEdit from './pages/RoleEdit';
@@ -266,6 +267,14 @@ function Routed() {
           element={
             <AdminOnly>
               <Attributes />
+            </AdminOnly>
+          }
+        />
+        <Route
+          path="/attribute-master"
+          element={
+            <AdminOnly>
+              <AttributeMaster />
             </AdminOnly>
           }
         />

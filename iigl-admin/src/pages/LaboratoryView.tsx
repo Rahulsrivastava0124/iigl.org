@@ -26,7 +26,6 @@ import {
   StatusChip,
   TableFrame,
   Tile,
-  commissionRate,
   money,
   TILE_CELL,
 } from '../components/ui';
@@ -145,13 +144,12 @@ export default function LaboratoryView() {
         )}
       </Stack>
 
-      {lab && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
-          {lab.empid ?? '—'} · {lab.owner_name ?? 'No owner recorded'} · {lab.mobile}
-          {lab.city ? ` · ${lab.city}` : ''}
-          {lab.commision == null ? '' : ` · ${commissionRate(lab.commision, lab.commission_type)} commission`}
-        </Typography>
-      )}
+      {/*
+        There was an identifier line here — code, owner, mobile, city, rate.
+        None of it is why this page is opened: it is opened for the money and
+        the certificates below, and every one of those five is on the record
+        itself, behind Edit.
+      */}
 
       <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid size={TILE_CELL}>

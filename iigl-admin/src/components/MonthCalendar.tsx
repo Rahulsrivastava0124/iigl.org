@@ -180,15 +180,26 @@ export default function MonthCalendar({
                 onClick={pickable ? () => onPick?.(date) : undefined}
                 sx={{
                   border: 1,
-                  borderColor: tint ? tint.soft : 'divider',
+                  // The full colour, not its pale end.
+                  //
+                  // A month is mostly empty squares, and the two or three that
+                  // are not are the whole reason to look at it. The wash was
+                  // chosen for a screen of a dozen tinted cards at once; here
+                  // it made a day worked and a day off nearly the same white,
+                  // and the month had to be read rather than glanced at.
+                  borderColor: tint ? tint.main : 'divider',
                   borderRadius: 1,
-                  bgcolor: tint ? tint.soft : 'transparent',
+                  bgcolor: tint ? tint.main : 'transparent',
                   minHeight: { xs: 58, sm: 74 },
                   p: { xs: 0.5, sm: 1 },
                   opacity: future ? 0.45 : 1,
                   ...(pickable && {
                     cursor: 'pointer',
-                    '&:hover': { borderColor: tint ? tint.main : 'primary.main' },
+                    // Nothing left to fill, so a filled cell answers with its
+                    // edge instead.
+                    '&:hover': tint
+                      ? { boxShadow: `0 0 0 2px ${tint.main}`, borderColor: tint.main }
+                      : { borderColor: 'primary.main' },
                   }),
                   // Today is outlined rather than filled: the fill is spoken
                   // for by whether anything happened.
@@ -200,7 +211,10 @@ export default function MonthCalendar({
                   sx={{
                     fontSize: 12,
                     fontWeight: 600,
-                    color: tint ? tint.main : 'text.secondary',
+                    // `on` is the colour that sits legibly on the fill — white
+                    // for every tone here. Keeping `main` would have written
+                    // each colour on itself.
+                    color: tint ? tint.on : 'text.secondary',
                   }}
                 >
                   {i + 1}
@@ -209,7 +223,7 @@ export default function MonthCalendar({
                   <Typography
                     key={n}
                     className="tabular"
-                    sx={{ fontSize: 11.5, color: tint?.main, lineHeight: 1.5 }}
+                    sx={{ fontSize: 11.5, color: tint?.on, lineHeight: 1.5 }}
                   >
                     {line}
                   </Typography>

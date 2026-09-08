@@ -217,7 +217,15 @@ authRoutes.post(
     const url = `${panelUrl}/reset-password?email=${encodeURIComponent(email)}&token=${token}`;
     // Counted from the row that was just written, so the mail and the check in
     // /reset-password are reading the same clock.
-    await sendPasswordReset(email, url, user.fullname, new Date(Date.now() + RESET_TTL_MS));
+    try {
+      await sendPasswordReset(email, url, user.fullname, new Date(Date.now() + RESET_TTL_MS));
+    } catch (e) {
+      // The row goes back out. Asking for a reset already invalidated whatever
+      // link was live; leaving a token behind that nobody was ever sent means
+      // an earlier, working mail was destroyed by an attempt that failed.
+      await db.deleteFrom('password_resets').where('email', '=', email).execute();
+      throw e;
+    }
 
     res.json({
       ok: true,

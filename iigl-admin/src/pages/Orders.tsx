@@ -166,7 +166,13 @@ export default function Orders() {
                 <TableRow key={o.id} hover>
                   <TableCell>{o.order_date}</TableCell>
                   <TableCell className="mono">{o.order_no}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'normal', minWidth: 160 }}>
+                  {/*
+                    Wrapping, not reserving. `minWidth` held 160 pixels open on
+                    every row whatever the name was — the widest fixed claim in
+                    a row of eleven columns — where wrapping gives a long name
+                    two lines and a short one nothing.
+                  */}
+                  <TableCell sx={{ whiteSpace: 'normal', minWidth: 110 }}>
                     {o.customer_name}
                   </TableCell>
                   <TableCell className="mono">{o.mobile}</TableCell>
@@ -221,7 +227,7 @@ export default function Orders() {
                       {money(o.dues_amount)}
                     </Box>
                   </TableCell>
-                  <TableCell sx={{ whiteSpace: 'normal', minWidth: 120 }}>
+                  <TableCell sx={{ whiteSpace: 'normal', minWidth: 100 }}>
                     {o.assigned_to_name ?? (
                       <Box component="span" sx={{ color: 'text.secondary' }}>
                         Unassigned

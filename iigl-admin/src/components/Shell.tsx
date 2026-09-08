@@ -256,6 +256,9 @@ const ADMIN_GROUPS: Group[] = [
     icon: MasterIcon,
     adminOnly: true,
     items: [
+      // The value lists the Add Value form is filled from. A master list rather
+      // than a screen of daily work, which is what this group is for.
+      { to: '/attribute-master', label: 'Attributes Master' },
       { to: '/master/gst', label: 'GST' },
       { to: '/master/enquiry-types', label: 'Enquiry Type' },
       { to: '/master/countries', label: 'Country' },

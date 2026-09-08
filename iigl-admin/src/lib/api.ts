@@ -175,6 +175,11 @@ export interface Report {
   /** `order_no` on a certificate holds the order id; these two say which is which. */
   order_id: number | null;
   order_number: string | null;
+  /**
+   * The photograph of the stone, as printed on the card. `public/uploads/…`;
+   * render with `fileUrl`. Empty on a certificate written without one.
+   */
+  item_image: string | null;
 }
 
 export interface Transaction {
@@ -293,6 +298,11 @@ export interface DashboardSummary {
     /** Ordered today and still in progress. */
     active_today: number;
   };
+  /**
+   * Pieces, not orders: `qty` summed over the lines. `done` is the pieces
+   * whose certificates are all written, on the same rule the order list reads.
+   */
+  items: { total: number; done: number; active: number };
   reports: { total: number };
   cards: { smart: number; classic: number };
   /**
@@ -327,10 +337,6 @@ export interface DashboardSummary {
    * out of that.
    */
   lab: {
-    /** Cards ordered, smart and classic together. */
-    cards_ordered: number;
-    /** Certificates generated against those orders. */
-    cards_generated: number;
     smart_generated: number;
     classic_generated: number;
     /** Everything this laboratory's staff have taken in, approved or not. */

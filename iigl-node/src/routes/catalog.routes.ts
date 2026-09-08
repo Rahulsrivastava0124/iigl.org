@@ -153,3 +153,63 @@ catalogRoutes.get(
     res.json({ data: rows });
   }),
 );
+
+/**
+ * The attribute master list: an attribute name under a category, and the values
+ * that attribute normally takes.
+ *
+ * The library the Add Value form is filled from — not values on anything. A
+ * master value becomes a real `attribute_values` row only when somebody picks
+ * it against a branch, and the two are unrelated from that moment on.
+ *
+ * Read here rather than under /admin because the form that offers the list is
+ * open to whoever may add a value; only changing the library is head office's.
+ * Narrowed by `category_id` when one is given, which is what the form does —
+ * "Colour" under Diamond is not the same list as "Colour" under Gemstone.
+ */
+catalogRoutes.get(
+  '/attribute-masters',
+  wrap(async (req, res) => {
+    let masters = db
+      .selectFrom('attribute_masters')
+      .select(['id', 'category_id', 'attr_name'])
+      .orderBy('attr_name');
+
+    const categoryId = Number(req.query.category_id);
+    if (Number.isInteger(categoryId) && categoryId > 0) {
+      masters = masters.where('category_id', '=', categoryId);
+    }
+    const rows = await masters.execute();
+    if (!rows.length) return void res.json({ data: [] });
+
+    // One query for every value rather than one per master: this is read on
+    // every keystroke of the Add Value form's category filter.
+    const values = await db
+      .selectFrom('attribute_master_values')
+      .select(['id', 'master_id', 'value_name'])
+      .where(
+        'master_id',
+        'in',
+        rows.map((r) => Number(r.id)),
+      )
+      .orderBy('order_no')
+      .orderBy('id')
+      .execute();
+
+    const byMaster = new Map<number, { id: number; value_name: string }[]>();
+    for (const v of values) {
+      const list = byMaster.get(Number(v.master_id)) ?? [];
+      list.push({ id: Number(v.id), value_name: String(v.value_name) });
+      byMaster.set(Number(v.master_id), list);
+    }
+
+    res.json({
+      data: rows.map((r) => ({
+        id: Number(r.id),
+        category_id: Number(r.category_id),
+        attr_name: String(r.attr_name),
+        values: byMaster.get(Number(r.id)) ?? [],
+      })),
+    });
+  }),
+);

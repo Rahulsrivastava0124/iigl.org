@@ -104,12 +104,36 @@ transactionRoutes.get(
       : [];
     const nameOf = new Map(people.map((u) => [Number(u.id), u.fullname]));
 
+    /*
+      The customer, on money taken at the counter.
+
+      `send_by` is 0 there — a walk-in has no account, and 0 is the sentinel for
+      "nobody" — so no user row can name them. The order can: it carries the
+      name written on it when the order was taken, and the transaction names the
+      order. The same rule the wallet ledger reads, so the two screens cannot
+      name the same payment differently.
+    */
+    const orderIds = [
+      ...new Set(rows.filter((r) => Number(r.send_by) === 0 && r.order_id).map((r) => Number(r.order_id))),
+    ];
+    const orders = orderIds.length
+      ? await db.selectFrom('orders').select(['id', 'customer_name']).where('id', 'in', orderIds).execute()
+      : [];
+    const customerOf = new Map(
+      orders
+        .filter((o) => o.customer_name && String(o.customer_name).trim())
+        .map((o) => [Number(o.id), String(o.customer_name).trim()]),
+    );
+
     res.json(
       paged(
         rows.map((r) => ({
           ...r,
-          // 0 is the sentinel for a walk-in customer with no account.
-          send_by_name: nameOf.get(Number(r.send_by)) ?? null,
+          // 0 is the sentinel for a walk-in customer with no account, named
+          // from their order where there is one.
+          send_by_name:
+            nameOf.get(Number(r.send_by)) ??
+            (r.order_id ? (customerOf.get(Number(r.order_id)) ?? null) : null),
           received_by_name: nameOf.get(Number(r.received_by)) ?? null,
         })),
         Number(count.n),

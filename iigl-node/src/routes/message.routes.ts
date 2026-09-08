@@ -5,6 +5,7 @@ import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { paged, readPage } from '../lib/paginate.js';
 import { assertEmploys, empidOf, requireLabScope, ROLE } from '../middleware/auth.js';
 import { numericId } from '../middleware/params.js';
+import type { SessionUser } from '../lib/session.js';
 
 /**
  * Messages and requests, from staff to the person who employs them.
@@ -26,6 +27,43 @@ export const messageRoutes = Router();
 messageRoutes.use(requireLabScope);
 
 const KINDS = new Set(['message', 'request']);
+
+/** What a request is about, when it was written from a template. */
+const TOPICS = new Set(['leave', 'punch']);
+
+/** How a request was answered. */
+const DECISIONS = new Set(['approved', 'declined']);
+
+/**
+ * One person's thread, as this reader may see it.
+ *
+ * Three different answers, and the reason they differ is who the messages were
+ * addressed to:
+ *
+ *   themselves   what they wrote
+ *   head office  the whole thread, either direction — a laboratory's employee
+ *                writes to the laboratory, never to head office, so "addressed
+ *                to me" showed head office an empty inbox beside a calendar
+ *                marked with the days those very messages named
+ *   an employer  both sides of their own exchange with this person. Not only
+ *                what was sent to them: a reply is written back as a message,
+ *                and "addressed to me" drops every answer the employer gave,
+ *                including the one they wrote a moment ago
+ *
+ * One builder because the rows and the count are selected by it, and a rule
+ * written twice is a pager describing a list nobody is looking at.
+ */
+function threadWith(eb: any, from: number, user: SessionUser, prefix = '') {
+  const col = (name: string) => `${prefix}${name}` as never;
+  if (from === user.id) return eb(col('from_user'), '=', from);
+  if (user.roleId === ROLE.SUPER) {
+    return eb.or([eb(col('from_user'), '=', from), eb(col('to_user'), '=', from)]);
+  }
+  return eb.or([
+    eb.and([eb(col('from_user'), '=', from), eb(col('to_user'), '=', user.id)]),
+    eb.and([eb(col('from_user'), '=', user.id), eb(col('to_user'), '=', from)]),
+  ]);
+}
 
 /** The account this person answers to: their employer, by `employements`. */
 async function employerOf(userId: number): Promise<number | null> {
@@ -160,6 +198,20 @@ messageRoutes.post(
     const kind = String(req.body?.kind ?? 'message');
     if (!KINDS.has(kind)) throw badRequest('Kind is "message" or "request".');
 
+    /*
+      What the request is about, from the template it was written on.
+
+      Leave and a punch to correct are both requests naming a day, and the only
+      other thing that told them apart was the sentence — which the person
+      writing is free to rewrite. The Employee list has to say whether somebody
+      is on leave today, and that is not a question prose can answer.
+
+      Absent for anything typed from scratch, which is honest: it is a request,
+      and nothing claims to know which kind.
+    */
+    const topic = String(req.body?.topic ?? '').trim() || null;
+    if (topic && !TOPICS.has(topic)) throw badRequest('Topic is "leave" or "punch".');
+
     const about = String(req.body?.about_date ?? '').trim();
     if (about && !/^\d{4}-\d{2}-\d{2}$/.test(about)) {
       throw badRequest('The date it is about must be YYYY-MM-DD.');
@@ -206,6 +258,7 @@ messageRoutes.post(
       from_user: req.user.id,
       to_user: to,
       kind,
+      topic,
       body,
       about_date: about ? new Date(`${about}T00:00:00`) : null,
       created_at: now,
@@ -239,8 +292,13 @@ messageRoutes.get(
       .select([
         'staff_messages.id as id',
         'staff_messages.kind as kind',
+        // What the request is about, and how it was answered. Both are what
+        // the reader's badge says, and neither can be read off the prose.
+        'staff_messages.topic as topic',
+        'staff_messages.decision as decision',
         'staff_messages.body as body',
         'staff_messages.about_date as about_date',
+        'staff_messages.reply_to as reply_to',
         'staff_messages.resolved_at as resolved_at',
         'staff_messages.created_at as created_at',
         'staff_messages.from_user as from_user',
@@ -252,10 +310,7 @@ messageRoutes.get(
       const from = Number(req.query.from);
       // Their own, or one of your people's. Anybody else's is not yours to read.
       if (from !== req.user.id) await assertEmploys(req.user, from);
-      q = q.where('staff_messages.from_user', '=', from);
-      // A person reading their own sees what they sent; an employer sees what
-      // was sent to them, which for their own staff is the same rows.
-      if (from !== req.user.id) q = q.where('staff_messages.to_user', '=', req.user.id);
+      q = q.where((eb) => threadWith(eb, from, req.user, 'staff_messages.'));
     } else if (req.query.box === 'all') {
       /*
         The whole conversation between this account and everybody it writes to
@@ -279,8 +334,9 @@ messageRoutes.get(
 
     let c = db.selectFrom('staff_messages').select(db.fn.countAll().as('n'));
     if (req.query.from) {
-      c = c.where('from_user', '=', Number(req.query.from));
-      if (Number(req.query.from) !== req.user.id) c = c.where('to_user', '=', req.user.id);
+      // The same rule the rows were selected by. Written twice, the two drift
+      // and the pager describes a list nobody is looking at.
+      c = c.where((eb) => threadWith(eb, Number(req.query.from), req.user));
     } else if (req.query.box === 'all') {
       c = c.where((eb) =>
         eb.or([eb('to_user', '=', req.user.id), eb('from_user', '=', req.user.id)]),
@@ -302,7 +358,7 @@ messageRoutes.patch(
   wrap(async (req, res) => {
     const row = await db
       .selectFrom('staff_messages')
-      .select(['id', 'to_user', 'resolved_at'])
+      .select(['id', 'to_user', 'from_user', 'about_date', 'resolved_at'])
       .where('id', '=', Number(req.params.id))
       .executeTakeFirst();
     if (!row) throw notFound('That message does not exist.');
@@ -311,17 +367,66 @@ messageRoutes.patch(
     }
 
     const done = req.body?.resolved !== false;
-    await db
-      .updateTable('staff_messages')
-      .set({
-        resolved_at: done ? new Date() : null,
-        resolved_by: done ? req.user.id : null,
-        updated_at: new Date(),
-      })
-      .where('id', '=', Number(row.id))
-      .execute();
 
-    res.json({ data: { id: Number(row.id), resolved: done } });
+    /*
+      What was decided, and what to say about it.
+
+      "Dealt with" was the whole of the answer, and it does not tell the person
+      who asked whether they got the day off. A decision is optional so that
+      closing a plain message — which nobody approves — still works exactly as
+      it did.
+
+      The reply is a message rather than a field on this row: written back to
+      whoever asked, in the table that already holds messages, so it reaches
+      their inbox instead of sitting on a record they have no reason to reopen.
+    */
+    const decision = String(req.body?.decision ?? '').trim() || null;
+    if (decision && !DECISIONS.has(decision)) {
+      throw badRequest('A decision is "approved" or "declined".');
+    }
+    const reply = String(req.body?.reply ?? '').trim();
+    if (reply.length > 2000) throw badRequest('That reply is too long. Keep it under 2000 characters.');
+
+    await db.transaction().execute(async (trx) => {
+      await trx
+        .updateTable('staff_messages')
+        .set({
+          resolved_at: done ? new Date() : null,
+          resolved_by: done ? req.user.id : null,
+          // Reopening drops the decision with the timestamp: a request that is
+          // open again has not been answered, whatever was said before.
+          decision: done ? decision : null,
+          updated_at: new Date(),
+        })
+        .where('id', '=', Number(row.id))
+        .execute();
+
+      if (done && reply && Number(row.from_user) !== req.user.id) {
+        const now = new Date();
+        await trx
+          .insertInto('staff_messages')
+          .values({
+            from_user: req.user.id,
+            to_user: Number(row.from_user),
+            // A reply is not itself a request: nothing is expected back, so it
+            // must not land in anybody's open list.
+            kind: 'message',
+            topic: null,
+            body: reply,
+            // The day the request was about, so the reply sits on the same day
+            // of their calendar as the thing it answers.
+            about_date: row.about_date ? new Date(row.about_date) : null,
+            // And what it answers, so the inbox folds it into that row rather
+            // than listing it above as an unrelated message.
+            reply_to: Number(row.id),
+            created_at: now,
+            updated_at: now,
+          })
+          .execute();
+      }
+    });
+
+    res.json({ data: { id: Number(row.id), resolved: done, decision: done ? decision : null } });
   }),
 );
 

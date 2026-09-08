@@ -15,6 +15,7 @@ import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { fileUrl } from '../lib/config';
 import FilePreview from '../components/FilePreview';
+import FileField from '../components/FileField';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
 import {
@@ -29,7 +30,13 @@ import type { Category, Subcategory } from '../lib/api';
 import AddIcon from '@mui/icons-material/AddOutlined';
 import EditIcon from '@mui/icons-material/EditOutlined';
 
-const BLANK_CATEGORY = { open: false, name: '', unit: '', short_description: '' };
+const BLANK_CATEGORY = {
+  open: false,
+  name: '',
+  unit: '',
+  short_description: '',
+  icon: null as string | null,
+};
 
 interface Unit {
   id: number;
@@ -69,6 +76,8 @@ export default function Categories() {
     name: string;
     unit: string;
     short_description: string;
+    /** The picture the list has always shown and no form could set. */
+    icon: string | null;
   }>(BLANK_CATEGORY);
   const [subForm, setSubForm] = useState<{
     open: boolean;
@@ -84,6 +93,9 @@ export default function Categories() {
       const body = {
         name: catForm.name,
         short_description: catForm.short_description.trim(),
+        // Cleared as null rather than '' so removing a picture empties the
+        // column instead of pointing it at a file called nothing.
+        icon: catForm.icon,
       };
       if (catForm.id) {
         // `unit` only when one is set. The API validates whatever it is sent,
@@ -203,6 +215,19 @@ export default function Categories() {
             value={catForm.short_description}
             onChange={(e) => setCatForm({ ...catForm, short_description: e.target.value })}
           />
+          {/*
+            The list has had an Icon column since before this form existed, and
+            nothing here could fill it — every picture in it was put there by
+            the Laravel screen. Same bucket as the attribute-value images, which
+            is head-office-only, and this screen already is.
+          */}
+          <FileField
+            label="Image"
+            bucket="icon"
+            value={catForm.icon}
+            onChange={(icon) => setCatForm({ ...catForm, icon })}
+            helperText="Shown against the category in lists."
+          />
         </FormPanel>
       )}
 
@@ -286,6 +311,7 @@ export default function Categories() {
                             name: c.name,
                             unit: c.unit ?? '',
                             short_description: c.short_description ?? '',
+                            icon: c.icon ?? null,
                           })
                         }
                       />

@@ -126,6 +126,17 @@ export default function MessageCompose({
     try {
       const res = await api.post<{ data: { sent: number } }>('/messages', {
         kind,
+        /*
+          Which template this was written from, so a leave request is
+          recognisable as one afterwards.
+
+          The body is prose and the person writing is free to rewrite it, so it
+          cannot be read back — and the Employee list has to say whether
+          somebody is on leave today. Sent only for a request that came from a
+          template; "Something else" says nothing about what it is, and
+          claiming otherwise would put people on leave who never asked.
+        */
+        ...(kind === 'request' && template !== 'blank' ? { topic: template } : {}),
         body: body.trim(),
         about_date: about || null,
         ...(chooses ? { to: chosen } : {}),
@@ -284,7 +295,14 @@ export default function MessageCompose({
               select
               label="Kind"
               value={kind}
-              onChange={(e) => setKind(e.target.value as 'request' | 'message')}
+              // Changing this by hand unsets the template: a "Leave request"
+              // turned into a plain message is no longer a leave request, and
+              // sending the topic anyway would mark a day off that nobody
+              // asked for.
+              onChange={(e) => {
+                setKind(e.target.value as 'request' | 'message');
+                setTemplate('blank');
+              }}
             >
               <MenuItem value="message">Message — just to tell them</MenuItem>
               <MenuItem value="request">Request — something to be done</MenuItem>

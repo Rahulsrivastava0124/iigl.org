@@ -278,7 +278,11 @@ const words = (amount) => {
 
       <div class="field">
         <div class="label req">E-MAIL</div>
-        <div class="line"><%= v(lab.email) %></div>
+        <%# The franchise's own address where there is one, the owner's where
+            there is not. The paper has one box and it is the business's line
+            of contact; `email` is what the account signs in with, which is a
+            fair stand-in and was the only answer before there were two. %>
+        <div class="line"><%= v(lab.official_email || lab.email) %></div>
       </div>
 
       <div class="field">

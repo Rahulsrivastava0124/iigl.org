@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Button,
   Chip,
+  Grid,
   Dialog as MuiDialog,
   DialogActions,
   DialogContent,
@@ -29,7 +30,9 @@ import {
   RowActions,
   SearchField,
   TableFrame,
-  commissionRate,
+  Tile,
+  TILE_CELL,
+  money,
 } from '../components/ui';
 
 /** True when the row's text contains the term. Case-insensitive; blank matches all. */
@@ -47,6 +50,9 @@ import AddIcon from '@mui/icons-material/AddOutlined';
 import EditIcon from '@mui/icons-material/EditOutlined';
 import ViewIcon from '@mui/icons-material/VisibilityOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
+import EarnedIcon from '@mui/icons-material/PercentOutlined';
+import PaidIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
+import DuesIcon from '@mui/icons-material/PendingActionsOutlined';
 
 export default function Laboratories() {
   const navigate = useNavigate();
@@ -61,6 +67,26 @@ export default function Laboratories() {
   const all = data?.data ?? [];
   const [search, setSearch] = useState('');
   const rows = all.filter((l) => hits(search, l.id, l.fullname, l.mobile, l.city));
+
+  /*
+    What the network owes, across the rows on screen.
+
+    Summed from the rows rather than asked for separately: the endpoint already
+    sends the three figures per laboratory, and a second total computed by the
+    server is a second thing that can disagree with the column under it.
+
+    Over the *filtered* rows, so a search narrows the total with the list —
+    a strip that keeps saying the network figure while the table shows one
+    franchise is answering a question nobody asked.
+  */
+  const totals = rows.reduce(
+    (t, l) => ({
+      earned: t.earned + l.commission_accrued,
+      paid: t.paid + l.commission_paid,
+      due: t.due + l.commission_due,
+    }),
+    { earned: 0, paid: 0, due: 0 },
+  );
 
   /** Who a message is being written to: empty is "choose in the dialog". */
   const [writing, setWriting] = useState<number[] | null>(null);
@@ -95,6 +121,42 @@ export default function Laboratories() {
 
   return (
     <>
+      {/*
+        Head office only. A laboratory sees one row — its own — and three cards
+        restating it is the same number four times.
+      */}
+      {admin && (
+        <Grid container spacing={2} sx={{ mb: 2 }}>
+          <Grid size={TILE_CELL}>
+            <Tile
+              label="Total commission"
+              value={money(totals.earned)}
+              note={`${rows.length} ${rows.length === 1 ? 'laboratory' : 'laboratories'}`}
+              fill="brand"
+              icon={EarnedIcon}
+            />
+          </Grid>
+          <Grid size={TILE_CELL}>
+            <Tile
+              label="Total received"
+              value={money(totals.paid)}
+              fill="settled"
+              icon={PaidIcon}
+            />
+          </Grid>
+          <Grid size={TILE_CELL}>
+            <Tile
+              label="Total dues"
+              // Amber only while something is outstanding: a warning colour
+              // over a zero is a warning nobody reads.
+              value={money(totals.due)}
+              fill={totals.due > 0 ? 'waiting' : 'settled'}
+              icon={DuesIcon}
+            />
+          </Grid>
+        </Grid>
+      )}
+
       <Panel
         title="Laboratories"
         count={admin ? `${rows.length} of ${all.length} in the network` : undefined}
@@ -137,7 +199,13 @@ export default function Laboratories() {
                 <TableCell>Owner Name</TableCell>
                 <TableCell>Mobile</TableCell>
                 <TableCell>City</TableCell>
-                <TableCell align="right">Rate</TableCell>
+                {/*
+                  The rate was the same two words on every row — the terms are
+                  on the laboratory's own record, and nobody opens this screen
+                  to read them. What head office comes here for is who owes it
+                  money, which the rate only implies.
+                */}
+                <TableCell align="right">Dues</TableCell>
                 <TableCell>Active</TableCell>
                 <TableCell />
               </TableRow>
@@ -152,8 +220,14 @@ export default function Laboratories() {
                   </TableCell>
                   <TableCell className="mono">{l.mobile}</TableCell>
                   <TableCell>{l.city ?? '—'}</TableCell>
-                  <TableCell align="right" className="tabular">
-                    {commissionRate(l.commision, l.commission_type)}
+                  <TableCell
+                    align="right"
+                    className="tabular"
+                    // Coloured only when there is something owed: a column of
+                    // red where most rows are settled stops meaning anything.
+                    sx={{ color: l.commission_due > 0 ? 'error.main' : 'text.secondary', fontWeight: l.commission_due > 0 ? 600 : 400 }}
+                  >
+                    {l.commission_due > 0 ? money(l.commission_due) : '—'}
                   </TableCell>
                   <TableCell>
                     <Chip

@@ -393,8 +393,21 @@ export default function Transactions() {
                     <TableCell align="right" className="tabular">
                       {money(t.amount)}
                     </TableCell>
-                    <TableCell>{t.send_by === 0 ? 'customer' : `#${t.send_by}`}</TableCell>
-                    <TableCell>#{t.received_by}</TableCell>
+                    {/*
+                      Names, not ids. The endpoint has resolved both for a
+                      while; the table went on printing the key beside them,
+                      which is a row somebody has to go and look things up in.
+
+                      A collection is named from its order — a walk-in has no
+                      account, so `send_by` is 0 — and "Customer" is the last
+                      resort, for a payment with no order behind it.
+                    */}
+                    <TableCell sx={{ whiteSpace: 'normal', minWidth: 130 }}>
+                      {t.send_by_name ?? (t.send_by > 0 ? `#${t.send_by}` : 'Customer')}
+                    </TableCell>
+                    <TableCell sx={{ whiteSpace: 'normal', minWidth: 130 }}>
+                      {t.received_by_name ?? `#${t.received_by}`}
+                    </TableCell>
                     <TableCell>{t.pay_mode}</TableCell>
                     <TableCell className="mono">{t.transaction_no ?? '—'}</TableCell>
                     <TableCell>

@@ -414,6 +414,15 @@ export interface LedgerEntry {
   amount: number;
   status: number;
   counterparty: number;
+  /**
+   * Who that is, by name. A statement that says "#26" is a statement somebody
+   * has to look up before they can read it, and the id is head office's key,
+   * not anything written on paper.
+   *
+   * Null where the row names nobody — `send_by` is 0 on money taken at the
+   * counter from a walk-in customer, who has no account.
+   */
+  counterparty_name: string | null;
   order_id: number | null;
   pay_mode: string;
   transaction_no: string | null;
@@ -456,8 +465,22 @@ export async function ledgerFor(
     .orderBy('id')
     .execute();
 
-  const from = Math.max(0, offset);
-  const to = from + Math.max(1, limit);
+  /*
+    Newest first, but counted oldest first.
+
+    The running balance on any entry is every entry before it, so the walk has
+    to go forward through time whatever order the page is read in. What changes
+    is which slice of that walk is kept: page one of a newest-first list is the
+    **last** rows of the history, not the first, and the page is reversed once
+    it is built.
+
+    Getting this wrong is quiet — the balances stay right and the wrong rows
+    come back — so the window is worked out from the end explicitly.
+  */
+  const asked = Math.max(0, offset);
+  const size = Math.max(1, limit);
+  const from = Math.max(0, rows.length - (asked + size));
+  const to = rows.length - asked;
 
   const entries: LedgerEntry[] = [];
   let balance = 0;
@@ -496,6 +519,9 @@ export async function ledgerFor(
       amount,
       status,
       counterparty: isCredit ? Number(row.send_by) : Number(row.received_by),
+      // Filled in below, once the page is known: one query for the names on it
+      // rather than one per row.
+      counterparty_name: null,
       order_id: row.order_id === null ? null : Number(row.order_id),
       pay_mode: row.pay_mode,
       transaction_no: row.transaction_no,
@@ -503,6 +529,64 @@ export async function ledgerFor(
       balance: round2(balance),
     });
   }
+
+  /*
+    The other party's name, for the page that is being returned.
+
+    One query over the ids actually on it — the history behind the running
+    balance can be the whole account, and naming every party in it would be a
+    join over rows nobody is going to see.
+  */
+  const ids = [...new Set(entries.map((e) => e.counterparty).filter((id) => id > 0))];
+  if (ids.length) {
+    const named = await db
+      .selectFrom('users')
+      .select(['id', 'fullname'])
+      .where('id', 'in', ids)
+      .execute();
+    const byId = new Map(named.map((u) => [Number(u.id), String(u.fullname)]));
+    for (const e of entries) e.counterparty_name = byId.get(e.counterparty) ?? null;
+  }
+
+  /*
+    The customer, for money taken at the counter.
+
+    `send_by` is 0 on those rows — a walk-in has no account, and 0 is the
+    sentinel for "nobody", which is why the column cannot name them. The order
+    can: it carries the name that was written on it when the order was taken,
+    and the transaction names the order.
+
+    So the party on a collection is the customer who paid, not the word
+    "Customer" standing in for every one of them.
+  */
+  const orderIds = [
+    ...new Set(
+      entries
+        .filter((e) => !e.counterparty_name && e.order_id)
+        .map((e) => Number(e.order_id)),
+    ),
+  ];
+  if (orderIds.length) {
+    const orders = await db
+      .selectFrom('orders')
+      .select(['id', 'customer_name'])
+      .where('id', 'in', orderIds)
+      .execute();
+    const byOrder = new Map(
+      orders
+        .filter((o) => o.customer_name && String(o.customer_name).trim())
+        .map((o) => [Number(o.id), String(o.customer_name).trim()]),
+    );
+    for (const e of entries) {
+      if (!e.counterparty_name && e.order_id) {
+        e.counterparty_name = byOrder.get(Number(e.order_id)) ?? null;
+      }
+    }
+  }
+
+  // The slice was gathered oldest first, because that is the only order the
+  // balance can be worked out in. The statement is read the other way round.
+  entries.reverse();
 
   return {
     entries,

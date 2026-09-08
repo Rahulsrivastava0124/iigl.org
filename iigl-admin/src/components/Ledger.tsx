@@ -22,6 +22,9 @@ export interface LedgerEntry {
   direction: 'credit' | 'debit';
   amount: number;
   status: number;
+  /** The other side of the movement, and who that is. */
+  counterparty: number;
+  counterparty_name: string | null;
   order_id: number | null;
   transaction_no: string | null;
   remark: string | null;
@@ -130,6 +133,12 @@ export function LedgerTable({
             <TableRow>
               <TableCell>Date</TableCell>
               <TableCell>Reference</TableCell>
+              {/*
+                Who the money moved between. A statement without it is a column
+                of figures nobody can attribute — and the id it was carrying is
+                head office's key, not anything written on paper.
+              */}
+              <TableCell>Party</TableCell>
               <TableCell>Remark</TableCell>
               <TableCell>Status</TableCell>
               <TableCell align="right">Credit</TableCell>
@@ -142,6 +151,18 @@ export function LedgerTable({
               <TableRow key={e.id} hover>
                 <TableCell>{e.date?.slice(0, 10) ?? '—'}</TableCell>
                 <TableCell className="mono">{e.transaction_no ?? `#${e.id}`}</TableCell>
+                <TableCell sx={{ whiteSpace: 'normal', minWidth: 130 }}>
+                  {/*
+                    `send_by` is 0 on money taken at the counter — a walk-in has
+                    no account — so those rows are named from the order the
+                    money was against, which carries the customer's name.
+
+                    "Customer" is the last resort, for a collection with no
+                    order behind it or an order with no name on it. Better than
+                    a dash, which reads as missing rather than as anonymous.
+                  */}
+                  {e.counterparty_name ?? (e.counterparty > 0 ? `#${e.counterparty}` : 'Customer')}
+                </TableCell>
                 <TableCell sx={{ whiteSpace: 'normal', minWidth: 180 }}>
                   {e.remark ?? e.type ?? '—'}
                 </TableCell>
@@ -153,12 +174,39 @@ export function LedgerTable({
                   down its credit column or down its debit column, and a minus
                   sign in a shared column is the thing people miss.
                 */}
-                <TableCell align="right" className="tabular">
+                {/*
+                  The figure is bold, the dash is not: a statement is scanned
+                  down one money column, and weighting the empty cells as
+                  heavily as the amounts is what made it a grid to read rather
+                  than a column to run an eye down.
+                */}
+                <TableCell
+                  align="right"
+                  className="tabular"
+                  sx={{
+                    fontWeight: e.direction === 'credit' ? 600 : 400,
+                    // The colour is on the figure, not the empty cell: a green
+                    // dash says money came in on a row where none did.
+                    color: e.direction === 'credit' ? 'success.main' : 'text.disabled',
+                  }}
+                >
                   {e.direction === 'credit' ? money(e.amount) : '—'}
                 </TableCell>
-                <TableCell align="right" className="tabular">
+                <TableCell
+                  align="right"
+                  className="tabular"
+                  sx={{
+                    fontWeight: e.direction === 'debit' ? 600 : 400,
+                    color: e.direction === 'debit' ? 'error.main' : 'text.disabled',
+                  }}
+                >
                   {e.direction === 'debit' ? money(e.amount) : '—'}
                 </TableCell>
+                {/*
+                  The balance stays light. It is the running total beside the
+                  movement, not the movement — bold on both leaves the row with
+                  two things shouting and nothing said.
+                */}
                 <TableCell align="right" className="tabular">
                   {money(e.balance)}
                 </TableCell>

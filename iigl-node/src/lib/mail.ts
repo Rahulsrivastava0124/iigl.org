@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import nodemailer from 'nodemailer';
 import { env } from './env.js';
+import { ApiError } from './errors.js';
 import { setting } from '../services/settings.service.js';
 
 /**
@@ -11,10 +12,10 @@ import { setting } from '../services/settings.service.js';
  * Only one message is sent by this application — a password reset — so there is
  * one transport and one function, configured from `SMTP_URL`.
  *
- * When SMTP is not configured the behaviour differs by environment on purpose:
- * development logs the link to the console so the flow can be walked end to
- * end without a mail server, and production refuses. A reset that reports
- * success while going nowhere is the one outcome worth ruling out — the person
+ * When SMTP is not configured, sending refuses — in every environment.
+ * Development additionally prints the link so the flow can still be walked
+ * without a mail server, but it prints *and* refuses. A reset that reports
+ * success while going nowhere is the one outcome worth ruling out: the person
  * waits for mail that will never arrive, and nothing anywhere says why.
  */
 /**
@@ -30,9 +31,6 @@ async function transportFor() {
   const url = await setting('mail.smtp_url');
   return url ? nodemailer.createTransport(url) : null;
 }
-
-/** Whether mail can be sent at all, for the screens that say so. */
-export const mailConfigured = Boolean(env.smtpUrl);
 
 /**
  * The mark at the top of the mail.
@@ -160,38 +158,63 @@ export async function sendPasswordReset(
 ): Promise<void> {
   const transport = await transportFor();
   if (!transport) {
-    if (env.isProd) {
-      throw new Error('SMTP_URL is not set, so password reset mail cannot be sent.');
+    // Development still prints the link, so the flow can be walked without a
+    // mail server — but it is printed *and* refused, never printed and called
+    // success. Returning quietly here is what produced "the reset mail never
+    // arrives": the panel said "on its way to r•••@gmail.com" and nothing had
+    // been sent, in the one environment where nobody thinks to check.
+    if (!env.isProd) {
+      console.info(`[dev] password reset for ${to} (until ${expiresAt(expires)}): ${url}`);
     }
-    console.info(`[dev] password reset for ${to} (until ${expiresAt(expires)}): ${url}`);
-    return;
+    throw new ApiError(
+      503,
+      'No SMTP server is configured, so the reset mail cannot be sent. Set the SMTP URL ' +
+        'on the Settings screen.',
+      'mail_unconfigured',
+    );
   }
 
   const company = await setting('company.name');
   const until = expiresAt(expires);
   const mark = await logo();
 
-  await transport.sendMail({
-    from: await setting('mail.from'),
-    to,
-    subject: `Reset your ${company} password`,
-    html: resetHtml(url, name, company, until, Boolean(mark)),
-    attachments: mark
-      ? [{ filename: 'logo.png', content: mark, cid: LOGO_CID, contentType: 'image/png' }]
-      : undefined,
-    // The alternative a text-only client falls back to. It carries the address
-    // because there is no button to press in plain text.
-    text: [
-      `Hello ${name},`,
-      '',
-      `Someone asked to reset the password on your ${company} account. Open the`,
-      'address below to choose a new one.',
-      '',
-      `This link works until ${until}.`,
-      '',
-      url,
-      '',
-      'If this was not you, nothing has changed and you can ignore this message.',
-    ].join('\n'),
-  });
+  /*
+    A refusal from the mail server is reported as one.
+
+    Anything thrown from here reaches the error handler as an unrecognised
+    error and becomes "Something went wrong on our side", which is true and
+    tells nobody — least of all head office — that the account's app password
+    has expired. The reason from the server is what says which.
+  */
+  try {
+    await transport.sendMail({
+      from: await setting('mail.from'),
+      to,
+      subject: `Reset your ${company} password`,
+      html: resetHtml(url, name, company, until, Boolean(mark)),
+      attachments: mark
+        ? [{ filename: 'logo.png', content: mark, cid: LOGO_CID, contentType: 'image/png' }]
+        : undefined,
+      // The alternative a text-only client falls back to. It carries the address
+      // because there is no button to press in plain text.
+      text: [
+        `Hello ${name},`,
+        '',
+        `Someone asked to reset the password on your ${company} account. Open the`,
+        'address below to choose a new one.',
+        '',
+        `This link works until ${until}.`,
+        '',
+        url,
+        '',
+        'If this was not you, nothing has changed and you can ignore this message.',
+      ].join('\n'),
+    });
+  } catch (e) {
+    throw new ApiError(
+      502,
+      `The mail server refused the message: ${(e as Error).message}`,
+      'mail_failed',
+    );
+  }
 }

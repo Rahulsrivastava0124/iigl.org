@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
+  Avatar,
   Button,
   Checkbox,
   Link,
@@ -15,7 +16,8 @@ import PrintIcon from '@mui/icons-material/PrintOutlined';
 import { useFetch, useDebounced } from '../lib/useFetch';
 import { IconAction, Pager, Panel, RowActions, SearchField, TableFrame } from '../components/ui';
 import type { Paged, Report } from '../lib/api';
-import { apiUrl } from '../lib/config';
+import { apiUrl, fileUrl } from '../lib/config';
+import FilePreview from '../components/FilePreview';
 import SmartIcon from '@mui/icons-material/CreditCardOutlined';
 import ClassicIcon from '@mui/icons-material/DescriptionOutlined';
 
@@ -27,6 +29,8 @@ function printCard(id: number, kind: 'smart' | 'classic') {
 export default function Reports() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<number[]>([]);
+  /** The stone being looked at full size, or none. */
+  const [preview, setPreview] = useState<{ path: string; name: string } | null>(null);
 
   // Server-side: 22,000 certificates, 25 on screen.
   const [search, setSearch] = useState('');
@@ -110,6 +114,15 @@ export default function Reports() {
                     slotProps={{ input: { 'aria-label': 'Select every certificate on this page' } }}
                   />
                 </TableCell>
+                {/*
+                  The stone, as it is printed on the card.
+
+                  The photograph was written with the certificate and rendered
+                  on the card, and appeared nowhere anybody could look at it —
+                  so the one way to check the right picture went onto the right
+                  certificate was to print it.
+                */}
+                <TableCell sx={{ width: 56 }}>Item</TableCell>
                 <TableCell>Certificate</TableCell>
                 <TableCell>Order</TableCell>
                 <TableCell align="right">Gross</TableCell>
@@ -128,6 +141,36 @@ export default function Reports() {
                       onChange={() => toggle(r.id)}
                       slotProps={{ input: { 'aria-label': `Select ${r.report_no}` } }}
                     />
+                  </TableCell>
+                  <TableCell>
+                    {/*
+                      Avatar rather than a bare <img>: it draws its fallback
+                      when the file is missing, and the older certificates were
+                      written by the Laravel application, so some of those files
+                      are gone.
+                    */}
+                    <Avatar
+                      variant="rounded"
+                      src={fileUrl(r.item_image) ?? undefined}
+                      alt=""
+                      onClick={
+                        r.item_image
+                          ? () => setPreview({ path: r.item_image!, name: r.report_no })
+                          : undefined
+                      }
+                      // The whole stone, not a square crop of it.
+                      slotProps={{ img: { sx: { objectFit: 'contain' } } }}
+                      sx={{
+                        width: 36,
+                        height: 36,
+                        bgcolor: 'action.hover',
+                        color: 'text.secondary',
+                        fontSize: 12,
+                        cursor: r.item_image ? 'zoom-in' : 'default',
+                      }}
+                    >
+                      —
+                    </Avatar>
                   </TableCell>
                   <TableCell className="mono">{r.report_no}</TableCell>
                   {/* The order by the number it is called everywhere else.
@@ -177,6 +220,14 @@ export default function Reports() {
           </Table>
         </TableFrame>
       </Panel>
+
+      {preview && (
+        <FilePreview
+          stored={preview.path}
+          title={preview.name}
+          onClose={() => setPreview(null)}
+        />
+      )}
     </>
   );
 }

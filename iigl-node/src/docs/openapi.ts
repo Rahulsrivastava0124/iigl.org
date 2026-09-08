@@ -1246,6 +1246,28 @@ const document = {
       },
     },
 
+    '/api/catalog/attribute-masters': {
+      get: {
+        tags: ['Catalog'],
+        summary: 'Attribute master lists',
+        description:
+          'The library the Add Value form is filled from: an attribute name under a category, ' +
+          'and the values it normally takes. These are templates — a master value becomes a real ' +
+          'attribute value only when somebody picks it against a branch, and the two are ' +
+          'unrelated from that moment on.',
+        parameters: [
+          {
+            name: 'category_id',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer' },
+            description: 'Only the masters under this category. "Colour" under Diamond is not the same list as "Colour" under Gemstone.',
+          },
+        ],
+        responses: { 200: { description: 'Masters, each with its values in order.' }, ...guarded },
+      },
+    },
+
     '/api/catalog/form-layouts/{categoryId}': {
       get: {
         tags: ['Catalog'],

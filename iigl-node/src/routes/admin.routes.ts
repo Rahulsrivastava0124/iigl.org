@@ -497,3 +497,220 @@ adminRoutes.patch(
     res.json({ ok: true });
   }),
 );
+
+// -------------------------------------------------------- attribute masters
+
+/**
+ * The value list somebody typed, cleaned up.
+ *
+ * Blanks and stray spaces dropped, and each name kept once: the input is a
+ * chip field, and "D" typed twice is one value however many times it is
+ * entered. Order is the order given — grades read D, E, F, and sorting them
+ * would be the one thing nobody wants.
+ */
+const valueList = (given: unknown): string[] => {
+  if (!Array.isArray(given)) throw badRequest('Send the values as a list.');
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of given) {
+    const name = String(raw ?? '').trim();
+    if (!name || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    out.push(name);
+  }
+  if (!out.length) throw badRequest('A master needs at least one value.');
+  return out;
+};
+
+/** Writes a master's values: the list replaces whatever was there. */
+async function setMasterValues(masterId: number, values: string[], trx: typeof db) {
+  await trx.deleteFrom('attribute_master_values').where('master_id', '=', masterId).execute();
+  await trx
+    .insertInto('attribute_master_values')
+    .values(
+      values.map((value_name, i) => ({
+        master_id: masterId,
+        value_name,
+        order_no: i,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })),
+    )
+    .execute();
+}
+
+adminRoutes.post(
+  '/attribute-masters',
+  wrap(async (req, res) => {
+    const categoryId = positive(req.body?.category_id, 'Category');
+    const attrName = requireText(req.body?.attr_name, 'Attribute name');
+    const values = valueList(req.body?.values);
+
+    const category = await db
+      .selectFrom('categories')
+      .select('id')
+      .where('id', '=', categoryId)
+      .executeTakeFirst();
+    if (!category) throw badRequest('That category does not exist.');
+
+    const clash = await db
+      .selectFrom('attribute_masters')
+      .select('id')
+      .where('category_id', '=', categoryId)
+      .where('attr_name', '=', attrName)
+      .executeTakeFirst();
+    if (clash) {
+      throw conflict(`${attrName} already has a master list under this category.`);
+    }
+
+    // Both or neither: a master with no values is a name the Add Value form
+    // offers and cannot fill.
+    const id = await db.transaction().execute(async (trx) => {
+      const result = await trx
+        .insertInto('attribute_masters')
+        .values({
+          category_id: categoryId,
+          attr_name: attrName,
+          created_at: new Date(),
+          updated_at: new Date(),
+        })
+        .executeTakeFirst();
+      const id = Number(result.insertId);
+      await setMasterValues(id, values, trx as typeof db);
+      return id;
+    });
+
+    res.status(201).json({ data: { id } });
+  }),
+);
+
+adminRoutes.patch(
+  '/attribute-masters/:id',
+  numericId,
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    const row = await db
+      .selectFrom('attribute_masters')
+      .select(['id', 'category_id', 'attr_name'])
+      .where('id', '=', id)
+      .executeTakeFirst();
+    if (!row) throw notFound('Master list not found.');
+
+    const categoryId =
+      req.body?.category_id === undefined
+        ? Number(row.category_id)
+        : positive(req.body.category_id, 'Category');
+    const attrName =
+      req.body?.attr_name === undefined
+        ? String(row.attr_name)
+        : requireText(req.body.attr_name, 'Attribute name');
+
+    if (categoryId !== Number(row.category_id) || attrName !== String(row.attr_name)) {
+      const clash = await db
+        .selectFrom('attribute_masters')
+        .select('id')
+        .where('category_id', '=', categoryId)
+        .where('attr_name', '=', attrName)
+        .where('id', '!=', id)
+        .executeTakeFirst();
+      if (clash) throw conflict(`${attrName} already has a master list under that category.`);
+    }
+
+    await db.transaction().execute(async (trx) => {
+      await trx
+        .updateTable('attribute_masters')
+        .set({ category_id: categoryId, attr_name: attrName, updated_at: new Date() })
+        .where('id', '=', id)
+        .execute();
+      // Absent means "leave the list alone"; a list given replaces it whole,
+      // which is what a chip field sends back.
+      if (req.body?.values !== undefined) {
+        await setMasterValues(id, valueList(req.body.values), trx as typeof db);
+      }
+    });
+
+    res.json({ ok: true });
+  }),
+);
+
+/**
+ * Delete a master and its values.
+ *
+ * A hard delete, unlike an attribute or an attribute value. Nothing points at a
+ * master: what was made from it is an `attribute_values` row of its own, and
+ * removing the template leaves every value already created exactly where it is.
+ */
+adminRoutes.delete(
+  '/attribute-masters/:id',
+  numericId,
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    const row = await db
+      .selectFrom('attribute_masters')
+      .select('id')
+      .where('id', '=', id)
+      .executeTakeFirst();
+    if (!row) throw notFound('Master list not found.');
+
+    await db.transaction().execute(async (trx) => {
+      await trx.deleteFrom('attribute_master_values').where('master_id', '=', id).execute();
+      await trx.deleteFrom('attribute_masters').where('id', '=', id).execute();
+    });
+
+    res.json({ ok: true });
+  }),
+);
+
+/**
+ * Several values against one attribute, in one go.
+ *
+ * What the Add Value form's multi-select sends. A name the attribute already
+ * carries is skipped rather than refused: the point of picking from a list is
+ * that nobody checks first, and half a list created plus a 409 is worse than
+ * either outcome on its own.
+ */
+adminRoutes.post(
+  '/attribute-values/bulk',
+  wrap(async (req, res) => {
+    const attrId = positive(req.body?.attr_id, 'Attribute');
+    const values = valueList(req.body?.values);
+
+    const attr = await db
+      .selectFrom('attributes')
+      .select(['id', 'category_id', 'subcategory_id'])
+      .where('id', '=', attrId)
+      .executeTakeFirst();
+    if (!attr) throw badRequest('That attribute does not exist.');
+
+    const existing = await db
+      .selectFrom('attribute_values')
+      .select('value_name')
+      .where('attr_id', '=', attrId)
+      .execute();
+    const held = new Set(existing.map((r) => String(r.value_name).toLowerCase()));
+
+    const fresh = values.filter((v) => !held.has(v.toLowerCase()));
+    if (fresh.length) {
+      await db
+        .insertInto('attribute_values')
+        .values(
+          fresh.map((value_name) => ({
+            attr_id: attrId,
+            value_name,
+            category_id: Number(attr.category_id),
+            subcategory_id: Number(attr.subcategory_id),
+            description: null,
+            icon: null,
+            is_deleted: 0,
+            created_at: new Date(),
+            updated_at: new Date(),
+          })),
+        )
+        .execute();
+    }
+
+    res.status(201).json({
+      data: { added: fresh.length, skipped: values.length - fresh.length },
+    });
+  }),
+);

@@ -453,6 +453,62 @@ export const extraPaths: Record<string, unknown> = {
 
   ...crud(
     'Catalogue admin',
+    'attribute master list',
+    '/api/admin/attribute-masters',
+    {
+      category_id: int,
+      attr_name: { type: 'string' },
+      values: {
+        type: 'array',
+        items: { type: 'string' },
+        description:
+          'The values this attribute normally takes, in the order they should be offered. Blanks and repeats are dropped; grades read D, E, F, so the order given is kept rather than sorted.',
+      },
+    },
+    ['category_id', 'attr_name', 'values'],
+    {
+      category_id: int,
+      attr_name: { type: 'string' },
+      values: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Replaces the list whole. Absent leaves it alone.',
+      },
+    },
+    {
+      '/api/admin/attribute-masters/{id}': {
+        delete: {
+          tags: ['Catalogue admin'],
+          summary: 'Delete a master list',
+          description:
+            'A hard delete, unlike an attribute or an attribute value. Nothing points at a master: what was made from it is an attribute value of its own, and removing the template leaves every value already created where it is.',
+          parameters: [idParam],
+          responses: { 200: ok('Deleted.'), 404: err('Master list not found.'), ...guarded },
+        },
+      },
+    },
+  ),
+
+  '/api/admin/attribute-values/bulk': {
+    post: {
+      tags: ['Catalogue admin'],
+      summary: 'Add several values to one attribute',
+      description:
+        'What the Add Value form\u2019s multi-select sends. A name the attribute already carries is skipped rather than refused: the point of picking from a list is that nobody checks first, and half a list created plus a 409 is worse than either outcome on its own.',
+      requestBody: body({ attr_id: int, values: { type: 'array', items: { type: 'string' } } }, [
+        'attr_id',
+        'values',
+      ]),
+      responses: {
+        201: ok('Created. The body says how many were added and how many were already there.'),
+        400: err('No attribute, or an empty list.'),
+        ...guarded,
+      },
+    },
+  },
+
+  ...crud(
+    'Catalogue admin',
     'price band',
     '/api/admin/prices',
     {
@@ -1662,6 +1718,12 @@ export const extraPaths: Record<string, unknown> = {
         {
           body: { type: 'string', maxLength: 2000 },
           kind: { type: 'string', enum: ['message', 'request'], default: 'message' },
+          topic: {
+            type: ['string', 'null'],
+            enum: ['leave', 'punch', null],
+            description:
+              'Which template a request was written from. Leave and a punch to correct are both requests naming a day and differ only in prose the writer can rewrite, so the Employee list cannot read one back — this is what lets it say somebody is on leave today. Absent for anything typed from scratch, which claims nothing about which kind it is.',
+          },
           about_date: { type: ['string', 'null'], description: 'The day it concerns, as YYYY-MM-DD, when it concerns one.' },
           to: {
             type: 'array',
@@ -1683,11 +1745,24 @@ export const extraPaths: Record<string, unknown> = {
   '/api/messages/{id}/resolve': {
     patch: {
       tags: ['Messages'],
-      summary: 'Mark one dealt with',
+      summary: 'Answer one: approve, decline, or simply close it',
       description:
-        'The reader’s, not the writer’s: they asked, you answer. `resolved: false` reopens it. `resolved_at` is the whole of the state — unread and unactioned are the same thing to the person who has to act.',
+        'The reader’s, not the writer’s: they asked, you answer. `resolved: false` reopens it, and reopening drops the decision with the timestamp — a request that is open again has not been answered, whatever was said before.\n\n**A decision is optional.** A plain message has nothing to approve and closing it works exactly as it did; a request without one reads as "Dealt with", which is all that was ever recorded before this existed and all that is known about the rows written then.\n\n**A reply is a message, not a field.** Given, it is written back to whoever asked — as a `message`, so nothing lands in anybody\u2019s open list, and carrying the request\u2019s own `about_date` so the answer sits on the same day of their calendar as the thing it answers. A note that lived only on the row it answers is a note nobody is told about.',
       parameters: [idParam],
-      requestBody: body({ resolved: { type: 'boolean', default: true } }),
+      requestBody: body({
+        resolved: { type: 'boolean', default: true },
+        decision: {
+          type: ['string', 'null'],
+          enum: ['approved', 'declined', null],
+          description:
+            'How the request was answered. "Dealt with" is true of an approval and of a refusal alike, which is the one distinction the person who asked came to find.',
+        },
+        reply: {
+          type: 'string',
+          maxLength: 2000,
+          description: 'Sent to them as a message. Ignored when answering your own.',
+        },
+      }),
       responses: {
         200: ok('Marked.'),
         404: err('That message does not exist.'),
@@ -2181,7 +2256,18 @@ export const extraPaths: Record<string, unknown> = {
         'Moves somebody onto an employer’s books. POST /api/users already does this for an account it creates, so this is for the ones that arrived without an employment — a Laravel-era row, or a person moving between laboratories after their old employment was ended. The employer is head office or a laboratory: head office employs its own staff too. `lab_id` is a **user id**; the employment stores that employer’s `empid`, so an employer without one is refused. `users.parent_id` is written at the same time, from the same value.',
       parameters: [idParam],
       requestBody: body(
-        { lab_id: int, joining_date: { type: 'string' }, salary: { type: 'string' }, remark: str },
+        {
+          lab_id: int,
+          joining_date: { type: 'string' },
+          salary: { type: 'string' },
+          remark: str,
+        week_off: {
+          type: ['string', 'array', 'null'],
+          items: { type: 'integer', minimum: 0, maximum: 6 },
+          description:
+            'The days of the week this posting is off, as 0 Sunday through 6 Saturday — the numbering Date.getDay() and MySQL both count in, so nothing translates. A list or a comma-separated string; sorted and de-duplicated on the way in. Empty means no fixed day off, which is what every employment said before the column existed. On the posting rather than the account: somebody moving to a laboratory that closes on a different day has a new week off, and the old row should keep saying what was true while it ran.',
+        },
+        },
         ['lab_id'],
       ),
       responses: {
@@ -2196,12 +2282,18 @@ export const extraPaths: Record<string, unknown> = {
       tags: ['Users'],
       summary: 'Change the terms of a posting',
       description:
-        'The salary and the joining date live on the employment, not on the account, so PATCH /api/users/{id} cannot reach them. Moving somebody to another employer is not this — that is ending one employment and starting another, which keeps the history.',
+        'The salary, the joining date and the week off live on the employment, not on the account, so PATCH /api/users/{id} cannot reach them. Moving somebody to another employer is not this — that is ending one employment and starting another, which keeps the history.',
       parameters: [idParam],
       requestBody: body({
         salary: { type: 'number' },
         joining_date: { type: 'string', format: 'date' },
         remark: str,
+        week_off: {
+          type: ['string', 'array', 'null'],
+          items: { type: 'integer', minimum: 0, maximum: 6 },
+          description:
+            'The days of the week this posting is off, as 0 Sunday through 6 Saturday — the numbering Date.getDay() and MySQL both count in, so nothing translates. A list or a comma-separated string; sorted and de-duplicated on the way in. Empty means no fixed day off, which is what every employment said before the column existed. On the posting rather than the account: somebody moving to a laboratory that closes on a different day has a new week off, and the old row should keep saying what was true while it ran.',
+        },
       }),
       responses: {
         200: ok('Saved.'),

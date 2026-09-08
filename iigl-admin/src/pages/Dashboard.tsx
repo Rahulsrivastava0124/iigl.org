@@ -22,6 +22,7 @@ import RegisteredIcon from '@mui/icons-material/HowToRegOutlined';
 import CustomerIcon from '@mui/icons-material/PersonOutlineOutlined';
 import TodayIcon from '@mui/icons-material/TodayOutlined';
 import CertificateIcon from '@mui/icons-material/WorkspacePremiumOutlined';
+import ItemsIcon from '@mui/icons-material/DiamondOutlined';
 import TransferIcon from '@mui/icons-material/SendOutlined';
 
 /**
@@ -139,6 +140,7 @@ export default function Dashboard() {
 }
 
 /** Head office: the whole system, grouped by what the figures are about. */
+
 function HeadOfficeTiles({ s }: { s: DashboardSummary }) {
   return (
     <>
@@ -209,22 +211,33 @@ function HeadOfficeTiles({ s }: { s: DashboardSummary }) {
         Account
       </Typography>
       <Grid container spacing={2}>
+        {/*
+          Pieces first, then orders.
+
+          "Total collected" counted orders and read as pieces — the tile beside
+          it said how many were tested, which is a count of stones, and the two
+          were never the same measure. Both are worth knowing, so both are
+          here, each said in its own unit and labelled as such.
+        */}
         <Grid size={CELL}>
           <Tile
             label="Total collected"
-            value={n(s.orders.total)}
-            note="orders"
+            value={n(s.items.total)}
+            note="items"
             fill="brand"
-            icon={OrdersIcon}
+            icon={ItemsIcon}
           />
         </Grid>
         <Grid size={CELL}>
           <Tile
-            label="Completed tested"
-            value={n(s.orders.delivered)}
+            label="Completed items"
+            value={n(s.items.done)}
             fill="settled"
             icon={DeliveredIcon}
           />
+        </Grid>
+        <Grid size={CELL}>
+          <Tile label="Active items" value={n(s.items.active)} fill="waiting" icon={ActiveIcon} />
         </Grid>
         <Grid size={CELL}>
           <Tile label="Smart report" value={n(s.cards.smart)} fill="brand" icon={SmartCardIcon} />
@@ -238,7 +251,32 @@ function HeadOfficeTiles({ s }: { s: DashboardSummary }) {
           />
         </Grid>
         <Grid size={CELL}>
-          <Tile label="Active order" value={n(s.orders.active)} fill="waiting" icon={ActiveIcon} />
+          <Tile
+            label="Total received orders"
+            value={n(s.orders.total)}
+            note="orders"
+            fill="brand"
+            icon={OrdersIcon}
+            to="/orders"
+          />
+        </Grid>
+        <Grid size={CELL}>
+          <Tile
+            label="Completed orders"
+            value={n(s.orders.delivered)}
+            fill="settled"
+            icon={DeliveredIcon}
+            to="/orders?status=delivered"
+          />
+        </Grid>
+        <Grid size={CELL}>
+          <Tile
+            label="Active orders"
+            value={n(s.orders.active)}
+            fill="waiting"
+            icon={ActiveIcon}
+            to="/orders?status=preparing"
+          />
         </Grid>
         <Grid size={CELL}>
           <Tile label="Total sale" value={money(s.money.sale)} fill="brand" icon={SaleIcon} />
@@ -562,22 +600,32 @@ function LaboratoryTiles({
         Account
       </Typography>
       <Grid container spacing={2}>
+        {/*
+          The same seven as head office, over this laboratory's own orders —
+          `s.items` and `s.orders` are already scoped to it. They used to be
+          read off `lab.cards_*`, which counted certificates ordered and
+          written rather than pieces finished, so "Total collected" and
+          "Complete tested" answered two different questions.
+        */}
         <Grid size={CELL}>
           <Tile
             label="Total collected"
-            value={n(lab.cards_ordered)}
-            note="cards"
+            value={n(s.items.total)}
+            note="items"
             fill="brand"
-            icon={OrdersIcon}
+            icon={ItemsIcon}
           />
         </Grid>
         <Grid size={CELL}>
           <Tile
-            label="Complete tested"
-            value={n(lab.cards_generated)}
+            label="Completed items"
+            value={n(s.items.done)}
             fill="settled"
             icon={DeliveredIcon}
           />
+        </Grid>
+        <Grid size={CELL}>
+          <Tile label="Active items" value={n(s.items.active)} fill="waiting" icon={ActiveIcon} />
         </Grid>
         <Grid size={CELL}>
           <Tile
@@ -593,6 +641,25 @@ function LaboratoryTiles({
             value={n(lab.classic_generated)}
             fill="brand"
             icon={ClassicCardIcon}
+          />
+        </Grid>
+        <Grid size={CELL}>
+          <Tile
+            label="Total received orders"
+            value={n(s.orders.total)}
+            note="orders"
+            fill="brand"
+            icon={OrdersIcon}
+            to="/orders"
+          />
+        </Grid>
+        <Grid size={CELL}>
+          <Tile
+            label="Completed orders"
+            value={n(s.orders.delivered)}
+            fill="settled"
+            icon={DeliveredIcon}
+            to="/orders?status=delivered"
           />
         </Grid>
         <Grid size={CELL}>

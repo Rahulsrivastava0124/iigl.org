@@ -108,6 +108,44 @@ dashboardRoutes.get(
     };
 
     /**
+     * Items, and how many of them are finished.
+     *
+     * An *item* is a piece, not a line: `qty` is how many stones that line is
+     * for, and two stones on one line are two things to certify. That is what
+     * "collected" has always meant on this screen — the orders count beside it
+     * is a different measure and now has tiles of its own.
+     *
+     * A line is finished when every certificate it is owed has been written,
+     * which is the rule the order list already reads in `withCounts`, so the
+     * tile and the list cannot disagree about what is still outstanding. A
+     * line owed nothing — neither card kind set — has nothing outstanding and
+     * counts as finished, the same reading as the list's "none" remaining.
+     *
+     * One statement rather than every line in memory: head office's version of
+     * this covers every order ever taken.
+     */
+    const itemCounts = async () => {
+      const owed = sql`order_details.qty * (order_details.smart_card + order_details.classic_card)`;
+      const written = sql`(select count(*) from reports
+        where reports.order_detail_id = order_details.id)`;
+      let q = liveJoined(
+        db
+          .selectFrom('order_details')
+          .innerJoin('orders', 'orders.id', 'order_details.order_id'),
+      ).select([
+        db.fn.sum<number>('order_details.qty').as('total'),
+        sql<number>`sum(case when ${written} >= ${owed} then order_details.qty else 0 end)`.as(
+          'done',
+        ),
+      ]);
+      if (!isAdmin) q = q.where('orders.lab_id', '=', labId);
+      const row = await q.executeTakeFirstOrThrow();
+      const total = Number(row.total ?? 0);
+      const done = Number(row.done ?? 0);
+      return { total, done, active: total - done };
+    };
+
+    /**
      * Customers are a view over orders — there is no customer table — grouped
      * by mobile, and "registered" means the order carries a GST number. Both
      * rules match the customer list, so the tile and the list agree.
@@ -371,8 +409,6 @@ dashboardRoutes.get(
       };
 
       const [
-        smartOrdered,
-        classicOrdered,
         smartGenerated,
         classicGenerated,
         collected,
@@ -385,8 +421,6 @@ dashboardRoutes.get(
         todayPaidLab,
         rate,
       ] = await Promise.all([
-        ordered('smart_card'),
-        ordered('classic_card'),
         generated('smart_card'),
         generated('classic_card'),
         collectedByStaff(),
@@ -430,8 +464,6 @@ dashboardRoutes.get(
         : round2((myWallet * rate.rate) / 100);
 
       return {
-        cards_ordered: smartOrdered + classicOrdered,
-        cards_generated: smartGenerated + classicGenerated,
         smart_generated: smartGenerated,
         classic_generated: classicGenerated,
         /*
@@ -684,6 +716,7 @@ dashboardRoutes.get(
       staffCount,
       registeredCustomers,
       unregisteredCustomers,
+      items,
     ] = await Promise.all([
       count((q) => q),
       count((q) => q.where('status', '=', 'preparing')),
@@ -706,6 +739,7 @@ dashboardRoutes.get(
       employees(),
       customers(true),
       customers(false),
+      itemCounts(),
     ]);
 
     const [lab, mine] = await Promise.all([labFigures(), myFigures()]);
@@ -717,6 +751,9 @@ dashboardRoutes.get(
     res.json({
       data: {
         orders: { total: orders, active, delivered, today: todayOrders, active_today: todayActive },
+        // Pieces rather than orders: what the counter took in, how much of it
+        // is finished, and what is still on the bench.
+        items,
         reports: { total: reports },
         cards: { smart: smartCards, classic: classicCards },
         // The three today figures come from the same set of orders — delivered,
