@@ -1,44 +1,22 @@
 # ---------------------------------------------------------------------------
 # The admin panel.
 #
-# **Vite substitutes `VITE_*` into the bundle at build time.** They are not
-# environment variables the container reads when it starts — by then they are
-# already string literals inside the JavaScript. So they arrive as build
-# arguments, and pointing the panel at a different API means rebuilding the
-# image, not restarting it.
+# No configuration. The build takes no arguments and reads no `.env` — the file
+# is excluded by `.dockerignore`, so `VITE_API_URL` is unset and the panel
+# falls back to `/api`, its same-origin default.
 #
-# On Dokploy that means setting them under Build Arguments, not under
-# Environment. A value put in Environment is read by nothing and the panel
-# silently keeps whatever it was built with, which looks exactly like a broken
-# API URL.
+# That default is the one to want. The panel and the API behind a single host
+# keeps the session cookie first-party, which survives the third-party cookie
+# restrictions a cross-origin setup runs into; on Dokploy it is a path rule
+# sending `/api` to the API container.
+#
+# **If the API has to live on another origin**, that cannot be done to this
+# image from outside: Vite substitutes `VITE_*` into the bundle at build time,
+# so by the time a container starts they are string literals in the JavaScript
+# and nothing reads the environment. Serving the API under `/api` on the
+# panel's own host is the way to avoid needing to.
 # ---------------------------------------------------------------------------
 FROM node:22-bookworm-slim AS build
-
-# Where the panel finds the API.
-#
-#   /api                       same origin — the panel and the API behind one
-#                              host. The session cookie stays first-party,
-#                              which survives third-party cookie restrictions
-#                              that a cross-origin setup does not.
-#
-#   https://api.iigl.org/api   a different origin. That API must then list this
-#                              panel's origin in CORS_ORIGINS, and both sides
-#                              must be HTTPS or the browser drops the cookie.
-ARG VITE_API_URL=/api
-
-# How hard a picture is shrunk in the browser before it is sent. All optional;
-# src/lib/image.ts clamps each to a range that still prints legibly, so a typo
-# falls back rather than ruining a week of scans.
-ARG VITE_IMAGE_QUALITY
-ARG VITE_IMAGE_MAX_EDGE
-ARG VITE_IMAGE_SKIP_UNDER_KB
-ARG VITE_UPLOAD_MAX_MB
-
-ENV VITE_API_URL=$VITE_API_URL \
-    VITE_IMAGE_QUALITY=$VITE_IMAGE_QUALITY \
-    VITE_IMAGE_MAX_EDGE=$VITE_IMAGE_MAX_EDGE \
-    VITE_IMAGE_SKIP_UNDER_KB=$VITE_IMAGE_SKIP_UNDER_KB \
-    VITE_UPLOAD_MAX_MB=$VITE_UPLOAD_MAX_MB
 
 WORKDIR /app
 
