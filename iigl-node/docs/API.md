@@ -1,6 +1,6 @@
 # IIGL API
 
-219 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
+224 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
 
 The interactive version is at `/docs` when the server is running, and the raw
 document at `/openapi.json`.
@@ -127,6 +127,7 @@ Categories, subcategories, attributes and their values.
 
 | Method | Path | Auth | Query | Body | Fails | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/catalog/attribute-masters` | session | `category_id` | — | 401, 403 | Attribute master lists |
 | GET | `/api/catalog/attribute-values` | session | `attr_id`, `subcategory_id`, `category_id`, `q`, `page`, `per_page` | — | 400, 401, 403 | Attribute values across a branch of the catalogue |
 | GET | `/api/catalog/attributes/{id}/values` | session | — | — | 401, 403 | Allowed values for an attribute |
 | GET | `/api/catalog/categories` | session | — | — | 401, 403 | List categories |
@@ -194,8 +195,8 @@ Laboratories, staff and account administration.
 | PATCH | `/api/users/{id}` | session | — | fullname, mobile, email, role_id, is_active, commision, commission_type, registration_fee, +33 more | 400, 401, 403, 404, 409 | Update any account |
 | DELETE | `/api/users/{id}` | session | — | — | 400, 401, 403, 404, 409 | Delete an account |
 | PATCH | `/api/users/{id}/active` | session | — | is_active | 401, 403, 404 | Activate or deactivate an account |
-| POST | `/api/users/{id}/employment` | session | — | **lab_id**, joining_date, salary, remark | 400, 401, 403, 404, 409 | Attach a person to an employer |
-| PATCH | `/api/users/{id}/employment` | session | — | salary, joining_date, remark | 400, 401, 403, 404 | Change the terms of a posting |
+| POST | `/api/users/{id}/employment` | session | — | **lab_id**, joining_date, salary, remark, week_off | 400, 401, 403, 404, 409 | Attach a person to an employer |
+| PATCH | `/api/users/{id}/employment` | session | — | salary, joining_date, remark, week_off | 400, 401, 403, 404 | Change the terms of a posting |
 | POST | `/api/users/{id}/employment/end` | session | — | leave_date, remark | 401, 403, 404 | End an employment |
 | POST | `/api/users/{id}/password` | session | — | **password** | 400, 401, 403, 404 | Reset someone's password |
 | GET | `/api/users/laboratories` | session | — | — | 401, 403 | List laboratories |
@@ -252,9 +253,13 @@ Creating and editing categories, attributes and prices. Administrators only.
 
 | Method | Path | Auth | Query | Body | Fails | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
+| POST | `/api/admin/attribute-masters` | session | — | **category_id**, **attr_name**, **values** | 400, 401, 403, 409 | Add a attribute master list |
+| PATCH | `/api/admin/attribute-masters/{id}` | session | — | category_id, attr_name, values | 400, 401, 403, 404 | Update a attribute master list |
+| DELETE | `/api/admin/attribute-masters/{id}` | session | — | — | 401, 403, 404 | Delete a master list |
 | POST | `/api/admin/attribute-values` | session | — | **attr_id**, **value_name**, description, icon | 400, 401, 403, 409 | Add a attribute value |
 | PATCH | `/api/admin/attribute-values/{id}` | session | — | attr_id, value_name, description, icon | 400, 401, 403, 404 | Update a attribute value |
 | DELETE | `/api/admin/attribute-values/{id}` | session | — | — | 401, 403, 404 | Retire an attribute value |
+| POST | `/api/admin/attribute-values/bulk` | session | — | **attr_id**, **values** | 400, 401, 403 | Add several values to one attribute |
 | POST | `/api/admin/attributes` | session | — | **attr_name**, **category_id**, **subcategory_id**, order_no, show_in_smart_card, show_in_classic_card, show_description, show_image, +2 more | 400, 401, 403, 409 | Add a attribute |
 | PATCH | `/api/admin/attributes/{id}` | session | — | attr_name, category_id, subcategory_id, order_no, show_in_smart_card, show_in_classic_card, show_description, show_image, +2 more | 400, 401, 403, 404 | Update a attribute |
 | DELETE | `/api/admin/attributes/{id}` | session | — | — | 401, 403, 404 | Retire an attribute |
@@ -448,8 +453,8 @@ The general enquiry book: questions, visits, leads and complaints.
 | Method | Path | Auth | Query | Body | Fails | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/messages` | session | `from`, `box`, `open`, `page`, `per_page` | — | 401, 403 | Inbox, or one person’s messages |
-| POST | `/api/messages` | session | — | **body**, kind, about_date, to | 400, 401, 403 | Write a message, to one person or several |
-| PATCH | `/api/messages/{id}/resolve` | session | — | resolved | 401, 403, 404 | Mark one dealt with |
+| POST | `/api/messages` | session | — | **body**, kind, topic, about_date, to | 400, 401, 403 | Write a message, to one person or several |
+| PATCH | `/api/messages/{id}/resolve` | session | — | resolved, decision, reply | 401, 403, 404 | Answer one: approve, decline, or simply close it |
 | GET | `/api/messages/employer` | session | — | — | 401, 403 | Who this account writes to |
 | GET | `/api/messages/recipients` | session | — | — | 401, 403 | Everybody this account may write to |
 
@@ -465,4 +470,4 @@ The general enquiry book: questions, visits, leads and complaints.
 
 Bold body fields are required.
 
-219 endpoints: 16 public, 203 requiring a session.
+224 endpoints: 16 public, 208 requiring a session.

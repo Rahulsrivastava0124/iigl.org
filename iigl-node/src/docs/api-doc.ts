@@ -1,5 +1,5 @@
 /**
- * Writes API.md, the human reference for the API.
+ * Writes docs/API.md, the human reference for the API.
  *
  *   npm run docs
  *
@@ -215,5 +215,8 @@ w(
 );
 w();
 
-writeFileSync('API.md', out.join('\n'), 'utf8');
-console.log(`API.md written: ${rows.length} endpoints, ${publicCount} public.`);
+// `docs/`, not the project root: this is generated reference material and it
+// sits with the rest of it. Written from the project root, which is where npm
+// runs a script from, so the path is relative to that and not to this file.
+writeFileSync('docs/API.md', out.join('\n'), 'utf8');
+console.log(`docs/API.md written: ${rows.length} endpoints, ${publicCount} public.`);

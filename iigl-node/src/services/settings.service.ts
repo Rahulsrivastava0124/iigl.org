@@ -262,8 +262,3 @@ export async function saveSettings(
   cache = null;
   return written;
 }
-
-/** Drops the cache. For tests, and for anything that writes rows directly. */
-export function forgetSettings(): void {
-  cache = null;
-}

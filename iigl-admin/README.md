@@ -132,7 +132,7 @@ where their data should be.
 and the role model. It follows the house structure in
 `Prakriti_New_Admin/docs/style.md`.
 
-[STYLE-AUDIT.md](STYLE-AUDIT.md) measures the panel against it. Seven findings,
+[docs/STYLE-AUDIT.md](docs/STYLE-AUDIT.md) measures the panel against it. Seven findings,
 one of which changes what a person sees: the permission matrix exists in the API
 but nothing in the UI reads it, so staff are offered buttons the API refuses.
 

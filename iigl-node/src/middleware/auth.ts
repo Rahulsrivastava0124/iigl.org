@@ -25,9 +25,6 @@ export const ROLE = {
   TEAM: 3,
 } as const;
 
-/** Nobody's role. Their grants in `user_permissions` are all they have. */
-export const NO_ROLE = null;
-
 declare global {
   namespace Express {
     interface Request {
@@ -103,8 +100,6 @@ export const requireRole =
 /** Head office only. Named for the route group it guards, not for role 2. */
 export const requireSuper = requireRole((r) => r === ROLE.SUPER, 'super admin');
 export const requireAdmin = requireSuper;
-export const requireLab = requireRole((r) => r === ROLE.LAB, 'laboratory');
-export const requireStaff = requireRole((r) => r !== null && r > ROLE.LAB, 'employee');
 /**
  * Somebody who employs people: head office, or a laboratory.
  *

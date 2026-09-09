@@ -1,6 +1,6 @@
 # Style audit
 
-The panel measured against [style.md](style.md), which follows the house guide
+The panel measured against [style.md](../style.md), which follows the house guide
 at `Prakriti_New_Admin/docs/style.md`.
 
 Eighteen screens, seven shared components. Every finding was produced by

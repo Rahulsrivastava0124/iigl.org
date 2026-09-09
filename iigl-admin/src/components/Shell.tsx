@@ -114,7 +114,7 @@ interface Group {
  *
  * It is **not** a permission change. Head office may still read every
  * laboratory's orders — `GET /api/orders` is unscoped for role 1, and the row
- * in ROLES.md still holds — and `/orders` is still a route: the certificate and
+ * in the repo's docs/ROLES.md still holds — and `/orders` is still a route: the certificate and
  * customer search in the header lands on it, and a dashboard tile or a link
  * opens it. What changed is that the sidebar no longer offers it as somewhere
  * to go.

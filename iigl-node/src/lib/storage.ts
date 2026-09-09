@@ -2,7 +2,6 @@ import type { Readable } from 'node:stream';
 import {
   GetObjectCommand,
   HeadBucketCommand,
-  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -33,8 +32,6 @@ export const r2 = storageConfigured
       credentials: { accessKeyId, secretAccessKey },
     })
   : null;
-
-export const r2Bucket = bucket;
 
 /** Public URL an object is served from, or '' when no public domain is set. */
 export function publicUrlFor(key: string): string {
@@ -127,15 +124,5 @@ export async function getObjectBuffer(key: string): Promise<Buffer | null> {
     return Buffer.from(await out.Body.transformToByteArray());
   } catch {
     return null;
-  }
-}
-
-export async function objectExists(key: string): Promise<boolean> {
-  if (!r2) return false;
-  try {
-    await r2.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
-    return true;
-  } catch {
-    return false;
   }
 }

@@ -1,0 +1,20 @@
+# What must never reach the image, and what only slows the build down.
+node_modules
+dist
+.env
+.env.*
+!.env.example
+*.log
+.git
+.DS_Store
+Dockerfile
+.dockerignore
+
+# Scratch output that has collected in this directory — a rendered agreement, a
+# logo somebody exported. Anchored with a leading slash so it means *this*
+# directory and not any directory: `src/templates/` holds three PNGs that the
+# cards and the franchise agreement are printed with, and an unanchored
+# `*.png` here is one Docker version away from dropping them and turning every
+# certificate into a page of broken images.
+/*.pdf
+/*.png

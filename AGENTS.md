@@ -5,7 +5,7 @@ no foreign keys):
 
 - `iigl-node/` — the API. Express 5, TypeScript, Kysely + mysql2, 102 endpoints,
   OpenAPI in `src/docs/`. `npm run sweep` exercises every route; `npm run docs`
-  regenerates `API.md`; `npm run check:spec` fails if a route is undocumented.
+  regenerates `iigl-node/docs/API.md`; `npm run check:spec` fails if a route is undocumented.
 - `iigl-admin/` — the panel. React 19, Vite, **Material UI 9.3**, react-router 7.
   House style is `iigl-admin/style.md`; follow it rather than inventing a
   second way to do the same thing.
@@ -46,13 +46,13 @@ attached to an employer through `employements.parent_id`, which holds that
 employer's `users.empid` rather than their id). `role_id` is
 nullable, and NULL is **no role at all**: that person holds only the grants in
 `user_permissions`. One sign-in door each — `super.` (or the bare
-domain), `admin.`, `team.` — and `ROLES.md` at the repo root has the structure,
+domain), `admin.`, `team.` — and `docs/ROLES.md` has the structure,
 what each role sees and where each rule is enforced.
 
 ## Working here
 
 - The database is a copy of production. Reads are free; check before writing.
 - Certificate numbering, pricing bands and GST are ported behaviour, not new
-  design. `iigl-node/PARITY.md` records how each was verified against Laravel.
-- `iigl-node/FEATURE-GAP.md` lists what is still missing and what was
+  design. `iigl-node/docs/PARITY.md` records how each was verified against Laravel.
+- `iigl-node/docs/FEATURE-GAP.md` lists what is still missing and what was
   deliberately not ported.

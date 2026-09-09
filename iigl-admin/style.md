@@ -863,7 +863,7 @@ page down on every save and then sat there until something else replaced it.
 > them, and a laboratory's own role is invisible to every other laboratory.
 
 **A full description of the three roles, the doors and where each rule is
-enforced is in `ROLES.md` at the repo root.**
+enforced is in `docs/ROLES.md` at the repo root.**
 
 ### Permissions in the UI
 

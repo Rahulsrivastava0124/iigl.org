@@ -30,11 +30,11 @@ With the server running:
 
 | Where | What |
 | --- | --- |
-| [API.md](API.md) | The written reference: auth, conventions, and every endpoint |
+| [docs/API.md](docs/API.md) | The written reference: auth, conventions, and every endpoint |
 | `http://localhost:3000/docs` | Swagger UI — browse and call every endpoint |
 | `http://localhost:3000/openapi.json` | Raw OpenAPI 3.1 document, for client generation |
 
-[API.md](API.md) is generated from the OpenAPI document, which `check:spec`
+[docs/API.md](docs/API.md) is generated from the OpenAPI document, which `check:spec`
 holds against the routers, so neither can drift from the code:
 
 ```bash
@@ -155,13 +155,13 @@ npm run check:pricing  # pricing matches the totals already stored
 npm run parity         # phase 07: every figure against the Laravel queries
 npm run check:parents  # users.parent_id still agrees with employements,
                        # and both still name an empid somebody holds
-npm run docs           # regenerate API.md
+npm run docs           # regenerate docs/API.md
 ```
 
 `npm test` is the only one that runs on a clean checkout; the rest need a
 populated database and, for the sweep, a running server.
 
-[AUDIT.md](AUDIT.md) records twelve findings, nine fixed and three held pending
+[docs/AUDIT.md](docs/AUDIT.md) records twelve findings, nine fixed and three held pending
 a decision: database indexes, session revocation on password change, and an
 audit trail for certificate amendments.
 
@@ -523,22 +523,20 @@ Run against a local copy of the production database:
 - Report numbers increment correctly and match the production format.
 - The quantity cap rejects a third report on a two-item line.
 
-`src/verify-auth.ts` is a read-only smoke test:
-
-```bash
-npx tsx src/verify-auth.ts
-```
+`npm run sweep` exercises every route as each role, and the `check:*` scripts
+each hold one rule the code has to keep — the spec against the routers, roles
+inside their own laboratory, money against Laravel's arithmetic.
 
 ## Still to build
 
-[FEATURE-GAP.md](FEATURE-GAP.md) compares this API against the Laravel
+[docs/FEATURE-GAP.md](docs/FEATURE-GAP.md) compares this API against the Laravel
 application it replaces, derived by parsing all 195 of its routes.
 
 Six areas block cutover — file uploads, role permissions, laboratory and staff
 records, receipts and invoices, attendance, and profile editing. Six more are
 wanted but not blocking, mostly content management for the public site.
 
-Phase 07 parity is done — [PARITY.md](PARITY.md) records the result. It found
+Phase 07 parity is done — [docs/PARITY.md](docs/PARITY.md) records the result. It found
 two defects, both fixed: the dashboard was summing the wrong column over the
 wrong set and overstating revenue by 7,808, and certificate numbering could
 issue a duplicate. Three findings remain that need a decision rather than code.

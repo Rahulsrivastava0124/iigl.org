@@ -1,0 +1,99 @@
+# ---------------------------------------------------------------------------
+# The three services, for a Dokploy Compose deployment.
+#
+# Traefik is Dokploy's, not this file's: no ports are published and no routing
+# labels are written here. Domains are attached in the Dokploy UI, which
+# generates the labels and terminates TLS. What this file has to do is put the
+# containers on `dokploy-network` so Traefik can reach them at all — a service
+# left off it deploys cleanly and then answers every request with 404.
+#
+# Values come from Dokploy's Environment tab. The required ones are written
+# `${VAR:?...}` so a missing value stops the deployment with a sentence saying
+# which, rather than starting a container that fails on its first request.
+# ---------------------------------------------------------------------------
+
+services:
+  api:
+    build:
+      context: ./iigl-node
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+
+      # The shared MySQL. This service never alters schema — grant SELECT,
+      # INSERT, UPDATE, DELETE and nothing more.
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL, e.g. mysql://user:pass@host:3306/iigl}
+
+      # Signs session cookies. 32+ random characters; startup refuses a
+      # placeholder under NODE_ENV=production, because a guessable secret means
+      # session cookies can be forged for any account.
+      #   node -e "console.log(crypto.randomUUID()+crypto.randomUUID())"
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET to 32+ random characters}
+
+      # Browser origins allowed to call this API, comma separated. Not needed
+      # when the panel is served from this same host; required when it is not,
+      # because the session is a cookie and a wildcard cannot carry credentials.
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+
+      # Where the panel is served from. A password reset link points here, so
+      # it has to be the address people actually open.
+      PANEL_URL: ${PANEL_URL:?set PANEL_URL, e.g. https://admin.iigl.org}
+
+      # The origin printed QR codes resolve against. Certificates already in
+      # circulation point at PUBLIC_SITE_URL/verify-report/{id}, so changing
+      # this does not change what is already printed.
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://www.iigl.org}
+
+      # Mail. Absent, a password reset refuses rather than reporting a success
+      # that never arrives — these can also be set on the Settings screen,
+      # which takes precedence over both of these.
+      SMTP_URL: ${SMTP_URL:-}
+      MAIL_FROM: ${MAIL_FROM:-IIGL <no-reply@iigl.org>}
+
+      # Cloudflare R2, where uploads are written. The four travel together:
+      # with any one missing, storage reports itself unconfigured rather than
+      # failing on the first upload.
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME:-}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
+
+      # Inside the container, always. The host path is the volume below.
+      LEGACY_PUBLIC_ROOT: /legacy-public
+    volumes:
+      # Everything Laravel uploaded and everything uploaded before R2 — every
+      # `public/uploads/...` path in the database resolves here first, and only
+      # falls through to R2 on a miss. Read-only: the API serves these and
+      # writes new files to R2.
+      #
+      # Put the Laravel `public/` directory at `../files/legacy-public` in the
+      # Dokploy application's own folder. Leave the mount in place even when
+      # the directory is empty — express.static on a missing path is a miss,
+      # which is exactly the fallback that makes R2 answer.
+      - ../files/legacy-public:/legacy-public:ro
+    networks:
+      - dokploy-network
+
+  admin:
+    build:
+      context: ./iigl-admin
+      args:
+        # Baked into the bundle. Changing it means rebuilding, not restarting
+        # — see the note at the top of iigl-admin/Dockerfile.
+        VITE_API_URL: ${VITE_API_URL:-/api}
+    restart: unless-stopped
+    networks:
+      - dokploy-network
+
+  website:
+    build:
+      context: ./iigl-frontend-website
+    restart: unless-stopped
+    networks:
+      - dokploy-network
+
+networks:
+  dokploy-network:
+    external: true

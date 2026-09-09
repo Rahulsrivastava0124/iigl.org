@@ -18,7 +18,7 @@ export const round2 = (n: number) => Math.round(n * 100) / 100;
  *
  * The rate is not configurable. GST rates are a master list — Master › GST —
  * recorded against a course fee or a price band; what an order is billed stays
- * the ported 18% that PARITY.md verified.
+ * the ported 18% that docs/PARITY.md verified.
  */
 export function gstOf(payable: number): number {
   return Math.trunc(payable * GST_MULTIPLIER);

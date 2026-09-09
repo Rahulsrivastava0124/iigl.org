@@ -760,7 +760,7 @@ dashboardRoutes.get(
         // dated today — so sale less paid is dues, and the row adds up. The
         // Laravel dashboard took its today's-paid from `transactions` and its
         // today's-sale from `delivery_date` instead, and the two never
-        // reconciled against each other; see the note in FEATURE-GAP.md.
+        // reconciled against each other; see the note in docs/FEATURE-GAP.md.
         money: {
           sale: totalSale,
           paid: totalPaid,

@@ -16,8 +16,24 @@ import { closeBrowser } from './services/pdf.service.js';
  */
 async function reportStatus(): Promise<void> {
   try {
-    await sql`select 1`.execute(db);
-    console.log(`  database  ok      ${new URL(env.databaseUrl).pathname.slice(1)}`);
+    /*
+      Reached once, on every connection in the pool.
+
+      The pool opens lazily, and opening a connection is a TCP handshake and an
+      authentication exchange — several round trips to a database that is not on
+      this machine. Left to happen on demand, the first request of the morning
+      pays for all twenty at once: measured, warming the pool from one
+      connection to ten costs about 150 ms, on top of the request's own work.
+
+      Twenty `select 1`s in parallel is one round trip and opens all of them, so
+      that cost is paid here, before anybody is waiting, and `enableKeepAlive`
+      is what stops it being paid again after an idle spell.
+    */
+    const t = Date.now();
+    await Promise.all(Array.from({ length: 20 }, () => sql`select 1`.execute(db)));
+    console.log(
+      `  database  ok      ${new URL(env.databaseUrl).pathname.slice(1)} · pool warm in ${Date.now() - t}ms`,
+    );
   } catch (err) {
     console.error(`  database  FAILED  ${(err as Error).message}`);
   }

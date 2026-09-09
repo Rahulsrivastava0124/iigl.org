@@ -145,10 +145,6 @@ export const isSuper = (user?: { roleId: number | null } | null) => user?.roleId
  */
 export const isAdmin = (user?: { roleId: number | null } | null) => user?.roleId === ROLE.ADMIN;
 export const isLab = isAdmin;
-/** Nobody's role: everything they can do was granted to them one row at a time. */
-export const hasNoRole = (user?: { roleId: number | null } | null) =>
-  user != null && user.roleId == null;
-
 /** What the sidebar and the breadcrumb root call each door. */
 export const PORTAL_LABEL: Record<Portal, string> = {
   super: 'Super Admin',

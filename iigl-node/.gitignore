@@ -2,3 +2,9 @@ node_modules/
 .env
 uploads/
 *.log
+
+# The compiled output. It was committed, and a build product tracked beside its
+# source is one that drifts from it — 73 files and 2.7 MB of JavaScript that
+# nobody reads and every branch conflicts on. `npm run build` makes it, and the
+# Dockerfile makes it fresh inside the image.
+dist/
