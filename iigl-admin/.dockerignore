@@ -1,0 +1,24 @@
+# .env and .env.production are NOT excluded, deliberately. They are the second
+# channel by which VITE_* reaches `vite build` — see the note at the top of the
+# Dockerfile. Everything in them ends up in the browser bundle anyway, so there
+# is nothing here to keep out of an image layer; the day a non-VITE_ secret is
+# written to one of these files, that stops being true, and this decision has to
+# be revisited.
+#
+# The .local variants are excluded: those are one developer's machine, and a
+# laptop's API URL shipping to production is exactly the accident this file
+# exists to prevent.
+.env.local
+.env.*.local
+
+# Rebuilt inside the image. A stale dist/ copied in would be overwritten by
+# `npm run build`, but it would also bust the layer cache on every change.
+node_modules
+dist
+
+.git
+.gitignore
+.DS_Store
+*.log
+Dockerfile
+.dockerignore
