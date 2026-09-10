@@ -1,10 +1,28 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const apiUrl = env.VITE_API_URL ?? '/api';
   const isSameOrigin = !/^https?:\/\//i.test(apiUrl);
+
+  /*
+    Printed so a deployment's build log records what was baked in.
+
+    VITE_API_URL is substituted into the bundle here and read by nothing at run
+    time, so a wrong value is invisible until the panel is open and every
+    request is going somewhere unexpected. It can arrive as a build argument or
+    from a .env file in the build context, which makes "which one won" a real
+    question with no way to ask it afterwards. One line in the log answers it.
+  */
+  if (command === 'build') {
+    console.info(
+      `[iigl-admin] API base: ${apiUrl}` +
+        (isSameOrigin
+          ? `  (same origin — ${apiUrl} on this panel's host must be routed to the API container)`
+          : `  (cross origin — the API needs this panel's origin in CORS_ORIGINS and SESSION_CROSS_SITE=true)`),
+    );
+  }
 
   return {
     plugins: [react()],

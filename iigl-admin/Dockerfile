@@ -13,20 +13,21 @@
 #
 #   1. Build arguments      the ARGs below. Docker exposes them to `RUN`, and
 #                           Vite gives an already-set process variable priority
-#                           over any .env file. This is Dokploy's channel.
-#   2. .env / .env.production   in the build context. .dockerignore lets these
-#                           through on purpose. Both are gitignored, so a deploy
-#                           that clones from git has no such file unless the
-#                           pipeline writes one before `docker build` runs
-#                           — on Dokploy, use channel 1.
+#                           over any .env file. Nothing needs to use this; it is
+#                           the override for a one-off build.
+#   2. .env.production      committed, and the normal channel. Vite loads it in
+#                           production mode, so a clone builds correctly with
+#                           nothing configured at the host — no Dokploy
+#                           Environment entries, no build arguments. That file
+#                           explains why it is in git.
 #
-# Absent both, `src/lib/config.ts` falls back to `/api`, and that fallback is
-# the one to want: the panel and the API behind a single host keeps the session
-# cookie first-party, which survives the third-party cookie restrictions a
-# cross-origin setup runs into. On Dokploy it is a path rule sending `/api` to
-# the API container. Nothing has to be configured for that to work, which is why
-# no ARG here carries a default — a default would silently outrank .env and
-# make channel 2 dead configuration.
+# .env is excluded by .dockerignore: it is a developer's machine, and Vite reads
+# it in production mode too, so left in it would shadow the deployed values.
+#
+# Absent both, `src/lib/config.ts` falls back to `/api` — same origin, which
+# needs a path rule sending /api to the API container. No ARG here carries a
+# default, because a default would silently outrank .env.production and make
+# channel 2 dead configuration.
 # ---------------------------------------------------------------------------
 FROM node:22-bookworm-slim AS build
 

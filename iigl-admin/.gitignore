@@ -23,8 +23,16 @@ dist-ssr
 *.sln
 *.sw?
 
-# Local environment. .env.example is committed; the real values are not.
+# Local environment.
+#
+# .env.production IS committed, deliberately. Everything in it is a VITE_ value,
+# which means it is substituted into the JavaScript bundle and served to every
+# visitor — it is published the moment the panel deploys, so keeping it out of
+# git buys no secrecy and costs the build its configuration. Committing it is
+# what lets a clone build correctly with nothing configured at the host.
+#
+# Nothing without a VITE_ prefix belongs in that file. Vite would not expose it,
+# but git would.
 .env
 .env.local
 .env.*.local
-.env.production

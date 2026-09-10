@@ -45,12 +45,6 @@ export const env = {
    */
   legacyPublicRoot: process.env.LEGACY_PUBLIC_ROOT ?? '../iigl.org/public',
   /**
-   * Browser origins allowed to call this API, comma separated. Authentication
-   * is a cookie, so this must be an explicit allowlist: a wildcard cannot be
-   * combined with credentials, and reflecting whatever Origin arrives would let
-   * any site call the API with the visitor's session.
-   */
-  /**
    * Where the admin panel is served from. A password reset link points here,
    * so it has to be the address the person actually uses, not the API's.
    */
@@ -62,10 +56,39 @@ export const env = {
    */
   smtpUrl: process.env.SMTP_URL ?? '',
   mailFrom: process.env.MAIL_FROM ?? 'IIGL <no-reply@iigl.org>',
+  /**
+   * Browser origins allowed to call this API, comma separated. Authentication
+   * is a cookie, so this must be an explicit allowlist: a wildcard cannot be
+   * combined with credentials, and reflecting whatever Origin arrives would let
+   * any site call the API with the visitor's session.
+   *
+   * Origins, not URLs: scheme, host and port, no trailing path or slash
+   * ("https://admin.iigl.org"). This is compared against the browser's Origin
+   * header, which never carries a path, so a stray slash silently matches
+   * nothing.
+   */
   corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:5173')
     .split(',')
-    .map((o) => o.trim())
+    .map((o) => o.trim().replace(/\/+$/, ''))
     .filter(Boolean),
+  /**
+   * Send the session cookie on cross-site requests.
+   *
+   * Off by default, and off is the safer setting. SameSite=Lax means the
+   * browser will not attach the session to a request originating from another
+   * site, and that refusal is the whole of this API's CSRF defence — there is
+   * no token anywhere in the codebase.
+   *
+   * Turn it on only when the panel is served from a different origin than this
+   * API (admin.iigl.org calling api.iigl.org). Left off in that arrangement the
+   * browser accepts the cookie at sign-in and then declines to send it back, so
+   * the login appears to succeed and every request after it is unauthenticated.
+   *
+   * Two things follow from turning it on: SameSite=None is only honoured
+   * alongside Secure, so both sides must be HTTPS; and app.ts adds an Origin
+   * check on mutating requests to put back what Lax was doing.
+   */
+  sessionCrossSite: process.env.SESSION_CROSS_SITE === 'true',
   /**
    * Cloudflare R2, where uploaded files are kept. The four credentials travel
    * together: with any one of them missing there is no usable client, so

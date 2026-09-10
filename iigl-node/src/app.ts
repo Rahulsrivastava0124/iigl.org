@@ -60,6 +60,34 @@ export function createApp() {
     }),
   );
 
+  // Cross-site sessions give up the browser's own CSRF protection, so it has to
+  // be done here instead.
+  //
+  // With SameSite=Lax the browser simply refuses to attach the session to a
+  // request that started on another site, and that refusal was the whole
+  // defence. SESSION_CROSS_SITE turns it off on purpose so a panel on its own
+  // domain can stay signed in — which leaves every state-changing endpoint
+  // reachable by a form posted from any page on the internet, with the
+  // visitor's cookie attached.
+  //
+  // CORS does not cover this. It governs whether a response may be *read*, not
+  // whether the request runs: a cross-site POST still reaches the handler and
+  // still commits, and the attacker never needed to see the reply.
+  //
+  // Only the mutating methods. A GET has no side effect worth protecting and
+  // blocking one would break a card PDF opened from anywhere. A missing Origin
+  // header means the caller is not a browser — curl, the sweep script, another
+  // server — and those carry no cookie they did not set themselves.
+  if (env.sessionCrossSite) {
+    const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+    app.use((req, res, next) => {
+      if (!MUTATING.has(req.method)) return next();
+      const origin = req.get('origin');
+      if (!origin || env.corsOrigins.includes(origin)) return next();
+      res.status(403).json({ error: 'Origin not allowed.' });
+    });
+  }
+
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: true }));
 

@@ -55,8 +55,25 @@ const sign = (body: string) => createHmac('sha256', env.sessionSecret).update(bo
 
 const cookieOptions = {
   httpOnly: true,
-  sameSite: 'lax' as const,
-  secure: env.isProd,
+  /*
+    Lax, unless the panel is served from a different origin than this API.
+
+    Lax is the safer setting and the only CSRF defence here: the browser will
+    not attach this cookie to a request originating from another site, and
+    there is no CSRF token to fall back on. See SESSION_CROSS_SITE in env.ts.
+
+    But that same rule means a Lax cookie is not sent on a cross-site fetch at
+    all, so a panel on its own domain signs in successfully and is then
+    unauthenticated on its very next request — a failure that reads like a
+    broken login rather than a cookie policy. SESSION_CROSS_SITE gives that up
+    deliberately, and app.ts checks Origin on mutating requests to compensate.
+
+    None is paired with Secure rather than with env.isProd because browsers
+    ignore SameSite=None without it: a cookie set that way is simply dropped.
+  */
+  ...(env.sessionCrossSite
+    ? { sameSite: 'none' as const, secure: true }
+    : { sameSite: 'lax' as const, secure: env.isProd }),
   path: '/',
 };
 

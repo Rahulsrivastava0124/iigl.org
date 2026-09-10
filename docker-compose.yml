@@ -36,6 +36,13 @@ services:
       # because the session is a cookie and a wildcard cannot carry credentials.
       CORS_ORIGINS: ${CORS_ORIGINS:-}
 
+      # Send the session cookie on cross-site requests. Required when the panel
+      # is on a different origin than this API, and harmful otherwise: it trades
+      # away the SameSite=Lax rule that is this API's only CSRF defence, which
+      # app.ts then replaces with an Origin check on mutating requests. Both
+      # sides must be HTTPS, because SameSite=None without Secure is ignored.
+      SESSION_CROSS_SITE: ${SESSION_CROSS_SITE:-false}
+
       # Where the panel is served from. A password reset link points here, so
       # it has to be the address people actually open.
       PANEL_URL: ${PANEL_URL:?set PANEL_URL, e.g. https://admin.iigl.org}
