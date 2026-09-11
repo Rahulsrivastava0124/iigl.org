@@ -180,6 +180,10 @@ async function currentEmployment(userId: number) {
       'employements.joining_date as joining_date',
       'employements.salary as salary',
       'employements.week_off as week_off',
+      'employements.working_hours as working_hours',
+      'employements.late_after as late_after',
+      'employements.shift_start as shift_start',
+      'employements.shift_end as shift_end',
       'employer.id as lab_id',
       'employer.fullname as lab_name',
       'employer.mobile as lab_mobile',
@@ -927,6 +931,9 @@ userRoutes.get(
           'users.mobile as mobile',
           'users.role_id as role_id',
           'users.is_active as is_active',
+          // With the joining date, where an absence can start from: a joining
+          // date is sometimes typed later than somebody's first punch.
+          'users.created_at as created_at',
           // The list shows a face beside each name; without this column every
           // row fell back to initials.
           'users.profile_photo as profile_photo',
@@ -943,6 +950,10 @@ userRoutes.get(
           'employements.joining_date as joining_date',
           'employements.salary as salary',
           'employements.week_off as week_off',
+          'employements.working_hours as working_hours',
+          'employements.late_after as late_after',
+          'employements.shift_start as shift_start',
+          'employements.shift_end as shift_end',
           'employements.is_working as is_working',
         ])
         .orderBy('users.fullname')
@@ -1118,6 +1129,10 @@ userRoutes.post(
             salary: req.body?.salary,
             remark: req.body?.remark,
             week_off: req.body?.week_off,
+            working_hours: req.body?.working_hours,
+            late_after: req.body?.late_after,
+            shift_start: req.body?.shift_start,
+            shift_end: req.body?.shift_end,
           },
           trx,
         ),
@@ -1650,15 +1665,80 @@ function weekOff(given: unknown): string | null {
   return days.length ? days.join(',') : null;
 }
 
+/**
+ * Hours in a full day, as stored: `DECIMAL(4,2)`, so 8.5 is a real answer.
+ * Blank is not set, and then nobody is marked short.
+ */
+function workingHours(given: unknown): string | null {
+  const raw = String(given ?? '').trim();
+  if (!raw) return null;
+  const hours = Number(raw);
+  if (!Number.isFinite(hours) || hours <= 0 || hours > 24) {
+    throw badRequest('Working hours must be a number of hours, more than 0 and at most 24.');
+  }
+  return String(Math.round(hours * 100) / 100);
+}
+
+/**
+ * A time of day as `HH:MM:00` — the same shape as `clockIn`, so the two compare
+ * as strings. Blank is not set.
+ */
+function clockTime(given: unknown, label: string): string | null {
+  const raw = String(given ?? '').trim();
+  if (!raw) return null;
+  const hit = /^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/.exec(raw);
+  if (!hit) throw badRequest(`${label} must be a time, HH:MM.`);
+  return `${hit[1]}:${hit[2]}:00`;
+}
+
+/** The time after which a punch-in is late. Blank is not set: nobody is late. */
+const lateAfter = (given: unknown) => clockTime(given, 'Late after');
+
+/**
+ * The shift as the form sends it: a start and an end.
+ *
+ * When either is in the body all three columns are written — the two times and
+ * the hours between them — so `working_hours` can never disagree with the times
+ * beside it. A shift that ends at or before it starts runs past midnight.
+ * Neither in the body: undefined, and the stored shift is left as it is.
+ */
+function shiftTimes(body: { shift_start?: unknown; shift_end?: unknown }) {
+  if (body.shift_start === undefined && body.shift_end === undefined) return undefined;
+  const start = clockTime(body.shift_start, 'Start time');
+  const end = clockTime(body.shift_end, 'End time');
+  if (Boolean(start) !== Boolean(end)) throw badRequest('Give both a start and an end time, or neither.');
+  if (!start || !end) return { shift_start: null, shift_end: null, working_hours: null };
+  const minutes = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+  let span = minutes(end) - minutes(start);
+  if (span <= 0) span += 24 * 60;
+  return { shift_start: start, shift_end: end, working_hours: String(Math.round((span / 60) * 100) / 100) };
+}
+
 async function employ(
   userId: number,
   employerId: number,
-  details: { joining_date?: unknown; salary?: unknown; remark?: unknown; week_off?: unknown } = {},
+  details: {
+    joining_date?: unknown;
+    salary?: unknown;
+    remark?: unknown;
+    week_off?: unknown;
+    working_hours?: unknown;
+    late_after?: unknown;
+    shift_start?: unknown;
+    shift_end?: unknown;
+  } = {},
   exec: Exec = db,
 ): Promise<number> {
   if (!Number.isInteger(employerId) || employerId < 1) {
     throw badRequest('Choose an employer.');
   }
+  // Read before anything is written, so a bad time fails the whole create.
+  const shift = {
+    working_hours: workingHours(details.working_hours),
+    late_after: lateAfter(details.late_after),
+    // Times, when given, write the hours as well.
+    ...shiftTimes(details),
+  };
 
   const [user, employer] = await Promise.all([
     exec.selectFrom('users').select(['id', 'role_id']).where('id', '=', userId).executeTakeFirst(),
@@ -1703,6 +1783,7 @@ async function employ(
       joining_date: String(details.joining_date ?? new Date().toISOString().slice(0, 10)),
       salary: String(details.salary ?? '0'),
       week_off: weekOff(details.week_off),
+      ...shift,
       is_working: '1',
       leave_date: '',
       remark: String(details.remark ?? ''),
@@ -1735,6 +1816,10 @@ userRoutes.post(
       salary: req.body?.salary,
       remark: req.body?.remark,
       week_off: req.body?.week_off,
+      working_hours: req.body?.working_hours,
+      late_after: req.body?.late_after,
+      shift_start: req.body?.shift_start,
+      shift_end: req.body?.shift_end,
     });
 
     res.status(201).json({ data: { id } });
@@ -1782,6 +1867,11 @@ userRoutes.patch(
     }
     if (req.body?.remark !== undefined) patch.remark = String(req.body.remark ?? '');
     if (req.body?.week_off !== undefined) patch.week_off = weekOff(req.body.week_off);
+    if (req.body?.working_hours !== undefined) patch.working_hours = workingHours(req.body.working_hours);
+    if (req.body?.late_after !== undefined) patch.late_after = lateAfter(req.body.late_after);
+    // After the hours, so a start and an end overrule an hours figure beside them.
+    const times = shiftTimes(req.body ?? {});
+    if (times) Object.assign(patch, times);
 
     if (Object.keys(patch).length === 1) throw badRequest('Nothing to update.');
 

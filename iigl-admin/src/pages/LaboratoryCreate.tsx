@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Box, Button, Grid, Stack } from '@mui/material';
 import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
@@ -28,7 +28,17 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBackOutlined';
 export default function LaboratoryCreate() {
   const navigate = useNavigate();
   const toast = useToast();
-  const [form, setForm] = useState<LabForm>(BLANK_LAB);
+  /* Opened from a converted laboratory enquiry: the person who asked is the
+     owner, and their number and address are already known. The laboratory's
+     own name is not — the enquiry never asked for it. */
+  const from = (useLocation().state as { fromEnquiry?: { name?: string; mobile?: string; email?: string } } | null)
+    ?.fromEnquiry;
+  const [form, setForm] = useState<LabForm>(() => ({
+    ...BLANK_LAB,
+    owner_name: from?.name ?? '',
+    mobile: from?.mobile ?? '',
+    email: from?.email ?? '',
+  }));
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
 

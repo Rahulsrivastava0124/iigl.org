@@ -21,6 +21,7 @@
     "check:nulls": "tsx src/docs/check-nulls.ts",
     "check:roles": "tsx src/docs/check-role-scope.ts",
     "check:week-off": "tsx src/docs/check-week-off.ts",
+    "check:order-money": "tsx src/docs/check-order-money.ts",
     "check:mail": "DATABASE_URL=mysql://x:x@127.0.0.1:1/x SMTP_URL= tsx src/docs/check-mail.ts",
     "dev:dist": "nodemon --watch src --ext ts,ejs,json --exec \"npm run build && npm start\"",
     "check:soft-delete": "tsx src/docs/check-soft-delete.ts",

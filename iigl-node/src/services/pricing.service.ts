@@ -497,3 +497,48 @@ export async function deliverOrder(orderId: number, deliveredBy: number) {
 
   return { id: orderId, status: 'delivered' as const, certificates: quote.certificates.length };
 }
+
+/**
+ * Bring an order's stored money back in step with its live bill.
+ *
+ * Settlement writes `total_amount`, `payable_amt`, `paid_amount` and
+ * `dues_amount` once, from the bill as it stood at that moment. Nothing wrote
+ * them again — so an order settled and then given its certificates, whose carat
+ * weights moved it into a cheaper band, kept the old figures. Order
+ * 202609-551221 was settled at 1,550 (1,829 with GST, 829 due) and its
+ * certificates then brought the bill to 950 (1,121, 121 due): the order page
+ * reads the live bill and said 121, while the order list, the dashboard's Dues
+ * and the customer totals all read the stored 829.
+ *
+ * Called wherever a bill can change after settlement — a certificate written or
+ * edited, an order's items changed or removed — inside the same transaction as
+ * that write, so the quote it reads already includes the change.
+ *
+ * Settled orders only. An order nobody has settled has nothing stored, and the
+ * lists deliberately show it with no figure rather than a bill nobody agreed to.
+ * The pay mode, reference, status and delivery are left alone: they record what
+ * happened at the counter, not what the bill comes to.
+ */
+export async function refreshOrderMoney(orderId: number, exec: Kysely<DB> = db): Promise<void> {
+  const order = await exec
+    .selectFrom('orders')
+    .select(['id', 'discount', 'payable_amt'])
+    .where('id', '=', orderId)
+    .where('deleted_at', 'is', null)
+    .executeTakeFirst();
+  if (!order || order.payable_amt === null) return;
+
+  const q = await quoteOrder(orderId, Number(order.discount ?? 0), exec);
+
+  await exec
+    .updateTable('orders')
+    .set({
+      total_amount: String(q.total_amount),
+      payable_amt: q.payable_amount,
+      paid_amount: String(q.paid_amount),
+      dues_amount: String(q.balance_due),
+      updated_at: new Date(),
+    })
+    .where('id', '=', orderId)
+    .execute();
+}

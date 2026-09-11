@@ -188,6 +188,16 @@ export interface Courses {
   updated_at: Date | null;
 }
 
+export interface CustomerCategoryDiscounts {
+  category_id: number;
+  created_at: Date | null;
+  customer_id: number;
+  discount_type: Generated<string>;
+  id: Generated<number>;
+  updated_at: Date | null;
+  value: Generated<Decimal>;
+}
+
 export interface DiscountCoupons {
   code: string;
   course_id: number | null;
@@ -223,13 +233,17 @@ export interface Employements {
   id: Generated<number>;
   is_working: string;
   joining_date: string;
+  late_after: string | null;
   leave_date: string | null;
   parent_id: string;
   remark: string | null;
   salary: string;
+  shift_end: string | null;
+  shift_start: string | null;
   updated_at: Date | null;
   user_id: number;
   week_off: string | null;
+  working_hours: Decimal | null;
 }
 
 export interface Enquiries {
@@ -400,6 +414,24 @@ export interface Prices {
   min_wt: number;
   rate: string;
   smart_price: number;
+  updated_at: Date | null;
+}
+
+export interface RegisteredCustomers {
+  city: string | null;
+  company_name: string;
+  created_at: Date | null;
+  created_by: number | null;
+  email: string | null;
+  gst_no: string | null;
+  id: Generated<number>;
+  lab_id: number;
+  mobile: string;
+  owner_name: string;
+  show_image_in_card: Generated<number>;
+  show_image_in_card_file: string | null;
+  show_name_in_card: Generated<number>;
+  show_name_input: string | null;
   updated_at: Date | null;
 }
 
@@ -754,6 +786,7 @@ export interface DB {
   countries: Countries;
   coupon_redemptions: CouponRedemptions;
   courses: Courses;
+  customer_category_discounts: CustomerCategoryDiscounts;
   discount_coupons: DiscountCoupons;
   districts: Districts;
   employements: Employements;
@@ -770,6 +803,7 @@ export interface DB {
   password_resets: PasswordResets;
   permission_actions: PermissionActions;
   prices: Prices;
+  registered_customers: RegisteredCustomers;
   reports: Reports;
   reportsearches: Reportsearches;
   reporttypes: Reporttypes;

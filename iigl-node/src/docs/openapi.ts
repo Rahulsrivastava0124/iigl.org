@@ -1632,6 +1632,39 @@ const document = {
       },
     },
 
+    '/api/transactions/expense': {
+      post: {
+        tags: ['Transactions'],
+        summary: 'Record an expense',
+        description:
+          'Money an employee spent out of what they hold — fuel, a courier, stationery. Staff only; head office and laboratories are refused. Lands **pending** until the employer approves it, exactly as a transfer does: collected money belongs to the laboratory, and nobody writes it off unseen.\n\nThe employer is stored as `received_by`, which here means **approver, not recipient** — that is what lets it use the same receiver-only decision, queue and notification as a transfer. Every balance leaves these rows out of the approver\u2019s credit: the ledger, `/api/transactions/wallet` and the dashboard. Once approved it comes off the employee\u2019s wallet and off the laboratory\u2019s Employee wallet.\n\nNo ceiling at the wallet balance: somebody who paid a courier from their own pocket is owed it, and approval is the check.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['amount', 'remark'],
+                properties: {
+                  amount: { type: 'number', exclusiveMinimum: 0 },
+                  remark: { type: 'string', maxLength: 255, description: 'What the money was spent on.' },
+                  pay_mode: { type: 'string', default: 'cash' },
+                  transaction_no: { type: ['string', 'null'] },
+                  attachment: { type: ['string', 'null'], description: 'A photograph of the bill, from POST /api/uploads/screenshot.' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Recorded, pending the employer\u2019s approval.' },
+          400: errorResponse('No amount, no description, or no employer to approve it.'),
+          ...guarded,
+          403: errorResponse('Head office and laboratories do not record expenses.'),
+        },
+      },
+    },
+
     '/api/transactions': {
       get: {
         tags: ['Transactions'],
@@ -2120,7 +2153,7 @@ const document = {
         tags: ['Dashboard'],
         summary: 'Counts and totals',
         description:
-          'Scoped to the caller’s laboratory, or every lab for an administrator. Today is matched against order_date, which is dd-mm-yyyy text rather than a date column.\n\nThe three `_today` money figures are the same three columns over the same set of orders — delivered, dated today — so `sale_today` less `paid_today` is `dues_today`. The Laravel dashboard read its today’s-paid from `transactions` and its today’s-sale from `delivery_date`, and the two never reconciled against each other.',
+          'Scoped to the caller’s laboratory, or every lab for an administrator. Today is matched against order_date, which is dd-mm-yyyy text rather than a date column.\n\n`sale` is what the orders were billed with GST — `payable_amt` plus 18%, truncated as the order page does — so it is measured on the same terms as `paid` and `dues`. The three `_today` money figures are the same three columns over the same set of orders — delivered, dated today — so `sale_today` less `paid_today` is `dues_today`. The Laravel dashboard read its today’s-paid from `transactions` and its today’s-sale from `delivery_date`, and the two never reconciled against each other.',
         responses: {
           200: {
             description: 'Summary.',

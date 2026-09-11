@@ -35,6 +35,7 @@ import ReportEdit from './pages/ReportEdit';
 import NewOrder from './pages/NewOrder';
 import Customers from './pages/Customers';
 import CustomerOrders from './pages/CustomerOrders';
+import RegisteredCustomerForm from './pages/RegisteredCustomerForm';
 import Students from './pages/Students';
 import StudentCreate from './pages/StudentCreate';
 import StudentEdit from './pages/StudentEdit';
@@ -145,6 +146,11 @@ function Routed() {
         <Route path="/customers" element={<Customers />} />
         {/* One customer's orders and what they came to. Keyed by mobile, which
             is what a customer is here. */}
+        {/* A registered customer: the record, and the terms they are given.
+            `new` and `:id/edit` sit beside `:mobile` without colliding — the
+            router ranks a static segment first, and `:id/edit` is two deep. */}
+        <Route path="/customers/new" element={<RegisteredCustomerForm />} />
+        <Route path="/customers/:id/edit" element={<RegisteredCustomerForm />} />
         <Route path="/customers/:mobile" element={<CustomerOrders />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/laboratories" element={<Laboratories />} />

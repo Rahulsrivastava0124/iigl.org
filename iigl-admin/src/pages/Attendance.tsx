@@ -14,7 +14,7 @@ import { ConfirmDialog, Panel, StateChip } from '../components/ui';
 import MessageCompose from '../components/MessageCompose';
 import StaffInbox, { type StaffMessage } from '../components/StaffInbox';
 import MessageIcon from '@mui/icons-material/ForumOutlined';
-import { attendanceDay, dayKey, holidayDay, hours, isOpen, minutesWorked, noteDay, noteOn, noteTip, time, weekOffDay, weekOffDays } from '../lib/attendance';
+import { absentDay, absentFrom, attendanceDay, shiftOf, dayKey, holidayDay, hours, isOpen, minutesWorked, noteDay, noteOn, noteTip, time, weekOffDay, weekOffDays } from '../lib/attendance';
 import type { Day, Holiday } from '../lib/attendance';
 import type { Paged } from '../lib/api';
 
@@ -31,6 +31,10 @@ interface StaffRow {
   fullname: string;
   /** The days of the week their posting is off, `"0,6"` style. */
   week_off: string | null;
+  joining_date: string | null;
+  created_at: string | null;
+  working_hours: string | null;
+  late_after: string | null;
 }
 
 /**
@@ -79,14 +83,26 @@ export default function Attendance() {
     your own, which is the one case that list does not cover: staff cannot read
     it, and it is the only screen they open.
   */
-  const mine = useFetch<{ data: { employment: { week_off: string | null } | null } }>(
-    empId === 'me' ? '/users/me' : null,
-  );
-  const weekOff = weekOffDays(
+  const mine = useFetch<{
+    data: {
+      created_at: string | null;
+      employment: {
+        week_off: string | null;
+        joining_date: string | null;
+        working_hours: string | null;
+        late_after: string | null;
+      } | null;
+    };
+  }>(empId === 'me' ? '/users/me' : null);
+  const other = (staff.data?.data ?? []).find((r) => String(r.id) === empId);
+  const weekOff = weekOffDays(empId === 'me' ? mine.data?.data.employment?.week_off : other?.week_off);
+  /** How long their day is and when they are late, to mark the month against. */
+  const shift = shiftOf(empId === 'me' ? mine.data?.data.employment : other);
+  /** The first day an empty square counts as an absence. */
+  const since =
     empId === 'me'
-      ? mine.data?.data.employment?.week_off
-      : (staff.data?.data ?? []).find((r) => String(r.id) === empId)?.week_off,
-  );
+      ? absentFrom(mine.data?.data.employment?.joining_date, mine.data?.data.created_at)
+      : absentFrom(other?.joining_date, other?.created_at);
   const holidayOn = new Map((holidays.data?.data ?? []).map((h) => [h.date, h]));
 
   const [busy, setBusy] = useState(false);
@@ -313,7 +329,7 @@ export default function Attendance() {
           */
           const said = notes.length > 0 ? ` · ${noteTip(notes)}` : '';
           if (record) {
-            const day = attendanceDay(record, shut);
+            const day = attendanceDay(record, shut, shift);
             return {
               ...day,
               tooltip: `${day.tooltip ?? ''}${off ? ' · week off' : ''}${said}`,
@@ -327,7 +343,9 @@ export default function Attendance() {
             const day = weekOffDay();
             return { ...day, tooltip: `${day.tooltip ?? ''}${said}` };
           }
-          return notes.length > 0 ? noteDay(notes) : null;
+          if (notes.length > 0) return noteDay(notes);
+          // Nothing punched, nothing said, and they were due in: red.
+          return absentDay(date, since, shift.lateAfter);
         }}
         /* No legend: the cells carry their own times, and the colour follows
            them. The note below is the month's own summary, which says
@@ -340,7 +358,7 @@ export default function Attendance() {
               : `${rows.length} of ${daysInMonth} days · ${hours(workedMinutes)} worked` +
                 (stillOpen > 0 ? ` · ${stillOpen} still open` : '') +
                 // Said out loud, because the difference between "twenty days"
-                // and "twenty-two" is usually the two pink squares.
+                // and "twenty-two" is usually the two yellow squares.
                 (holidayOn.size > 0
                   ? ` · ${holidayOn.size} ${holidayOn.size === 1 ? 'holiday' : 'holidays'}`
                   : '')

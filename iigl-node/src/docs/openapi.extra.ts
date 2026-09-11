@@ -1464,6 +1464,91 @@ export const extraPaths: Record<string, unknown> = {
     },
   },
 
+  '/api/customers/accounts': {
+    get: {
+      tags: ['Customers'],
+      summary: 'Registered customers',
+      description:
+        'Every stored registered customer, and every GST customer known only from an order who has not been registered yet — both are real, and dropping either would make the list wrong in a different direction. Matched on mobile. A stored row carries `account_id`, company, owner, city and `discounts`; an order-derived row has `account_id: null` and no terms. Order totals are joined by mobile. A laboratory sees its own; head office sees all.',
+      parameters: [
+        { name: 'page', in: 'query', schema: { type: 'integer' } },
+        { name: 'per_page', in: 'query', schema: { type: 'integer', maximum: 200 } },
+        { name: 'q', in: 'query', schema: { type: 'string' }, description: 'Matches company, owner, name, mobile, email, city or GST.' },
+      ],
+      responses: { 200: ok('A page of registered customers.'), ...guarded },
+    },
+    post: {
+      tags: ['Customers'],
+      summary: 'Register a customer',
+      description:
+        'A laboratory registers its own customers and its staff register them for it. Head office belongs to no laboratory and must send `lab_id`. A GST number is required: registered has always meant one here. The discount is stored per category and **not yet applied to an order** — pricing is ported behaviour verified against Laravel, and billing a discount is its own change.',
+      requestBody: body(
+        {
+          lab_id: { type: 'integer', description: 'Head office only.' },
+          company_name: { type: 'string' },
+          owner_name: { type: 'string' },
+          mobile: { type: 'string', pattern: '^\\d{10}$' },
+          email: str,
+          city: str,
+          gst_no: { type: 'string' },
+          show_name_in_card: { type: 'boolean', description: 'Print the customer’s name on their certificates. The same field an order carries, so an order can copy it.' },
+          show_name_input: { type: ['string', 'null'], description: 'The name to print. Cleared when show_name_in_card is off.' },
+          show_image_in_card: { type: 'boolean', description: 'Print an image on their certificates.' },
+          show_image_in_card_file: { type: ['string', 'null'], description: 'The uploaded image path. Cleared when show_image_in_card is off.' },
+          discounts: { type: 'array', items: { type: 'object', properties: { category_id: int, discount_type: { type: 'string', enum: ['percent', 'per_pc'] }, value: { type: 'number', minimum: 0 } } }, description: 'One row per category. A value of 0 removes that category’s discount; a percentage over 100 is refused. Absent on PATCH leaves the terms alone, and a list replaces them whole.' },
+        },
+        ['company_name', 'owner_name', 'mobile', 'gst_no'],
+      ),
+      responses: {
+        201: ok('Registered.'),
+        400: err('A required field is missing or invalid.'),
+        409: err('That contact number is already a registered customer of this laboratory.'),
+        ...guarded,
+      },
+    },
+  },
+
+  '/api/customers/accounts/{id}': {
+    get: {
+      tags: ['Customers'],
+      summary: 'One registered customer, with their discounts',
+      parameters: [idParam],
+      responses: { 200: ok('The customer.'), 404: err('Customer not found.'), ...guarded },
+    },
+    patch: {
+      tags: ['Customers'],
+      summary: 'Update a registered customer',
+      description: 'Only the fields present are changed. `discounts`, when sent, replaces the terms whole.',
+      parameters: [idParam],
+      requestBody: body({
+        company_name: { type: 'string' },
+        owner_name: { type: 'string' },
+        mobile: { type: 'string' },
+        email: str,
+        city: str,
+        gst_no: { type: 'string' },
+        show_name_in_card: { type: 'boolean', description: 'Print the customer’s name on their certificates. The same field an order carries, so an order can copy it.' },
+        show_name_input: { type: ['string', 'null'], description: 'The name to print. Cleared when show_name_in_card is off.' },
+        show_image_in_card: { type: 'boolean', description: 'Print an image on their certificates.' },
+        show_image_in_card_file: { type: ['string', 'null'], description: 'The uploaded image path. Cleared when show_image_in_card is off.' },
+        discounts: { type: 'array', items: { type: 'object', properties: { category_id: int, discount_type: { type: 'string', enum: ['percent', 'per_pc'] }, value: { type: 'number', minimum: 0 } } }, description: 'One row per category. A value of 0 removes that category’s discount; a percentage over 100 is refused. Absent on PATCH leaves the terms alone, and a list replaces them whole.' },
+      }),
+      responses: {
+        200: ok('Updated.'),
+        404: err('Customer not found.'),
+        409: err('That contact number is already registered here.'),
+        ...guarded,
+      },
+    },
+    delete: {
+      tags: ['Customers'],
+      summary: 'Remove a registered customer',
+      description: 'The record and its terms. Their orders are untouched: removing the registration does not unbill anybody.',
+      parameters: [idParam],
+      responses: { 200: ok('Removed.'), 404: err('Customer not found.'), ...guarded },
+    },
+  },
+
   '/api/customers/verifiers': {
     get: {
       tags: ['Customers'],
@@ -2267,6 +2352,22 @@ export const extraPaths: Record<string, unknown> = {
           description:
             'The days of the week this posting is off, as 0 Sunday through 6 Saturday — the numbering Date.getDay() and MySQL both count in, so nothing translates. A list or a comma-separated string; sorted and de-duplicated on the way in. Empty means no fixed day off, which is what every employment said before the column existed. On the posting rather than the account: somebody moving to a laboratory that closes on a different day has a new week off, and the old row should keep saying what was true while it ran.',
         },
+        working_hours: {
+          type: ['number', 'string', 'null'],
+          description: 'Hours in a full day for this posting, e.g. 9 or 8.5; more than 0 and at most 24. A closed day with fewer hours worked is marked short on the calendar. Blank or null is not set.',
+        },
+        late_after: {
+          type: ['string', 'null'],
+          description: 'HH:MM. A punch-in after this time is marked late on the calendar, and an empty day counts as absent once it has passed. Stored as HH:MM:00. Blank or null is not set.',
+        },
+        shift_start: {
+          type: ['string', 'null'],
+          description: 'HH:MM, when the day starts. Sent with shift_end — both or neither. When either is given, working_hours is written from the two (a shift ending at or before its start runs past midnight), overruling any working_hours in the same body. Both blank or null clears the shift and the hours.',
+        },
+        shift_end: {
+          type: ['string', 'null'],
+          description: 'HH:MM, when the day ends. See shift_start.',
+        },
         },
         ['lab_id'],
       ),
@@ -2282,7 +2383,7 @@ export const extraPaths: Record<string, unknown> = {
       tags: ['Users'],
       summary: 'Change the terms of a posting',
       description:
-        'The salary, the joining date and the week off live on the employment, not on the account, so PATCH /api/users/{id} cannot reach them. Moving somebody to another employer is not this — that is ending one employment and starting another, which keeps the history.',
+        'The salary, the joining date, the week off, the working hours and the late time live on the employment, not on the account, so PATCH /api/users/{id} cannot reach them. Moving somebody to another employer is not this — that is ending one employment and starting another, which keeps the history.',
       parameters: [idParam],
       requestBody: body({
         salary: { type: 'number' },
@@ -2294,10 +2395,26 @@ export const extraPaths: Record<string, unknown> = {
           description:
             'The days of the week this posting is off, as 0 Sunday through 6 Saturday — the numbering Date.getDay() and MySQL both count in, so nothing translates. A list or a comma-separated string; sorted and de-duplicated on the way in. Empty means no fixed day off, which is what every employment said before the column existed. On the posting rather than the account: somebody moving to a laboratory that closes on a different day has a new week off, and the old row should keep saying what was true while it ran.',
         },
+        working_hours: {
+          type: ['number', 'string', 'null'],
+          description: 'Hours in a full day for this posting, e.g. 9 or 8.5; more than 0 and at most 24. A closed day with fewer hours worked is marked short on the calendar. Blank or null is not set.',
+        },
+        late_after: {
+          type: ['string', 'null'],
+          description: 'HH:MM. A punch-in after this time is marked late on the calendar, and an empty day counts as absent once it has passed. Stored as HH:MM:00. Blank or null is not set.',
+        },
+        shift_start: {
+          type: ['string', 'null'],
+          description: 'HH:MM, when the day starts. Sent with shift_end — both or neither. When either is given, working_hours is written from the two (a shift ending at or before its start runs past midnight), overruling any working_hours in the same body. Both blank or null clears the shift and the hours.',
+        },
+        shift_end: {
+          type: ['string', 'null'],
+          description: 'HH:MM, when the day ends. See shift_start.',
+        },
       }),
       responses: {
         200: ok('Saved.'),
-        400: err('Nothing to update, or a salary or date that is not valid.'),
+        400: err('Nothing to update, or a salary, date, working hours or late time that is not valid.'),
         404: err('Not currently employed anywhere.'),
         ...guarded,
       },

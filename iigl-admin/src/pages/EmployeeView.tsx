@@ -15,7 +15,7 @@ import { fileUrl } from '../lib/config';
 import { useFetch } from '../lib/useFetch';
 import MonthCalendar, { monthRange, thisMonth } from '../components/MonthCalendar';
 import { Panel, Tile, YesNo } from '../components/ui';
-import { attendanceDay, dayKey, holidayDay, hours, isOpen, minutesWorked, noteDay, noteOn, noteTip, weekOffDay, weekOffDays } from '../lib/attendance';
+import { absentDay, absentFrom, attendanceDay, shiftOf, dayKey, holidayDay, hours, isOpen, minutesWorked, noteDay, noteOn, noteTip, weekOffDay, weekOffDays } from '../lib/attendance';
 import AttendanceEdit from '../components/AttendanceEdit';
 import StaffInbox, { type StaffMessage } from '../components/StaffInbox';
 import SalaryHistory from '../components/SalaryHistory';
@@ -30,6 +30,10 @@ interface Employment {
   salary: string;
   /** The days of the week this posting is off, `"0,6"` style. */
   week_off: string | null;
+  working_hours: string | null;
+  late_after: string | null;
+  shift_start: string | null;
+  shift_end: string | null;
   lab_id: number | null;
   lab_name: string | null;
   lab_mobile: string | null;
@@ -38,6 +42,7 @@ interface Employment {
 
 interface Employee {
   id: number;
+  created_at: string | null;
   empid: string | null;
   fullname: string;
   mobile: string;
@@ -122,6 +127,9 @@ export default function EmployeeView() {
 
   /** The days of the week this posting is off, as day numbers. */
   const weekOff = weekOffDays(person.data?.data?.employment?.week_off);
+  const shift = shiftOf(person.data?.data?.employment);
+  /** The first day an empty square on their calendar counts as an absence. */
+  const since = absentFrom(person.data?.data?.employment?.joining_date, person.data?.data?.created_at);
 
   const roleName =
     p && p.role_id !== null
@@ -156,13 +164,13 @@ export default function EmployeeView() {
             <Avatar
               src={fileUrl(p?.profile_photo) ?? undefined}
               sx={{
-                width: 26,
-                height: 26,
-                mr: 1,
+                width: 44,
+                height: 44,
+                mr: 1.25,
                 display: 'inline-flex',
                 verticalAlign: 'middle',
                 bgcolor: 'primary.main',
-                fontSize: 11,
+                fontSize: 16,
               }}
             >
               {initials(p?.fullname ?? '')}
@@ -179,7 +187,7 @@ export default function EmployeeView() {
           <Box
             sx={{
               display: 'grid',
-              gridTemplateColumns: { xs: 'repeat(3, auto)', md: 'repeat(5, auto)' },
+              gridTemplateColumns: { xs: 'repeat(3, auto)', md: 'repeat(6, auto)' },
               gap: 2,
             }}
           >
@@ -190,6 +198,14 @@ export default function EmployeeView() {
               {p?.employment?.salary && Number(p.employment.salary) > 0
                 ? `₹${Number(p.employment.salary).toLocaleString('en-IN')}`
                 : '—'}
+            </Fact>
+            <Fact label="Shift">
+              {shift.start && shift.end
+                ? `${shift.start}–${shift.end} (${shift.workingHours ?? ''}h)`
+                : shift.workingHours
+                  ? `${shift.workingHours}h`
+                  : '—'}
+              {shift.lateAfter ? ` · late after ${shift.lateAfter}` : ''}
             </Fact>
             <Fact label="Active">
               <YesNo on={p?.is_active ?? 0} />
@@ -264,7 +280,7 @@ export default function EmployeeView() {
           */
           const said = notes.length > 0 ? ` · ${noteTip(notes)}` : '';
           if (record) {
-            const day = attendanceDay(record, shut);
+            const day = attendanceDay(record, shut, shift);
             return {
               ...day,
               tooltip: `${day.tooltip ?? ''}${off ? ' · their week off' : ''}${said}`,
@@ -278,7 +294,9 @@ export default function EmployeeView() {
             const day = weekOffDay();
             return { ...day, tooltip: `${day.tooltip ?? ''}${said}` };
           }
-          return notes.length > 0 ? noteDay(notes) : null;
+          if (notes.length > 0) return noteDay(notes);
+          // Nothing punched, nothing said, and they were due in: red.
+          return absentDay(date, since, shift.lateAfter);
         }}
         /*
           Any day that has already happened, recorded or not. A day nobody

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Box,
+  Chip,
   MenuItem,
   Table,
   TableBody,
@@ -70,17 +71,26 @@ export default function StudentCertificates() {
   const toast = useToast();
   const [params, setParams] = useSearchParams();
   const page = Number(params.get('page') ?? 1);
+  /** Set when opened from a registration: that one student's certificates. */
+  const studentId = params.get('student_id');
+  /** Paging and searching keep the student filter rather than dropping it. */
+  const keep = (extra: Record<string, string> = {}) =>
+    setParams({ ...(studentId ? { student_id: studentId } : {}), ...extra });
 
   const [search, setSearch] = useState('');
   const term = useDebounced(search);
 
   const query = new URLSearchParams({ page: String(page), per_page: '25' });
   if (term.trim()) query.set('q', term.trim());
+  if (studentId) query.set('student_id', studentId);
 
   const source = useFetch<Paged<Certificate>>(`/student-certificates?${query}`);
   const pending = useFetch<{ data: Pending[] }>('/student-certificates/pending');
   const rows = source.data?.data ?? [];
-  const waiting = pending.data?.data ?? [];
+  const waiting = (pending.data?.data ?? []).filter(
+    (w) => !studentId || String(w.student_id) === studentId,
+  );
+  const who = rows[0]?.student_name ?? waiting[0]?.student_name ?? 'One student';
 
   const [issuing, setIssuing] = useState<Pending | null>(null);
   const [editing, setEditing] = useState<Certificate | null>(null);
@@ -241,21 +251,33 @@ export default function StudentCertificates() {
         footer={
           <Pager
             meta={source.data?.meta}
-            onPage={(n) => setParams(n > 1 ? { page: String(n) } : {})}
+            onPage={(n) => keep(n > 1 ? { page: String(n) } : {})}
           />
         }
         actions={
-          <SearchField
-            placeholder="Certificate no, student, course…"
-            value={search}
-            onChange={(v) => {
-              setSearch(v);
-              setParams({});
-            }}
-          />
+          <>
+            {studentId && <Chip label={`${who} only`} onDelete={() => setParams({})} />}
+            <SearchField
+              placeholder="Certificate no, student, course…"
+              value={search}
+              onChange={(v) => {
+                setSearch(v);
+                keep();
+              }}
+            />
+          </>
         }
       >
-        <TableFrame loading={source.loading} error={source.error} empty={rows.length === 0}>
+        <TableFrame
+          loading={source.loading}
+          error={source.error}
+          empty={rows.length === 0}
+          emptyText={
+            studentId
+              ? 'No certificate issued to this student yet. One is issued when an enrolment is completed.'
+              : undefined
+          }
+        >
           <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>

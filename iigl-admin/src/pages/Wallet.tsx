@@ -1,9 +1,14 @@
 import { useState } from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box, Button, Grid, MenuItem, Stack, TextField, Typography } from '@mui/material';
+import ExpenseIcon from '@mui/icons-material/ReceiptOutlined';
+import SendIcon from '@mui/icons-material/SendOutlined';
 import { useFetch } from '../lib/useFetch';
-import { useAuth } from '../lib/auth';
-import { isSuper } from '../lib/portal';
-import { Notice, Pager } from '../components/ui';
+import { api } from '../lib/api';
+import { messageOf, useAuth } from '../lib/auth';
+import { isLab, isSuper } from '../lib/portal';
+import { Dialog, Notice, Pager, hint, money } from '../components/ui';
+import { useToast } from '../components/Toast';
+import FileField from '../components/FileField';
 import { LedgerTable, LedgerTotals, type LedgerPage } from '../components/Ledger';
 
 /**
@@ -34,8 +39,80 @@ export default function Wallet() {
   const entries = account?.entries ?? [];
   const total = account?.total ?? 0;
 
+  /*
+    What an employee does with the money they hold: spend some of it on the
+    laboratory's behalf, or hand it in. Both wait for the employer's approval,
+    and neither moves the balance until they have it.
+
+    Staff only. Head office and a laboratory have no employer to hand money to
+    or to approve an expense — a laboratory pays head office through Commission.
+  */
+  const toast = useToast();
+  const isStaff = Boolean(user) && !isSuper(user) && !isLab(user);
+
+  type Kind = 'expense' | 'transfer';
+  const [kind, setKind] = useState<Kind | null>(null);
+  const [payMode, setPayMode] = useState('cash');
+  const [amount, setAmount] = useState('');
+  const [remark, setRemark] = useState('');
+  const [reference, setReference] = useState('');
+  const [proof, setProof] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const open = (next: Kind) => {
+    setKind(next);
+    setPayMode('cash');
+    setAmount('');
+    setRemark('');
+    setReference('');
+    setProof(null);
+  };
+
+  // Cash was counted and leaves nothing behind; everything else has a reference.
+  const traceable = payMode !== 'cash';
+  const value = Number(amount);
+  const ready = value > 0 && (kind !== 'expense' || remark.trim() !== '');
+
+  const submit = async () => {
+    if (!kind || !ready) return;
+    setBusy(true);
+    try {
+      const body = {
+        amount: value,
+        pay_mode: payMode,
+        transaction_no: traceable ? reference.trim() || null : null,
+        remark: remark.trim() || null,
+        attachment: proof,
+      };
+      if (kind === 'expense') {
+        await api.post('/transactions/expense', body);
+        toast.ok('Expense sent for approval.');
+      } else {
+        await api.post('/transactions', body);
+        toast.ok('Sent to your laboratory for approval.');
+      }
+      setKind(null);
+      ledger.reload();
+    } catch (e) {
+      toast.error(messageOf(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <>
+      {isStaff && (
+        <Stack direction="row" spacing={1} sx={{ mb: 2, justifyContent: 'flex-end' }}>
+          <Button variant="outlined" startIcon={<ExpenseIcon />} onClick={() => open('expense')}>
+            Add Expense
+          </Button>
+          <Button variant="contained" startIcon={<SendIcon />} onClick={() => open('transfer')}>
+            Send to Laboratory
+          </Button>
+        </Stack>
+      )}
+
       <LedgerTotals account={account} />
 
       {/*
@@ -76,6 +153,91 @@ export default function Wallet() {
           leave it unchanged.
         </Typography>
       </Box>
+
+      {kind && (
+        <Dialog
+          title={kind === 'expense' ? 'Add Expense' : 'Send to Laboratory'}
+          onClose={() => setKind(null)}
+          onSubmit={submit}
+          submitLabel={kind === 'expense' ? 'Send for approval' : 'Send'}
+          busy={busy}
+          disabled={!ready}
+        >
+          {/* The method first: it decides whether there is a reference to give. */}
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                select
+                label="Payment method"
+                value={payMode}
+                onChange={(e) => setPayMode(e.target.value)}
+              >
+                <MenuItem value="cash">Cash</MenuItem>
+                <MenuItem value="upi">UPI</MenuItem>
+                <MenuItem value="card">Card</MenuItem>
+                <MenuItem value="bank">Bank transfer</MenuItem>
+              </TextField>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                label="Amount"
+                type="number"
+                required
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                slotProps={{
+                  htmlInput: { min: 0, step: '0.01' },
+                  // What they hold, as a guide rather than a limit: somebody
+                  // who paid a courier from their own pocket is still owed it.
+                  ...hint(`You currently hold ${money(account?.balance ?? 0)}.`),
+                }}
+              />
+            </Grid>
+
+            <Grid size={12}>
+              <TextField
+                label={kind === 'expense' ? 'What was it for' : 'Note'}
+                placeholder={kind === 'expense' ? 'Eg. Courier to Kolkata' : 'Optional'}
+                value={remark}
+                onChange={(e) => setRemark(e.target.value)}
+                required={kind === 'expense'}
+                slotProps={{ htmlInput: { maxLength: 255 } }}
+              />
+            </Grid>
+
+            {traceable && (
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  label="Reference number"
+                  value={reference}
+                  onChange={(e) => setReference(e.target.value)}
+                  slotProps={hint('The UPI, card or bank reference.')}
+                />
+              </Grid>
+            )}
+
+            {/* A bill is worth keeping for any expense, cash included — cash
+                is exactly when the receipt is the only record. A transfer only
+                has proof to attach when it was not cash. */}
+            {(kind === 'expense' || traceable) && (
+              <Grid size={12}>
+                <FileField
+                  label={kind === 'expense' ? 'Bill photo' : 'Payment proof'}
+                  bucket="screenshot"
+                  accept="image/*,application/pdf"
+                  value={proof}
+                  onChange={setProof}
+                  helperText={
+                    kind === 'expense'
+                      ? 'The receipt your laboratory approves this against.'
+                      : 'The screenshot or receipt your laboratory approves this against.'
+                  }
+                />
+              </Grid>
+            )}
+          </Grid>
+        </Dialog>
+      )}
     </>
   );
 }

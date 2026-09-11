@@ -1,4 +1,5 @@
 import { db } from '../db/index.js';
+import { refreshOrderMoney } from './pricing.service.js';
 import { badRequest, conflict } from '../lib/errors.js';
 import type { SessionUser } from '../middleware/auth.js';
 
@@ -358,6 +359,10 @@ export async function updateOrder(orderId: number, input: UpdateOrderInput) {
           .execute();
       }
     }
+
+    // Items added, removed or re-quantified change what the order is billed
+    // for. A customer-details edit returned above and never reaches this.
+    await refreshOrderMoney(orderId, trx);
 
     return orderId;
   });

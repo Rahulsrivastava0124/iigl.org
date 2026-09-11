@@ -8,6 +8,7 @@ import {
   accruedByLab,
   COMMISSION_TYPE,
   TRANSACTION_TYPE,
+  notAnExpense,
 } from '../services/commission.service.js';
 
 export const dashboardRoutes = Router();
@@ -23,6 +24,18 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
  * dd-mm-yyyy string, not a date column, so "today" is a string comparison —
  * matching how the PHP queries it.
  */
+/**
+ * What an order was billed, GST included — the figure its own page shows and
+ * the one `paid_amount` and `dues_amount` are measured against.
+ *
+ * `payable_amt` is before GST. Summed as the sale, it put 950 beside 1,000
+ * paid and 121 due on an order billed 1,121: the dues tile, sale less paid,
+ * then read nothing owed, and a sale smaller than its own takings. `TRUNCATE`
+ * because `gstOf` truncates, so a sum of these is a sum of real bills.
+ */
+const billed = (column = 'payable_amt') =>
+  sql<number>`sum(truncate(${sql.ref(column)} * 118 / 100, 0))`;
+
 dashboardRoutes.get(
   '/summary',
   wrap(async (req, res) => {
@@ -78,7 +91,7 @@ dashboardRoutes.get(
       let q = scopeOrders(
         db
           .selectFrom('orders')
-          .select(db.fn.sum<number>(column).as('total'))
+          .select(column === 'payable_amt' ? billed().as('total') : db.fn.sum<number>(column).as('total'))
           .where((eb) =>
             eb.or([eb('status', '=', 'delivered'), eb('payable_amt', 'is not', null)]),
           ),
@@ -199,12 +212,14 @@ dashboardRoutes.get(
      */
     const walletBalance = async () => {
       const side = async (column: 'received_by' | 'send_by') => {
-        const row = await db
+        const base = db
           .selectFrom('transactions')
           .select(db.fn.sum<number>('amount').as('total'))
           .where(column, '=', req.user.id)
-          .where('status', '=', TX_STATUS.APPROVED)
-          .executeTakeFirstOrThrow();
+          .where('status', '=', TX_STATUS.APPROVED);
+        // An expense addressed to head office is one of its own staff's that
+        // it approves. Nothing arrives, so it is not a credit.
+        const row = await (column === 'received_by' ? base.where(notAnExpense) : base).executeTakeFirstOrThrow();
         return Number(row.total ?? 0);
       };
       const [credit, debit] = await Promise.all([side('received_by'), side('send_by')]);
@@ -293,6 +308,28 @@ dashboardRoutes.get(
       };
 
       /**
+       * What this laboratory's staff have spent on approved expenses.
+       *
+       * Out of the money they were holding, so "Employee wallet" has to come down
+       * by it: that tile is what the staff still have in hand, and cash spent on a
+       * courier and signed off by the laboratory is no longer in anybody's hand.
+       * Scoped through `employements` exactly as `collectedByStaff` is.
+       */
+      const staffExpensesTotal = async () => {
+        if (!empid) return 0;
+        const row = await db
+          .selectFrom('transactions')
+          .select(db.fn.sum<number>('transactions.amount').as('total'))
+          .where('transactions.transaction_type', '=', TRANSACTION_TYPE.EXPENSE)
+          .where('transactions.status', '=', TX_STATUS.APPROVED)
+          .where('transactions.send_by', 'in', (eb) =>
+            eb.selectFrom('employements').select('user_id').where('parent_id', '=', empid),
+          )
+          .executeTakeFirstOrThrow();
+        return Number(row.total ?? 0);
+      };
+
+      /**
        * Money the laboratory took at its own counter.
        *
        * `collectedByStaff` reads collections received by the laboratory's
@@ -368,7 +405,7 @@ dashboardRoutes.get(
 
       const saleToday = async () => {
         const row = await live(db.selectFrom('orders'))
-          .select(db.fn.sum<number>('payable_amt').as('total'))
+          .select(billed().as('total'))
           .where('lab_id', '=', labId)
           // Billed today, or handed over today. Paying and delivering are two
           // acts, and an order billed this morning is today's sale whether or
@@ -409,6 +446,7 @@ dashboardRoutes.get(
       };
 
       const [
+        staffExpenses,
         smartGenerated,
         classicGenerated,
         collected,
@@ -421,6 +459,7 @@ dashboardRoutes.get(
         todayPaidLab,
         rate,
       ] = await Promise.all([
+        staffExpensesTotal(),
         generated('smart_card'),
         generated('classic_card'),
         collectedByStaff(),
@@ -480,7 +519,7 @@ dashboardRoutes.get(
         // Staff-held money only, and never negative: staff holding less than
         // has been transferred in is a float, not a debt. What the laboratory
         // took itself is in its own wallet, not in theirs.
-        employee_wallet: round2(Math.max(0, collected - walletCredit)),
+        employee_wallet: round2(Math.max(0, collected - walletCredit - staffExpenses)),
         my_wallet: myWallet,
         admin_commission: adminCommission,
         today: {
@@ -545,27 +584,37 @@ dashboardRoutes.get(
         return Number(row.n);
       };
 
-      const saleMine = async (todayOnly = false) => {
+      /**
+       * Billed, paid and due on my orders, as each order's own page has them.
+       *
+       * Paid is what was paid *on* the order, whoever took it. Reading it off
+       * the payments I received myself — right for the wallet, below — showed
+       * an order the laboratory had taken the money for as paid nothing, and
+       * its whole bill as due.
+       */
+      const moneyMine = async (todayOnly = false) => {
         const row = await myOrders(
-          db.selectFrom('orders').select(db.fn.sum<number>('orders.payable_amt').as('total')),
+          db
+            .selectFrom('orders')
+            .select([
+              billed('orders.payable_amt').as('sale'),
+              db.fn.sum<number>('orders.paid_amount').as('paid'),
+              db.fn.sum<number>('orders.dues_amount').as('dues'),
+            ])
+            .where('orders.payable_amt', 'is not', null),
           todayOnly,
         ).executeTakeFirstOrThrow();
-        return Number(row.total ?? 0);
+        return { sale: Number(row.sale ?? 0), paid: Number(row.paid ?? 0), dues: Number(row.dues ?? 0) };
       };
 
-      /** Money I took in. Dated by when it arrived, as the laboratory's is. */
-      const paidMine = async (todayOnly = false) => {
-        let q = db
+      /** Money I took in with my own hands: what my wallet starts from. */
+      const paidMine = async () => {
+        const row = await db
           .selectFrom('transactions')
           .select(db.fn.sum<number>('amount').as('total'))
           .where('transaction_type', '=', TRANSACTION_TYPE.ORDER_COLLECTION)
-          .where('received_by', '=', me);
-        if (todayOnly) {
-          q = q
-            .where('created_at', '>=', startOfToday)
-            .where('created_at', '<', startOfTomorrow);
-        }
-        const row = await q.executeTakeFirstOrThrow();
+          .where('received_by', '=', me)
+          .executeTakeFirstOrThrow();
         return Number(row.total ?? 0);
       };
 
@@ -625,6 +674,18 @@ dashboardRoutes.get(
         return Number(row.total ?? 0);
       };
 
+      /** Approved expenses I recorded: money spent out of what I hold. */
+      const expensesMine = async () => {
+        const row = await db
+          .selectFrom('transactions')
+          .select(db.fn.sum<number>('amount').as('total'))
+          .where('transaction_type', '=', TRANSACTION_TYPE.EXPENSE)
+          .where('send_by', '=', me)
+          .where('status', '=', TX_STATUS.APPROVED)
+          .executeTakeFirstOrThrow();
+        return Number(row.total ?? 0);
+      };
+
       const [
         ordersTaken,
         activeMine,
@@ -632,16 +693,16 @@ dashboardRoutes.get(
         classicCardsMine,
         smartReportsMine,
         classicReportsMine,
-        saleAll,
+        moneyAll,
         paidAll,
         transferred,
         walletCredit,
+        expensesSpent,
         todayOrders,
         todayActiveMine,
         todayCards,
         todayClassicCards,
-        todaySaleMine,
-        todayPaidMine,
+        moneyToday,
       ] = await Promise.all([
         countMine(),
         countMine(false, 'preparing'),
@@ -649,16 +710,16 @@ dashboardRoutes.get(
         cardsMine('classic_card'),
         reportsMine('smart_card'),
         reportsMine('classic_card'),
-        saleMine(),
+        moneyMine(),
         paidMine(),
         transferredMine(),
         walletInMine(),
+        expensesMine(),
         countMine(true),
         countMine(true, 'preparing'),
         cardsMine('smart_card', true),
         cardsMine('classic_card', true),
-        saleMine(true),
-        paidMine(true),
+        moneyMine(true),
       ]);
 
       return {
@@ -668,10 +729,9 @@ dashboardRoutes.get(
         smart_generated: smartReportsMine,
         classic_generated: classicReportsMine,
         active: activeMine,
-        sale: round2(saleAll),
-        paid: round2(paidAll),
-        // Floored: taking in more than has been billed is a credit, not a debt.
-        dues: round2(Math.max(0, saleAll - paidAll)),
+        sale: round2(moneyAll.sale),
+        paid: round2(moneyAll.paid),
+        dues: round2(moneyAll.dues),
         transferred: round2(transferred),
         /*
           What they are still holding: what they took in, plus any float handed
@@ -682,14 +742,17 @@ dashboardRoutes.get(
           hands money to their employer — so every transfer they made left the
           tile unchanged and the figure only ever grew.
         */
-        wallet: round2(paidAll + walletCredit - transferred),
+        // Approved expenses come off too: spent on the laboratory's behalf and
+        // signed off, that cash is no longer in their hand.
+        expenses: round2(expensesSpent),
+        wallet: round2(paidAll + walletCredit - transferred - expensesSpent),
         today: {
           orders: todayOrders,
           cards_ordered: todayCards + todayClassicCards,
           active: todayActiveMine,
-          sale: round2(todaySaleMine),
-          paid: round2(todayPaidMine),
-          dues: round2(Math.max(0, todaySaleMine - todayPaidMine)),
+          sale: round2(moneyToday.sale),
+          paid: round2(moneyToday.paid),
+          dues: round2(moneyToday.dues),
         },
       };
     };

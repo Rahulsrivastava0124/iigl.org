@@ -304,6 +304,12 @@ messageRoutes.get(
         'staff_messages.from_user as from_user',
         'staff_messages.to_user as to_user',
         'author.fullname as from_name',
+        // Whose words these are, by role. The bell opens a message on the
+        // sender's employee page only when the sender is somebody the reader
+        // employs; a laboratory's reply to its staff, or head office writing
+        // to a laboratory, has no such page, and opening one showed an empty
+        // record reading "That account is not one of your employees".
+        'author.role_id as from_role_id',
       ]);
 
     if (req.query.from) {

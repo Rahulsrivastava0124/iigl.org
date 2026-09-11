@@ -4,14 +4,9 @@ import {
   Box,
   Button,
   Checkbox,
-  FormControl,
-  FormControlLabel,
-  FormLabel,
   Grid,
   IconButton,
   MenuItem,
-  Radio,
-  RadioGroup,
   Stack,
   Table,
   TableBody,
@@ -31,6 +26,7 @@ import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
 import { hint, Panel } from '../components/ui';
 import FileField from '../components/FileField';
+import YesNoField from '../components/YesNoField';
 import type { Category, Paged } from '../lib/api';
 
 interface Item {
@@ -85,42 +81,6 @@ interface StaffRow {
  */
 const DUES_FORMAT = 'ddd DD MMM YYYY hh:mm A';
 
-/**
- * A yes/no question with whatever answering "yes" then asks for underneath.
- *
- * Two of these sit beside the Assign to field, and the three columns have to
- * line up: a caption above a radio row starts higher than an outlined field's
- * floating label does, which is what made the bottom of this form look ragged.
- * `FormLabel` puts all three on the same first line, and the fixed gap keeps
- * the follow-up control at the same height in both columns.
- */
-function YesNo({
-  label,
-  value,
-  onChange,
-  children,
-}: {
-  label: string;
-  value: boolean;
-  onChange: (value: boolean) => void;
-  children?: React.ReactNode;
-}) {
-  return (
-    <FormControl component="fieldset" fullWidth>
-      <FormLabel
-        component="legend"
-        sx={{ fontSize: 13.5, fontWeight: 600, color: 'text.primary', mb: 0.5 }}
-      >
-        {label}
-      </FormLabel>
-      <RadioGroup row value={value ? '1' : '0'} onChange={(e) => onChange(e.target.value === '1')}>
-        <FormControlLabel value="1" control={<Radio size="small" />} label="Yes" />
-        <FormControlLabel value="0" control={<Radio size="small" />} label="No" />
-      </RadioGroup>
-      <Box sx={{ mt: 1 }}>{children}</Box>
-    </FormControl>
-  );
-}
 
 /**
  * Taking an order at the counter — "Collect New" in the laboratory menu — and
@@ -519,7 +479,7 @@ export default function NewOrder() {
           </Grid>
 
           <Grid size={CELL}>
-            <YesNo
+            <YesNoField
               label="Show Name on Card"
               value={showName}
               onChange={setShowName}
@@ -534,11 +494,11 @@ export default function NewOrder() {
                 disabled={!showName}
                 fullWidth
               />
-            </YesNo>
+            </YesNoField>
           </Grid>
 
           <Grid size={CELL}>
-            <YesNo label="Show Image on Card" value={showImage} onChange={setShowImage}>
+            <YesNoField label="Show Image on Card" value={showImage} onChange={setShowImage}>
               {showImage ? (
                 <FileField
                   label="Picture for the card"
@@ -550,7 +510,7 @@ export default function NewOrder() {
                   fill
                 />
               ) : null}
-            </YesNo>
+            </YesNoField>
           </Grid>
 
         </Grid>

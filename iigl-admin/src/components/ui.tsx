@@ -66,7 +66,8 @@ const TONE_COLOUR = {
   waiting: 'warning',
   refused: 'error',
   plain: 'default',
-  // Material UI has no pink chip. A holiday keeps its own colour on the
+  // Material UI's warning is amber, which already means still open. A
+  // holiday keeps its own yellow on the
   // calendar, where the tone is painted from TONE directly; anywhere a
   // Material component picks the colour it reads as the neutral it is.
   holiday: 'default',
@@ -92,18 +93,19 @@ export const toneColour = (tone: Tone) => TONE_COLOUR[tone];
  * Where somebody is today, for the Employee list.
  *
  * Three states and three colours, because the absence of a punch and a day off
- * are not the same news: grey is nobody has punched in — which at nine in the
- * morning means nothing and at four means something — green is they are here,
- * and red is they asked for the day.
+ * are not the same news: green is they are here, solid red is they asked for
+ * the day, and light red is absent — nobody has punched in. Light rather than
+ * solid because at nine in the morning that means nothing yet and at four it
+ * means something, and it should not read as loudly as a day asked off.
  *
  * Leave is only known where the request was written from the Leave template;
  * one typed from scratch is a request about a day and says nothing about which
  * kind, so it reads as grey rather than guessing.
  */
-export function todayState(state: string | null | undefined): { tone: Tone; label: string } {
+export function todayState(state: string | null | undefined): { tone: Tone; label: string; soft?: boolean } {
   if (state === 'present') return { tone: 'settled', label: 'Present' };
   if (state === 'leave') return { tone: 'refused', label: 'Leave' };
-  return { tone: 'plain', label: 'Not punched' };
+  return { tone: 'refused', label: 'Absent', soft: true };
 }
 
 /** How many certificates on an order item are still to be written. */
@@ -120,16 +122,19 @@ export function remainingState(left: number): { tone: Tone; label: string } {
  * read across, and a solid badge holds its colour at a glance where a hairline
  * outline on white does not. The colours come from TONE — including `plain`,
  * which Material UI would otherwise render as its own undefined grey.
+ *
+ * `soft` paints the tone's light wash with its colour as the text, for a state
+ * that should be seen without shouting.
  */
-export function StateChip({ tone, label }: { tone: Tone; label: string }) {
+export function StateChip({ tone, label, soft = false }: { tone: Tone; label: string; soft?: boolean }) {
   const colour = TONE[tone];
   return (
     <Chip
       size="small"
       label={label}
       sx={{
-        bgcolor: colour.main,
-        color: colour.on,
+        bgcolor: soft ? colour.soft : colour.main,
+        color: soft ? colour.main : colour.on,
         fontWeight: 600,
         letterSpacing: '0.01em',
         borderRadius: 1,

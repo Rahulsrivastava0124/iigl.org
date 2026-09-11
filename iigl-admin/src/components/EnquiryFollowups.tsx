@@ -71,6 +71,13 @@ const OUTCOMES: {
   { id: 'converted', label: 'Converted', tone: 'settled', moves: { enquiry: 'closed', student: 'converted' } },
 ];
 
+/**
+ * The statuses an enquiry ends in. Once an attempt lands it in one of these —
+ * or it is already in one — there is no next attempt to schedule and no status
+ * left to choose, so the dialog stops asking for either.
+ */
+const CLOSING = new Set(['closed', 'converted', 'not_interested']);
+
 const outcomeOf = (id: string) =>
   OUTCOMES.find((o) => o.id === id) ?? { id, label: id, tone: 'plain' as Tone };
 
@@ -219,8 +226,11 @@ export function FollowupDialog({
     id: number;
     name: string;
     status: string;
-    /* Carried only by the course book, and only so a conversion can hand the
-       registration form what the enquiry already knows. */
+    /** The general book's kind. A converted `laboratory` enquiry opens the
+        laboratory registration form. */
+    kind?: string;
+    /* Carried so a conversion can hand the registration form what the enquiry
+       already knows. */
     mobile?: string;
     email?: string | null;
     course_id?: number | null;
@@ -243,7 +253,11 @@ export function FollowupDialog({
   // The suggestion follows the outcome until the status is set by hand.
   const [touched, setTouched] = useState(false);
   const suggested = (outcomeOf(outcome) as { moves?: Record<Book, string | undefined> }).moves?.[book] ?? '';
-  const effective = touched ? status : suggested;
+  // Closed by this attempt, or closed already: nothing to schedule, nothing to
+  // pick. The move is the outcome's own, and a status picked by hand before the
+  // outcome changed is not carried into a closed enquiry.
+  const closing = CLOSING.has(suggested) || CLOSING.has(enquiry.status);
+  const effective = closing ? (CLOSING.has(suggested) ? suggested : '') : touched ? status : suggested;
 
   /*
     A conversion is two things: the attempt that ended in one, and the student
@@ -252,6 +266,9 @@ export function FollowupDialog({
     the form opens carrying what the enquiry already knows.
   */
   const converting = book === 'student' && effective === 'converted';
+  /* The laboratory book's conversion goes straight on to registering the
+     laboratory: somebody who has agreed to open one is registered next. */
+  const registersLab = book === 'enquiry' && enquiry.kind === 'laboratory' && outcome === 'converted';
 
   const save = async (thenRegister = false) => {
     setBusy(true);
@@ -259,18 +276,29 @@ export function FollowupDialog({
       await api.post(BOOKS[book].path(enquiry.id), {
         outcome,
         note: note.trim(),
-        next_follow_up_on: next || null,
+        next_follow_up_on: closing ? null : next || null,
         status: effective || undefined,
       });
       toast.ok(
-        converting
+        converting || registersLab
           ? `${enquiry.name} marked converted.`
           : `Follow-up recorded for ${enquiry.name}.`,
       );
       onSaved();
       onClose();
 
-      if (thenRegister) {
+      if (registersLab) {
+        navigate('/laboratories/create', {
+          state: {
+            fromEnquiry: {
+              id: enquiry.id,
+              name: enquiry.name,
+              mobile: enquiry.mobile ?? '',
+              email: enquiry.email ?? '',
+            },
+          },
+        });
+      } else if (thenRegister) {
         navigate('/students/create', {
           state: {
             fromEnquiry: {
@@ -296,7 +324,9 @@ export function FollowupDialog({
       title={`Follow up — ${enquiry.name}`}
       onClose={onClose}
       onSubmit={() => save()}
-      submitLabel={converting ? 'Record & convert' : 'Record follow-up'}
+      submitLabel={
+        registersLab ? 'Convert & register laboratory' : converting ? 'Record & convert' : 'Record follow-up'
+      }
       secondary={
         converting ? (
           <Button variant="outlined" disabled={busy} onClick={() => save(true)}>
@@ -323,30 +353,34 @@ export function FollowupDialog({
             ))}
           </TextField>
 
-          <DateField
-            label="Next attempt due"
-            value={next}
-            onChange={setNext}
-            sx={{ width: 220 }}
-          />
+          {!closing && (
+            <DateField
+              label="Next attempt due"
+              value={next}
+              onChange={setNext}
+              sx={{ width: 220 }}
+            />
+          )}
 
-          <TextField
-            select
-            label="Status after this"
-            value={effective}
-            onChange={(e) => {
-              setTouched(true);
-              setStatus(e.target.value);
-            }}
-            sx={{ width: 220 }}
-          >
-            <MenuItem value="">Leave it as {enquiry.status}</MenuItem>
-            {BOOKS[book].statuses.map((st) => (
-              <MenuItem key={st.id} value={st.id}>
-                {st.label}
-              </MenuItem>
-            ))}
-          </TextField>
+          {!closing && (
+            <TextField
+              select
+              label="Status after this"
+              value={effective}
+              onChange={(e) => {
+                setTouched(true);
+                setStatus(e.target.value);
+              }}
+              sx={{ width: 220 }}
+            >
+              <MenuItem value="">Leave it as {enquiry.status}</MenuItem>
+              {BOOKS[book].statuses.map((st) => (
+                <MenuItem key={st.id} value={st.id}>
+                  {st.label}
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
         </Stack>
 
         <TextField

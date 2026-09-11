@@ -7,6 +7,8 @@ import {
   Grid,
   IconButton,
   MenuItem,
+  Popover,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -26,6 +28,7 @@ import { messageOf, useAuth } from '../lib/auth';
 import { hint, ConfirmDialog, DateField, IconAction, Pager, Panel, PasswordField, RowActions, SearchField, StateChip, TableFrame, todayState } from '../components/ui';
 import FileField from '../components/FileField';
 import type { Paged } from '../lib/api';
+import { hoursBetween } from '../lib/attendance';
 import { isLab, isSuper, ROLE } from '../lib/portal';
 import AddIcon from '@mui/icons-material/AddOutlined';
 import EditIcon from '@mui/icons-material/EditOutlined';
@@ -106,7 +109,15 @@ interface Account {
   profile_photo: string | null;
   adhar_photo: string | null;
   role_id: number | null;
-  employment: { joining_date: string; salary: string; week_off: string | null } | null;
+  employment: {
+    joining_date: string;
+    salary: string;
+    week_off: string | null;
+    working_hours: string | null;
+    late_after: string | null;
+    shift_start: string | null;
+    shift_end: string | null;
+  } | null;
 }
 
 /**
@@ -152,12 +163,19 @@ const BLANK_ACCOUNT = {
     said before there was anywhere to record one.
   */
   week_off: [] as number[],
+  /** When the day starts and ends, and the time after which a punch-in is
+      late. Blank is not set. The hours in a day are worked out from the two. */
+  shift_start: '',
+  shift_end: '',
+  late_after: '',
 };
 
 export default function Staff() {
   const toast = useToast();
   const { user } = useAuth();
   const { can } = usePermissions();
+  /** The Working Hours field the start-and-end picker opens under. */
+  const [shiftAnchor, setShiftAnchor] = useState<HTMLElement | null>(null);
   const admin = isSuper(user);
   /**
    * Who employs the people on this screen.
@@ -258,6 +276,9 @@ export default function Staff() {
             ? String(Number(a.employment.salary))
             : '',
         joining_date: String(a.employment?.joining_date ?? '').slice(0, 10),
+        shift_start: String(a.employment?.shift_start ?? '').slice(0, 5),
+        shift_end: String(a.employment?.shift_end ?? '').slice(0, 5),
+        late_after: String(a.employment?.late_after ?? '').slice(0, 5),
         week_off: String(a.employment?.week_off ?? '')
           .split(',')
           .map((n) => n.trim())
@@ -309,6 +330,11 @@ export default function Staff() {
           ...(form.salary !== '' ? { salary: Number(form.salary) } : {}),
           ...(form.joining_date !== '' ? { joining_date: form.joining_date } : {}),
           week_off: form.week_off,
+          // Always sent, like the week off: blank is an answer — not set. The
+          // API writes the working hours from the two times.
+          shift_start: form.shift_start || null,
+          shift_end: form.shift_end || null,
+          late_after: form.late_after || null,
         });
         toast.ok(`${form.fullname} updated.`);
       } else {
@@ -322,6 +348,9 @@ export default function Staff() {
           salary: form.salary === '' ? 0 : Number(form.salary),
           joining_date: form.joining_date || undefined,
           week_off: form.week_off,
+          shift_start: form.shift_start || null,
+          shift_end: form.shift_end || null,
+          late_after: form.late_after || null,
         });
         // Update with additional fields
         const id = res.data.id;
@@ -591,6 +620,74 @@ export default function Staff() {
                       </MenuItem>
                     ))}
                   </TextField>
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  {/*
+                    A start and an end rather than a number: a shift is thought
+                    of as half nine to half six, and the hours are a sum nobody
+                    should have to do in their head. Clicking opens the two
+                    times; the field shows the shift and what it comes to.
+                  */}
+                  <TextField
+                    label="Working Hours"
+                    value={
+                      form.shift_start && form.shift_end
+                        ? `${form.shift_start} – ${form.shift_end} · ${hoursBetween(form.shift_start, form.shift_end)}h`
+                        : ''
+                    }
+                    onClick={(e) => setShiftAnchor(e.currentTarget)}
+                    slotProps={{ htmlInput: { readOnly: true, style: { cursor: 'pointer' } } }}
+                    helperText="Click to set the start and end time. Less is marked short."
+                  />
+                  <Popover
+                    open={Boolean(shiftAnchor)}
+                    anchorEl={shiftAnchor}
+                    onClose={() => setShiftAnchor(null)}
+                    anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                  >
+                    <Stack spacing={2} sx={{ p: 2, width: 320 }}>
+                      <Stack direction="row" spacing={1.5}>
+                        <TextField
+                          label="Start time"
+                          type="time"
+                          value={form.shift_start}
+                          onChange={(e) => setForm({ ...form, shift_start: e.target.value })}
+                          slotProps={{ inputLabel: { shrink: true }, htmlInput: { step: 60 } }}
+                        />
+                        <TextField
+                          label="End time"
+                          type="time"
+                          value={form.shift_end}
+                          onChange={(e) => setForm({ ...form, shift_end: e.target.value })}
+                          slotProps={{ inputLabel: { shrink: true }, htmlInput: { step: 60 } }}
+                        />
+                      </Stack>
+                      <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
+                        <Button
+                          size="small"
+                          onClick={() => {
+                            setForm({ ...form, shift_start: '', shift_end: '' });
+                            setShiftAnchor(null);
+                          }}
+                        >
+                          Clear
+                        </Button>
+                        <Button size="small" variant="contained" onClick={() => setShiftAnchor(null)}>
+                          Done
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  </Popover>
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <TextField
+                    label="Late Marking Time"
+                    type="time"
+                    value={form.late_after}
+                    onChange={(e) => setForm({ ...form, late_after: e.target.value })}
+                    slotProps={{ inputLabel: { shrink: true }, htmlInput: { step: 60 } }}
+                    helperText="A punch-in after this is marked late."
+                  />
                 </Grid>
                 {!form.id && (
                   <Grid size={{ xs: 12, md: 4 }}>

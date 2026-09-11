@@ -31,7 +31,32 @@ export const TRANSACTION_TYPE = {
   ORDER_COLLECTION: 'collected_by_order',
   WALLET_TRANSFER: 'wallet_transfer',
   COMMISSION: 'commision',
+  /*
+    Money an employee spent out of what they hold — fuel, a courier, stationery.
+
+    Recorded with their employer as `received_by`, which is the **approver and
+    not a recipient**: nothing is received. That is what lets it ride the
+    existing approval path untouched — the receiver-only decision, the queue,
+    the bell. Every sum of `received_by` must therefore leave these rows out, or
+    an employee's expense reads as money their laboratory took in.
+  */
+  EXPENSE: 'expense',
 } as const;
+
+/**
+ * Rows that are money this user genuinely received: everything addressed to
+ * them except an expense they were only asked to approve.
+ *
+ * Written as `IS NULL OR <> 'expense'` and not `<> 'expense'` alone. The older
+ * rows carry no type at all, and in SQL `NULL <> 'expense'` is NULL rather than
+ * true — so the short form would quietly drop every untyped row from every
+ * balance it was used in.
+ */
+export const notAnExpense = (eb: any) =>
+  eb.or([
+    eb('transaction_type', 'is', null),
+    eb('transaction_type', '!=', TRANSACTION_TYPE.EXPENSE),
+  ]);
 
 const STATUS = { PENDING: 0, APPROVED: 1, DECLINED: 2 } as const;
 
@@ -452,7 +477,10 @@ export async function ledgerFor(
   limit = 100,
   offset = 0,
 ): Promise<LedgerPage> {
-  const mine = (eb: any) => eb.or([eb('send_by', '=', userId), eb('received_by', '=', userId)]);
+  // What I sent, and what I received — but not an expense I was only asked to
+  // approve, which is not money that reached me and must not credit my balance.
+  const mine = (eb: any) =>
+    eb.or([eb('send_by', '=', userId), eb.and([eb('received_by', '=', userId), notAnExpense(eb)])]);
 
   // The whole history is read because the running balance on any entry depends
   // on every entry before it, and the totals describe the account rather than

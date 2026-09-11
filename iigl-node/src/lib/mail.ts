@@ -1,6 +1,3 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import nodemailer from 'nodemailer';
 import { env } from './env.js';
 import { ApiError } from './errors.js';
@@ -32,34 +29,6 @@ async function transportFor() {
   return url ? nodemailer.createTransport(url) : null;
 }
 
-/**
- * The mark at the top of the mail.
- *
- * Sent as an attachment and referenced by `cid:`, not as a `data:` URI: Gmail
- * and Outlook both strip a data URI out of an <img>, so the one approach that
- * renders everywhere is the one the mail carries with it. Read once and kept —
- * the file does not change while the process runs.
- *
- * Missing, the mail goes out without it. A password reset that fails because a
- * logo could not be read would be the wrong thing to break.
- */
-const LOGO_CID = 'iigl-logo';
-let logoFile: Buffer | null | undefined;
-
-async function logo(): Promise<Buffer | null> {
-  if (logoFile !== undefined) return logoFile;
-  try {
-    const file = path.resolve(
-      path.dirname(fileURLToPath(import.meta.url)),
-      '../templates/iigl-logo.png',
-    );
-    logoFile = await readFile(file);
-  } catch {
-    logoFile = null;
-  }
-  return logoFile;
-}
-
 /** Anything a person typed, safe to drop into markup. */
 const escape = (v: string) =>
   v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -82,7 +51,6 @@ function resetHtml(
   name: string,
   company: string,
   expires: string,
-  withLogo: boolean,
 ): string {
   const navy = '#061948';
   return `<!doctype html>
@@ -90,11 +58,6 @@ function resetHtml(
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:520px;margin:0;background:#ffffff">
     <tr><td style="padding:20px 24px">
       <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px"><tr>
-        ${
-          withLogo
-            ? `<td style="padding-right:10px" valign="middle"><img src="cid:${LOGO_CID}" width="36" height="36" alt="" style="display:block;border:0"></td>`
-            : ''
-        }
         <td valign="middle">
           <p style="margin:0;font-size:18px;font-weight:600;color:${navy}">${escape(company)}</p>
           <p style="margin:0;font-size:13px;color:#4a5265">Password reset</p>
@@ -176,7 +139,6 @@ export async function sendPasswordReset(
 
   const company = await setting('company.name');
   const until = expiresAt(expires);
-  const mark = await logo();
 
   /*
     A refusal from the mail server is reported as one.
@@ -191,10 +153,11 @@ export async function sendPasswordReset(
       from: await setting('mail.from'),
       to,
       subject: `Reset your ${company} password`,
-      html: resetHtml(url, name, company, until, Boolean(mark)),
-      attachments: mark
-        ? [{ filename: 'logo.png', content: mark, cid: LOGO_CID, contentType: 'image/png' }]
-        : undefined,
+      // No attachments. The logo used to travel as one, referenced by `cid:`,
+      // and Gmail lists an inline image like that as a `logo.png` file at the
+      // foot of the message — so a password reset arrived looking like it
+      // carried a download. The company name heads the mail on its own.
+      html: resetHtml(url, name, company, until),
       // The alternative a text-only client falls back to. It carries the address
       // because there is no button to press in plain text.
       text: [

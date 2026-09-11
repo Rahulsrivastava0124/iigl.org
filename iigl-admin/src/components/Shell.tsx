@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link as RouterLink, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   AppBar,
@@ -447,16 +447,6 @@ export default function Shell() {
    */
   const groups = isSuper ? ADMIN_GROUPS : FIELD_GROUPS;
 
-  // Set document title based on role
-  useLayoutEffect(() => {
-    const roleTitle = isSuper
-      ? 'IIGL Super Admin'
-      : isLab
-        ? 'IIGL Laboratory'
-        : 'IIGL Team';
-    document.title = roleTitle;
-  }, [isSuper, isLab]);
-
   /**
    * Issuing a certificate belongs to a laboratory and its staff, not to an
    * administrator.
@@ -479,6 +469,7 @@ export default function Shell() {
   const canCollect = (user?.roleId ?? -1) >= ROLE.ADMIN && can('product_collection', 'create');
 
   const crumbs = useBreadcrumbs(portal);
+
   const here = `${location.pathname}${location.search}`;
 
   // The node at the right-hand end of the trail, handed to the page below so it

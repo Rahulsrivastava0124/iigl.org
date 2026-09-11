@@ -1,6 +1,6 @@
 # IIGL API
 
-224 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
+230 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
 
 The interactive version is at `/docs` when the server is running, and the raw
 document at `/openapi.json`.
@@ -181,6 +181,7 @@ Remittances, approvals, dues collection and wallet balance.
 | GET | `/api/transactions/commission/earnings` | session | `page`, `per_page` | — | 401, 403 | What the commission is made of, order by order |
 | GET | `/api/transactions/commission/summary` | session | — | — | 401, 403 | Commission earned, paid and due |
 | POST | `/api/transactions/dues/{orderId}` | session | — | **amount**, pay_mode, transaction_no, remark | 400, 401, 403, 404 | Collect dues against an order |
+| POST | `/api/transactions/expense` | session | — | **amount**, **remark**, pay_mode, transaction_no, attachment | 400, 401, 403 | Record an expense |
 | GET | `/api/transactions/ledger` | session | `user_id` | — | 401, 403 | Running account |
 | GET | `/api/transactions/wallet` | session | — | — | 401, 403 | Your balance |
 
@@ -195,8 +196,8 @@ Laboratories, staff and account administration.
 | PATCH | `/api/users/{id}` | session | — | fullname, mobile, email, role_id, is_active, commision, commission_type, registration_fee, +33 more | 400, 401, 403, 404, 409 | Update any account |
 | DELETE | `/api/users/{id}` | session | — | — | 400, 401, 403, 404, 409 | Delete an account |
 | PATCH | `/api/users/{id}/active` | session | — | is_active | 401, 403, 404 | Activate or deactivate an account |
-| POST | `/api/users/{id}/employment` | session | — | **lab_id**, joining_date, salary, remark, week_off | 400, 401, 403, 404, 409 | Attach a person to an employer |
-| PATCH | `/api/users/{id}/employment` | session | — | salary, joining_date, remark, week_off | 400, 401, 403, 404 | Change the terms of a posting |
+| POST | `/api/users/{id}/employment` | session | — | **lab_id**, joining_date, salary, remark, week_off, working_hours, late_after, shift_start, +1 more | 400, 401, 403, 404, 409 | Attach a person to an employer |
+| PATCH | `/api/users/{id}/employment` | session | — | salary, joining_date, remark, week_off, working_hours, late_after, shift_start, shift_end | 400, 401, 403, 404 | Change the terms of a posting |
 | POST | `/api/users/{id}/employment/end` | session | — | leave_date, remark | 401, 403, 404 | End an employment |
 | POST | `/api/users/{id}/password` | session | — | **password** | 400, 401, 403, 404 | Reset someone's password |
 | GET | `/api/users/laboratories` | session | — | — | 401, 403 | List laboratories |
@@ -344,6 +345,11 @@ Views over orders, grouped by mobile number. There is no customer table.
 | Method | Path | Auth | Query | Body | Fails | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/customers/{mobile}/orders` | session | — | — | 400, 401, 403 | One customer's orders, and what they come to |
+| GET | `/api/customers/accounts` | session | `page`, `per_page`, `q` | — | 401, 403 | Registered customers |
+| POST | `/api/customers/accounts` | session | — | lab_id, **company_name**, **owner_name**, **mobile**, email, city, **gst_no**, show_name_in_card, +4 more | 400, 401, 403, 409 | Register a customer |
+| GET | `/api/customers/accounts/{id}` | session | — | — | 401, 403, 404 | One registered customer, with their discounts |
+| PATCH | `/api/customers/accounts/{id}` | session | — | company_name, owner_name, mobile, email, city, gst_no, show_name_in_card, show_name_input, +3 more | 401, 403, 404, 409 | Update a registered customer |
+| DELETE | `/api/customers/accounts/{id}` | session | — | — | 401, 403, 404 | Remove a registered customer |
 | GET | `/api/customers/all` | session | `page`, `per_page`, `q` | — | 401, 403 | Every customer, registered or not |
 | GET | `/api/customers/registered` | session | `page`, `per_page` | — | 401, 403 | Customers with a GST number |
 | GET | `/api/customers/unregistered` | session | `page`, `per_page` | — | 401, 403 | Customers with no GST number |
@@ -470,4 +476,4 @@ The general enquiry book: questions, visits, leads and complaints.
 
 Bold body fields are required.
 
-224 endpoints: 16 public, 208 requiring a session.
+230 endpoints: 16 public, 214 requiring a session.

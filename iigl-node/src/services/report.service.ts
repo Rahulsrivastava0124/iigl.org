@@ -2,7 +2,7 @@ import { db } from '../db/index.js';
 import type { Kysely } from 'kysely';
 import type { DB } from '../db/types.js';
 import { setting, settingNumber } from './settings.service.js';
-import { agreedPriceFor } from './pricing.service.js';
+import { agreedPriceFor, refreshOrderMoney } from './pricing.service.js';
 import { caratOf } from '../lib/money.js';
 import { badRequest, conflict } from '../lib/errors.js';
 import type { SessionUser } from '../middleware/auth.js';
@@ -285,6 +285,10 @@ export async function createReport(
       })
       .executeTakeFirst();
 
+    // A certificate prices its item from its carat weight, so writing one can
+    // move a settled order's bill. Kept in step here, in the same transaction.
+    await refreshOrderMoney(Number(input.order_id), trx);
+
     return Number(result.insertId);
   };
 
@@ -493,6 +497,15 @@ export async function updateReport(
       .set(patch as never)
       .where('id', '=', reportId)
       .execute();
+
+    // An edited carat weight or band re-prices the item. The certificate names
+    // its order line, not its order, so the order is found through the line.
+    const line = await trx
+      .selectFrom('order_details')
+      .select('order_id')
+      .where('id', '=', Number(report.order_detail_id))
+      .executeTakeFirst();
+    if (line) await refreshOrderMoney(Number(line.order_id), trx);
 
     return reportId;
   };

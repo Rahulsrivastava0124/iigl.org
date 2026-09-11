@@ -43,6 +43,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const portal = currentPortal();
   const config = PORTALS[portal];
 
+  /*
+    The page title: IIGL and the door's panel — IIGL Super Admin, IIGL Admin or
+    IIGL Team, the same words the sign-in heading uses.
+
+    Set here, above everything, because it depends on the door and not on who
+    is signed in: a signed-in person is always on their own door, so the sign-in
+    pages and the panel behind them want the same title.
+  */
+  useEffect(() => {
+    document.title = config.title;
+  }, [config]);
+
   // A 401 anywhere means the session is gone. Clearing the user here returns
   // the whole panel to sign-in, instead of each open screen showing the API
   // message where its data should be.

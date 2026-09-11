@@ -52,6 +52,8 @@ export interface StaffMessage {
   created_at: string | null;
   from_user: number;
   from_name: string | null;
+  /** The sender's role: 1 head office, 2 a laboratory, 3 and up (or none) staff. */
+  from_role_id?: number | null;
 }
 
 const day = (v: string | null) => String(v ?? '').slice(0, 10);
@@ -211,7 +213,21 @@ export default function StaffInbox({
             <ListItem
               key={m.id}
               divider
-              sx={{ alignItems: 'flex-start', gap: 1, opacity: m.resolved_at ? 0.6 : 1 }}
+              /*
+                Answered rows are tinted, not faded.
+
+                They used to drop to 60% opacity, which greyed out the reply and
+                the Approved / Declined chip along with them — the part the
+                person came back to read. A light royal-blue wash marks the row
+                as dealt with and leaves every word at full strength; an open
+                row stays white, so what still needs an answer is what stands
+                out.
+              */
+              sx={{
+                alignItems: 'flex-start',
+                gap: 1,
+                bgcolor: m.resolved_at ? '#eaf0fd' : 'transparent',
+              }}
               secondaryAction={
                 own ? (
                   // What became of it, rather than a control they cannot use.

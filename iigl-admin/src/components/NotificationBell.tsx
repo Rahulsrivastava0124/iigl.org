@@ -20,6 +20,8 @@ import { useFetch } from '../lib/useFetch';
 import { money, toneColour } from './ui';
 import type { Paged, Transaction } from '../lib/api';
 import type { StaffMessage } from './StaffInbox';
+import { useAuth } from '../lib/auth';
+import { isLab, isSuper, ROLE } from '../lib/portal';
 
 /**
  * The bell, and what is behind it.
@@ -83,6 +85,29 @@ export default function NotificationBell() {
     navigate(to);
   };
 
+  /*
+    Where a message is opened: on the page that actually holds it.
+
+    Every message used to open the sender's employee page, which is right for
+    exactly one case — an employer opening what their staff wrote, where the
+    request is answered. For everybody else it opened a page about somebody the
+    reader does not employ: a team member opening their laboratory's reply
+    landed on the laboratory's own id, and saw an empty record reading "That
+    account is not one of your employees".
+
+    So the employee page only when the reader employs people and the sender is
+    staff — any role but head office or a laboratory, including somebody with no
+    role who works on grants alone. Everything else opens the reader's own
+    messages on the attendance page. A team member never employs anybody, so
+    they always go there, whatever the row says.
+  */
+  const { user } = useAuth();
+  const employs = isSuper(user) || isLab(user);
+  const destination = (m: StaffMessage) =>
+    employs && m.from_role_id !== ROLE.SUPER && m.from_role_id !== ROLE.ADMIN
+      ? `/staff/${m.from_user}`
+      : '/attendance';
+
   return (
     <>
       <Tooltip
@@ -120,7 +145,7 @@ export default function NotificationBell() {
             {messages.map((m) => (
               <ListItemButton
                 key={`m${m.id}`}
-                onClick={() => go(`/staff/${m.from_user}`)}
+                onClick={() => go(destination(m))}
                 sx={{ alignItems: 'flex-start', gap: 1.25, py: 1.25 }}
               >
                 <MessageIcon
@@ -173,9 +198,20 @@ export default function NotificationBell() {
                       {when(t.created_at)}
                     </Typography>
                   </Stack>
-                  <Typography variant="body2" color="text.secondary">
-                    has sent {money(t.amount)}
-                    {t.transaction_type === 'commision' ? ' as commission' : ''}
+                  {/* An expense is a request to approve money already spent, not
+                      money arriving — "has sent" would say the opposite. */}
+                  <Typography variant="body2" color="text.secondary" noWrap>
+                    {t.transaction_type === 'expense' ? (
+                      <>
+                        spent {money(t.amount)}
+                        {t.remark ? ` — ${t.remark}` : ''}
+                      </>
+                    ) : (
+                      <>
+                        has sent {money(t.amount)}
+                        {t.transaction_type === 'commision' ? ' as commission' : ''}
+                      </>
+                    )}
                   </Typography>
                 </Box>
               </ListItemButton>

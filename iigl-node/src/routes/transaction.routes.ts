@@ -1,18 +1,11 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
+import { refreshOrderMoney } from '../services/pricing.service.js';
 import { wrap } from '../lib/async.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { paged, readPage, readSearch } from '../lib/paginate.js';
 import { assertLabOwnership, requireLabScope, ROLE } from '../middleware/auth.js';
-import {
-  accruedByLab,
-  commissionEarnings,
-  COMMISSION_TYPE,
-  ledgerFor,
-  sendCommission,
-  TRANSACTION_TYPE,
-  validateCommissionInput,
-} from '../services/commission.service.js';
+import { accruedByLab, commissionEarnings, COMMISSION_TYPE, ledgerFor, sendCommission, TRANSACTION_TYPE, validateCommissionInput, notAnExpense } from '../services/commission.service.js';
 import { numericId, numericParams } from '../middleware/params.js';
 
 export const transactionRoutes = Router();
@@ -150,7 +143,7 @@ transactionRoutes.get(
 transactionRoutes.post(
   '/',
   wrap(async (req, res) => {
-    const { amount, pay_mode, transaction_no, transaction_type, remark, attachment } = req.body ?? {};
+    const { amount, pay_mode, transaction_no, remark, attachment } = req.body ?? {};
     const value = Number(amount);
     if (!Number.isFinite(value) || value <= 0) throw badRequest('Enter an amount greater than zero.');
     if (!pay_mode) throw badRequest('Select a payment mode.');
@@ -164,11 +157,79 @@ transactionRoutes.post(
         amount: String(value),
         pay_mode: String(pay_mode),
         transaction_no: transaction_no ? String(transaction_no) : null,
-        transaction_type: transaction_type ? String(transaction_type) : null,
+        /*
+          Always a wallet transfer. It used to take the type from the body, so a
+          transfer sent without one was stored untyped — and the dashboard only
+          subtracts approved `wallet_transfer` rows from what somebody holds,
+          so that money never came off their wallet. Taking it from the body also
+          let a caller label a transfer as a commission payment or an expense.
+          Those have their own routes.
+        */
+        transaction_type: TRANSACTION_TYPE.WALLET_TRANSFER,
         remark: remark ? String(remark) : null,
         attachment: attachment ? String(attachment) : null,
         send_by: req.user.id,
         received_by: receivedBy,
+        status: STATUS.PENDING,
+        seen_by_sender: 1,
+        seen_by_receiver: 0,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })
+      .executeTakeFirst();
+
+    res.status(201).json({ data: { id: Number(result.insertId) } });
+  }),
+);
+
+/**
+ * Record an expense: money an employee spent out of what they hold.
+ *
+ * Staff only. Pending until their employer approves it, exactly as a transfer is
+ * — money collected belongs to the laboratory, and an employee writing it off
+ * with nobody looking is the one shape this must not take. The employer is
+ * `received_by` as the approver, not as a recipient; see TRANSACTION_TYPE.
+ *
+ * No ceiling at the wallet balance. Somebody who paid a courier out of their own
+ * pocket is owed it, and refusing the entry would push that off the books rather
+ * than onto them. Approval is the check.
+ */
+transactionRoutes.post(
+  '/expense',
+  wrap(async (req, res) => {
+    if (req.user.roleId === ROLE.SUPER || req.user.roleId === ROLE.LAB) {
+      throw forbidden('An expense is recorded by staff, against their employer.');
+    }
+
+    const value = Number(req.body?.amount);
+    if (!Number.isFinite(value) || value <= 0) throw badRequest('Enter an amount greater than zero.');
+
+    const remark = String(req.body?.remark ?? '').trim();
+    if (!remark) throw badRequest('Say what the money was spent on.');
+    if (remark.length > 255) throw badRequest('Keep the description under 255 characters.');
+
+    const approver = req.user.labId;
+    if (!approver) {
+      throw badRequest('Your account is not linked to an employer, so there is nobody to approve it.');
+    }
+
+    const optional = (v: unknown) => {
+      const t = String(v ?? '').trim();
+      return t === '' ? null : t;
+    };
+
+    const result = await db
+      .insertInto('transactions')
+      .values({
+        amount: String(value),
+        pay_mode: String(req.body?.pay_mode || 'cash'),
+        transaction_no: optional(req.body?.transaction_no),
+        transaction_type: TRANSACTION_TYPE.EXPENSE,
+        remark,
+        // A photograph of the bill, where there is one.
+        attachment: optional(req.body?.attachment),
+        send_by: req.user.id,
+        received_by: Number(approver),
         status: STATUS.PENDING,
         seen_by_sender: 1,
         seen_by_receiver: 0,
@@ -324,7 +385,7 @@ transactionRoutes.post(
       const order = await trx
         .selectFrom('orders')
         .where('deleted_at', 'is', null)
-        .select(['id', 'lab_id', 'paid_amount', 'dues_amount'])
+        .select(['id', 'lab_id', 'dues_amount'])
         .where('id', '=', Number(req.params.orderId))
         .executeTakeFirst();
       if (!order) throw notFound('Order not found.');
@@ -354,15 +415,10 @@ transactionRoutes.post(
         })
         .execute();
 
-      await trx
-        .updateTable('orders')
-        .set({
-          paid_amount: String(Number(order.paid_amount ?? 0) + value),
-          dues_amount: String(dues - value),
-          updated_at: new Date(),
-        })
-        .where('id', '=', Number(order.id))
-        .execute();
+      // Paid and due re-read from the bill, which now counts this collection,
+      // rather than added to the stored figures: a stored figure that was stale
+      // would stay stale by exactly the same amount.
+      await refreshOrderMoney(Number(order.id), trx);
     });
 
     res.json({ ok: true });
@@ -379,6 +435,8 @@ transactionRoutes.get(
         .select(db.fn.sum<number>('amount').as('total'))
         .where('received_by', '=', req.user.id)
         .where('status', '=', STATUS.APPROVED)
+        // An expense addressed to me is one I approve, not money I received.
+        .where(notAnExpense)
         .executeTakeFirstOrThrow(),
       db
         .selectFrom('transactions')

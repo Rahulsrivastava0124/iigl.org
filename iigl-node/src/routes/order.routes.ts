@@ -6,12 +6,7 @@ import { conflict, notFound } from '../lib/errors.js';
 import { paged, readPage, readSearch } from '../lib/paginate.js';
 import { assertLabOwnership, requireLabScope, ROLE } from '../middleware/auth.js';
 import { createOrder, live, liveJoined, updateOrder, validateOrderInput, validateUpdateOrderInput } from '../services/order.service.js';
-import {
-  deliverOrder,
-  quoteOrder,
-  settleAndDeliver,
-  validateSettleInput,
-} from '../services/pricing.service.js';
+import { deliverOrder, quoteOrder, settleAndDeliver, validateSettleInput, refreshOrderMoney } from '../services/pricing.service.js';
 import { orderVisibility } from '../services/permission.service.js';
 import { TRANSACTION_TYPE } from '../services/commission.service.js';
 import { numericId, numericParams } from '../middleware/params.js';
@@ -365,13 +360,15 @@ orderRoutes.delete(
         .selectFrom('order_details')
         .innerJoin('orders', 'orders.id', 'order_details.order_id'),
     )
-      .select(['order_details.id as id', 'orders.lab_id as lab_id'])
+      .select(['order_details.id as id', 'orders.lab_id as lab_id', 'order_details.order_id as order_id'])
       .where('order_details.id', '=', Number(req.params.id))
       .executeTakeFirst();
     if (!item) throw notFound('Order item not found.');
     assertLabOwnership(req.user, Number(item.lab_id));
 
     await db.deleteFrom('order_details').where('id', '=', Number(item.id)).execute();
+    // One item fewer is a smaller bill; a settled order's stored figures follow.
+    await refreshOrderMoney(Number(item.order_id));
     res.json({ ok: true });
   }),
 );

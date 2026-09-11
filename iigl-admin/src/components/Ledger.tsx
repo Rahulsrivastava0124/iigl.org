@@ -161,7 +161,12 @@ export function LedgerTable({
                     order behind it or an order with no name on it. Better than
                     a dash, which reads as missing rather than as anonymous.
                   */}
-                  {e.counterparty_name ?? (e.counterparty > 0 ? `#${e.counterparty}` : 'Customer')}
+                  {/* An expense is stored against the employer who approves it,
+                      so the counterparty on the row is that laboratory — which
+                      would read as money sent to it. It went nowhere; it was spent. */}
+                  {e.type === 'expense'
+                    ? 'Expense'
+                    : (e.counterparty_name ?? (e.counterparty > 0 ? `#${e.counterparty}` : 'Customer'))}
                 </TableCell>
                 <TableCell sx={{ whiteSpace: 'normal', minWidth: 180 }}>
                   {e.remark ?? e.type ?? '—'}
