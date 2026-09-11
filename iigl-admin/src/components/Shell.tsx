@@ -55,6 +55,7 @@ import { ROLE, ROLE_NAMES } from '../lib/portal';
 import { api } from '../lib/api';
 import { fileUrl } from '../lib/config';
 import { useBreadcrumbs } from '../lib/breadcrumbs';
+import { StatementReminder } from './Statements';
 import NotificationBell from './NotificationBell';
 import PunchClock from './PunchClock';
 import { usePermissions } from '../lib/permissions';
@@ -241,10 +242,9 @@ const ADMIN_GROUPS: Group[] = [
     icon: EnquiryIcon,
     adminOnly: true,
     items: [
-      { to: '/enquiries', label: 'All Enquiries' },
       { to: '/enquiries?kind=ask', label: 'Ask Me' },
       { to: '/enquiries?kind=visit', label: "Visitor's Diary" },
-      { to: '/enquiries?kind=lead', label: 'Lead Followup' },
+      { to: '/enquiries?kind=lead', label: 'Contact Us' },
       { to: '/enquiries?kind=complaint', label: 'Complaints' },
     ],
   },
@@ -1111,6 +1111,8 @@ export default function Shell() {
 
         <Box component="main" sx={{ flex: 1, px: { xs: 2, md: 3 }, pt: 2.5, pb: 8, minWidth: 0 }}>
           <CrumbSlotContext.Provider value={crumbSlot}>
+            {/* A laboratory's commission reminder, or the lock, above every page. */}
+            <StatementReminder />
             <Outlet />
           </CrumbSlotContext.Provider>
         </Box>

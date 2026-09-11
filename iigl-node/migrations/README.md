@@ -67,6 +67,7 @@ Every file also carries its own rollback in a comment at the bottom.
 | `046-customer-card-display.sql` | **applied** | Four columns on `registered_customers` — `show_name_in_card`, `show_name_input`, `show_image_in_card`, `show_image_in_card_file` — under the same names an order already uses, so a later order can copy them straight across. A new file because 045 is applied and checksummed. Additive. |
 | `047-employment-shift.sql` | **applied** | `employements.working_hours` (hours in a full day, `DECIMAL(4,2)`) and `employements.late_after` (`TIME`, a punch-in after it is marked late). On the employment beside `week_off`: a new posting is a new shift. Empty on existing rows, meaning not set — nobody is marked late or short. Additive. |
 | `048-employment-shift-times.sql` | **applied** | `employements.shift_start` and `shift_end` (`TIME`): the shift as the form takes it, a start and an end. `working_hours` is written from them whenever they are given, so the calendar reads it unchanged; a shift past midnight wraps. A new file because 047 is applied. Additive. |
+| `049-lab-statements.sql` | **applied** | `users.statement_period` (months per commission statement, default 1), `statement_grace_days` (default 15) and `statement_from` (first month billed; NULL reads as September 2026 or the month the laboratory was added). A statement unpaid past its grace days locks certificate generation until head office approves a payment. Additive; nothing before September 2026 is billed. |
 
 ---
 

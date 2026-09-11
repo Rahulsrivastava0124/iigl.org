@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Button,
@@ -42,11 +42,14 @@ const TABS: Array<{ id: Status | 'all'; label: string }> = [
 ];
 
 /**
- * The ladder in colour: waiting while it needs somebody, settled once it has
- * become a registration, refused when the answer was no.
+ * The ladder in colour: yellow while it is a lead, light blue while it is being
+ * followed up, green once it has become a registration, red when the answer was
+ * no. Contacted and interested are not tabs, but a follow-up can set them.
  */
-const STATE: Record<Status, { tone: Tone; label: string }> = {
-  new: { tone: 'waiting', label: 'New' },
+const STATE: Record<Status | 'contacted' | 'interested', { tone: Tone; label: string }> = {
+  new: { tone: 'lead', label: 'New' },
+  contacted: { tone: 'followup', label: 'Contacted' },
+  interested: { tone: 'followup', label: 'Interested' },
   converted: { tone: 'settled', label: 'Converted' },
   not_interested: { tone: 'refused', label: 'Not interested' },
 };
@@ -117,6 +120,9 @@ export default function StudentEnquiries() {
   const courseList = courses.data?.data ?? [];
 
   const [form, setForm] = useState<typeof BLANK | null>(null);
+  // A form belongs to the table it was opened on: switching to another one —
+  // by its tab or from the menu — closes it rather than carrying it across.
+  useEffect(() => setForm(null), [tab]);
   const [following, setFollowing] = useState<Enquiry | null>(null);
   const [viewing, setViewing] = useState<Enquiry | null>(null);
   const [deleting, setDeleting] = useState<Enquiry | null>(null);
@@ -273,124 +279,123 @@ export default function StudentEnquiries() {
   return (
     <>
       {tabStrip}
-      {form && (
-        <FormPanel
-          title={form.id ? `Edit enquiry — ${form.name}` : 'New enquiry'}
-          onClose={() => setForm(null)}
-          onSubmit={save}
-          busy={busy}
-          actions={
-            /*
-              Only on a saved enquiry, and only one of the two: an enquiry that
-              has not been converted can be, and one that has can be undone.
-              A new enquiry has nothing to register yet.
-            */
-            form.id ? (
-              form.student_id ? (
-                <Button
-                  type="button"
-                  variant="outlined"
-                  color="error"
-                  startIcon={<UndoIcon />}
-                  disabled={busy}
-                  onClick={() => setUndoing(form)}
-                >
-                  Undo registration
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  variant="contained"
-                  color="success"
-                  startIcon={<ConvertIcon />}
-                  disabled={busy}
-                  onClick={convert}
-                >
-                  Convert &amp; register
-                </Button>
-              )
-            ) : undefined
-          }
-        >
-          <TextField
-            label="Student name"
-            value={form.name}
-            onChange={(e) => set('name', e.target.value)}
-            required
-          />
-          <TextField
-            label="Mobile number"
-            value={form.mobile}
-            onChange={(e) => set('mobile', e.target.value)}
-            required
-          />
-          <TextField label="Email" value={form.email} onChange={(e) => set('email', e.target.value)} />
-          <TextField
-            select
-            label="Course interested"
-            value={form.course_id}
-            onChange={(e) => set('course_id', e.target.value)}
-            slotProps={hint('Leave blank and type it below if we do not run it yet.', true)}
-          >
-            <MenuItem value="">Not on the list</MenuItem>
-            {courseList.map((c) => (
-              <MenuItem key={c.id} value={c.id}>
-                {c.name}
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            label="Other course"
-            value={form.course_interested}
-            onChange={(e) => set('course_interested', e.target.value)}
-          />
-          <DateField
-            label="Enquiry date"
-            value={form.enquiry_date}
-            onChange={(value) => set('enquiry_date', value)}
-          />
-          <SourceField
-            label="Enquiry source"
-            value={form.source}
-            onChange={(v) => set('source', v)}
-          />
-          <TextField
-            select
-            label="Status"
-            value={form.status}
-            onChange={(e) => set('status', e.target.value)}
-          >
-            {/*
-              Converted is not something you choose — it happens when an enquiry
-              becomes a registration — so it is not offered. It is still listed
-              while the form is open on an enquiry that already holds it, or the
-              select would show a blank where the status is.
-            */}
-            {TABS.filter(
-              (t) => t.id !== 'all' && (t.id !== 'converted' || form.status === 'converted'),
-            ).map((t) => (
-              <MenuItem key={t.id} value={t.id} disabled={t.id === 'converted'}>
-                {t.label}
-              </MenuItem>
-            ))}
-          </TextField>
-          <DateField
-            label="Follow up on"
-            value={form.follow_up_on}
-            onChange={(value) => set('follow_up_on', value)}
-          />
-          <TextField
-            label="Follow-up / remarks"
-            value={form.remarks}
-            onChange={(e) => set('remarks', e.target.value)}
-            multiline
-            minRows={2}
-            sx={{ gridColumn: '1 / -1' }}
-          />
-        </FormPanel>
-      )}
-
       <Panel
+        form={form && (
+          <FormPanel
+            title={form.id ? `Edit enquiry — ${form.name}` : 'New enquiry'}
+            onClose={() => setForm(null)}
+            onSubmit={save}
+            busy={busy}
+            actions={
+              /*
+                Only on a saved enquiry, and only one of the two: an enquiry that
+                has not been converted can be, and one that has can be undone.
+                A new enquiry has nothing to register yet.
+              */
+              form.id ? (
+                form.student_id ? (
+                  <Button
+                    type="button"
+                    variant="outlined"
+                    color="error"
+                    startIcon={<UndoIcon />}
+                    disabled={busy}
+                    onClick={() => setUndoing(form)}
+                  >
+                    Undo registration
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="contained"
+                    color="success"
+                    startIcon={<ConvertIcon />}
+                    disabled={busy}
+                    onClick={convert}
+                  >
+                    Convert &amp; register
+                  </Button>
+                )
+              ) : undefined
+            }
+          >
+            <TextField
+              label="Student name"
+              value={form.name}
+              onChange={(e) => set('name', e.target.value)}
+              required
+            />
+            <TextField
+              label="Mobile number"
+              value={form.mobile}
+              onChange={(e) => set('mobile', e.target.value)}
+              required
+            />
+            <TextField label="Email" value={form.email} onChange={(e) => set('email', e.target.value)} />
+            <TextField
+              select
+              label="Course interested"
+              value={form.course_id}
+              onChange={(e) => set('course_id', e.target.value)}
+              slotProps={hint('Leave blank and type it below if we do not run it yet.', true)}
+            >
+              <MenuItem value="">Not on the list</MenuItem>
+              {courseList.map((c) => (
+                <MenuItem key={c.id} value={c.id}>
+                  {c.name}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="Other course"
+              value={form.course_interested}
+              onChange={(e) => set('course_interested', e.target.value)}
+            />
+            <DateField
+              label="Enquiry date"
+              value={form.enquiry_date}
+              onChange={(value) => set('enquiry_date', value)}
+            />
+            <SourceField
+              label="Enquiry source"
+              value={form.source}
+              onChange={(v) => set('source', v)}
+            />
+            <TextField
+              select
+              label="Status"
+              value={form.status}
+              onChange={(e) => set('status', e.target.value)}
+            >
+              {/*
+                Converted is not something you choose — it happens when an enquiry
+                becomes a registration — so it is not offered. It is still listed
+                while the form is open on an enquiry that already holds it, or the
+                select would show a blank where the status is.
+              */}
+              {TABS.filter(
+                (t) => t.id !== 'all' && (t.id !== 'converted' || form.status === 'converted'),
+              ).map((t) => (
+                <MenuItem key={t.id} value={t.id} disabled={t.id === 'converted'}>
+                  {t.label}
+                </MenuItem>
+              ))}
+            </TextField>
+            <DateField
+              label="Follow up on"
+              value={form.follow_up_on}
+              onChange={(value) => set('follow_up_on', value)}
+            />
+            <TextField
+              label="Follow-up / remarks"
+              value={form.remarks}
+              onChange={(e) => set('remarks', e.target.value)}
+              multiline
+              minRows={2}
+              sx={{ gridColumn: '1 / -1' }}
+            />
+          </FormPanel>
+        )}
         title="Course enquiries"
         count={source.data ? `${source.data.meta.total.toLocaleString()} enquiries` : 'Loading…'}
         footer={<Pager meta={source.data?.meta} onPage={(n) => go({ page: n })} />}

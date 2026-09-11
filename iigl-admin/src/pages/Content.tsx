@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Box,
@@ -82,6 +82,9 @@ export default function Content() {
   const section = (params.get('tab') as Section) ?? 'articles';
   const setSection = (next: Section) => setParams({ tab: next });
   const [editing, setEditing] = useState<Editing | null>(null);
+  // A form belongs to the table it was opened on: switching to another one —
+  // by its tab or from the menu — closes it rather than carrying it across.
+  useEffect(() => setEditing(null), [section]);
   const [deletingBanner, setDeletingBanner] = useState<{ id: number; name: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -184,43 +187,42 @@ export default function Content() {
         ))}
       </Tabs>
 
-      {editing && editing.section === section && (
-        <FormPanel
-          title={`${form.id ? 'Edit' : 'Add'} ${SECTIONS.find((s) => s.id === section)!.label.replace(/s$/, '').toLowerCase()}`}
-          onClose={clear}
-          onSubmit={save}
-          submitLabel={form.id ? 'Save changes' : 'Add'}
-          busy={busy}
-        >
-          {Object.keys(form.values).map((key) => {
-              const long = key === 'content' || key === 'description';
-              return (
-                <TextField
-                  key={key}
-                  label={key.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())}
-                  value={form.values[key]}
-                  onChange={(e) => set(key, e.target.value)}
-                  multiline={long}
-                  minRows={long ? 4 : undefined}
-                  // A body of text needs the width; a slug does not.
-                  sx={long ? { gridColumn: '1 / -1' } : undefined}
-                  required={['page_name', 'city', 'name', 'img_type'].includes(key)}
-                />
-              );
-          })}
-
-          <Box sx={{ gridColumn: '1 / -1' }}>
-            <FileField
-              label={section === 'banners' ? 'Image' : 'Banner image'}
-              bucket={section === 'branches' || section === 'banners' ? 'banner' : 'website'}
-              value={form.image}
-              onChange={(path) => setEditing({ ...form, image: path })}
-            />
-          </Box>
-        </FormPanel>
-      )}
-
       <Panel
+        form={editing && editing.section === section && (
+          <FormPanel
+            title={`${form.id ? 'Edit' : 'Add'} ${SECTIONS.find((s) => s.id === section)!.label.replace(/s$/, '').toLowerCase()}`}
+            onClose={clear}
+            onSubmit={save}
+            submitLabel={form.id ? 'Save changes' : 'Add'}
+            busy={busy}
+          >
+            {Object.keys(form.values).map((key) => {
+                const long = key === 'content' || key === 'description';
+                return (
+                  <TextField
+                    key={key}
+                    label={key.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())}
+                    value={form.values[key]}
+                    onChange={(e) => set(key, e.target.value)}
+                    multiline={long}
+                    minRows={long ? 4 : undefined}
+                    // A body of text needs the width; a slug does not.
+                    sx={long ? { gridColumn: '1 / -1' } : undefined}
+                    required={['page_name', 'city', 'name', 'img_type'].includes(key)}
+                  />
+                );
+            })}
+
+            <Box sx={{ gridColumn: '1 / -1' }}>
+              <FileField
+                label={section === 'banners' ? 'Image' : 'Banner image'}
+                bucket={section === 'branches' || section === 'banners' ? 'banner' : 'website'}
+                value={form.image}
+                onChange={(path) => setEditing({ ...form, image: path })}
+              />
+            </Box>
+          </FormPanel>
+        )}
         title={SECTIONS.find((s) => s.id === section)?.label ?? 'Website content'}
         count={source.loading ? 'Loading…' : `${rows.length} of ${all.length}`}
         actions={

@@ -159,34 +159,33 @@ export default function Roles() {
   return (
     <>
 
-      {form.open && (
-        <FormPanel
-          title={form.id ? 'Rename role' : 'Add role'}
-          onClose={() => setForm({ open: false, name: '', description: '' })}
-          onSubmit={saveRole}
-          submitLabel={form.id ? 'Save changes' : 'Add role'}
-          busy={busy}
-        >
-          <TextField
-            label="Role name"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            required
-          />
-          <TextField
-            label="What it is for"
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-            slotProps={hint(
-              isSuper(user)
-                ? 'A head office role: every laboratory can put somebody in it.'
-                : "Your laboratory's own role. No other laboratory sees it.",
-            )}
-          />
-        </FormPanel>
-      )}
-
       <Panel
+        form={form.open && (
+          <FormPanel
+            title={form.id ? 'Rename role' : 'Add role'}
+            onClose={() => setForm({ open: false, name: '', description: '' })}
+            onSubmit={saveRole}
+            submitLabel={form.id ? 'Save changes' : 'Add role'}
+            busy={busy}
+          >
+            <TextField
+              label="Role name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              required
+            />
+            <TextField
+              label="What it is for"
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              slotProps={hint(
+                isSuper(user)
+                  ? 'A head office role: every laboratory can put somebody in it.'
+                  : "Your laboratory's own role. No other laboratory sees it.",
+              )}
+            />
+          </FormPanel>
+        )}
         title="Roles"
         count={roles.loading ? 'Loading…' : `${shown.length} roles`}
         actions={

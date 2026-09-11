@@ -34,6 +34,7 @@ import { couponRoutes } from '../routes/coupon.routes.js';
 import { masterRoutes } from '../routes/master.routes.js';
 import { settingsRoutes } from '../routes/settings.routes.js';
 import { holidayRoutes } from '../routes/holiday.routes.js';
+import { statementRoutes } from '../routes/statement.routes.js';
 import { db } from '../db/index.js';
 
 const MOUNTS: Array<[string, Router]> = [
@@ -61,6 +62,7 @@ const MOUNTS: Array<[string, Router]> = [
   ['/api/master', masterRoutes],
   ['/api/settings', settingsRoutes],
   ['/api/holidays', holidayRoutes],
+  ['/api/statements', statementRoutes],
 ];
 
 /** Routes registered directly on the app rather than through a router. */

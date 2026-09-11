@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Button,
@@ -46,31 +46,29 @@ type Status = 'new' | 'open' | 'closed';
  * already looking at.
  */
 const TABS: Array<{ id: Kind | 'all'; label: string; note: string }> = [
-  { id: 'all', label: 'All', note: 'Everything that came in, newest and still open first.' },
   { id: 'ask', label: 'Ask me', note: 'Questions from the website and the phone.' },
   { id: 'visit', label: "Visitor's diary", note: 'People who came to the laboratory.' },
-  { id: 'lead', label: 'Lead followup', note: 'Work worth chasing.' },
+  // Stored as `lead`; shown as Contact Us, which is what people filled in.
+  { id: 'lead', label: 'Contact Us', note: 'People who wrote in through Contact Us.' },
   { id: 'complaint', label: 'Complaints', note: 'Something went wrong and somebody said so.' },
   { id: 'laboratory', label: 'Laboratory', note: 'People asking about opening a laboratory.' },
 ];
 
 /**
- * New is the tone that asks for attention; open is in hand; closed is done.
- *
- * `refused` is deliberately not used here — red is what the panel says for a
- * declined transaction or a deleted record, and an enquiry nobody has picked up
- * yet is waiting, not refused.
+ * Stored as new / open / closed and named for what they mean on the list:
+ * Pending in yellow — nobody has started; In progress in light blue — being
+ * followed up; Resolved in green — done with.
  */
 const STATE: Record<Status, { tone: Tone; label: string }> = {
-  new: { tone: 'waiting', label: 'New' },
-  open: { tone: 'plain', label: 'Open' },
-  closed: { tone: 'settled', label: 'Closed' },
+  new: { tone: 'lead', label: 'Pending' },
+  open: { tone: 'followup', label: 'In progress' },
+  closed: { tone: 'settled', label: 'Resolved' },
 };
 
 const KIND_LABEL: Record<Kind, string> = {
   ask: 'Ask me',
   visit: 'Visit',
-  lead: 'Lead',
+  lead: 'Contact Us',
   complaint: 'Complaint',
   laboratory: 'Laboratory',
 };
@@ -139,7 +137,9 @@ const BLANK = {
 export default function Enquiries({ fixedKind }: { fixedKind?: Kind } = {}) {
   const toast = useToast();
   const [params, setParams] = useSearchParams();
-  const kind = fixedKind ?? ((params.get('kind') as Kind | null) ?? 'all');
+  // No "All": each kind is a book of its own, and one with no kind named opens
+  // on the first of them.
+  const kind = fixedKind ?? ((params.get('kind') as Kind | 'all' | null) ?? 'ask');
   const status = params.get('status') as Status | null;
   const page = Number(params.get('page') ?? 1);
 
@@ -160,6 +160,9 @@ export default function Enquiries({ fixedKind }: { fixedKind?: Kind } = {}) {
   const courseList = courses.data?.data ?? [];
 
   const [form, setForm] = useState<typeof BLANK | null>(null);
+  // A form belongs to the table it was opened on: switching to another one —
+  // by its tab or from the menu — closes it rather than carrying it across.
+  useEffect(() => setForm(null), [kind]);
   const [deleting, setDeleting] = useState<Enquiry | null>(null);
   const [following, setFollowing] = useState<Enquiry | null>(null);
   const [viewing, setViewing] = useState<Enquiry | null>(null);
@@ -228,7 +231,7 @@ export default function Enquiries({ fixedKind }: { fixedKind?: Kind } = {}) {
   const move = async (e: Enquiry, next: Status) => {
     try {
       await api.patch(`/enquiries/${e.id}`, { status: next });
-      toast.ok(next === 'closed' ? `Closed the enquiry from ${e.name}.` : `Picked up ${e.name}.`);
+      toast.ok(next === 'closed' ? `Resolved the enquiry from ${e.name}.` : `${e.name} is in progress.`);
       reload();
     } catch (err) {
       toast.error(messageOf(err));
@@ -269,9 +272,9 @@ export default function Enquiries({ fixedKind }: { fixedKind?: Kind } = {}) {
             note="new and open"
             tone={totals.waiting > 0 ? 'waiting' : 'settled'}
           />
-          <Tile label="New" value={String(totals.statuses.new)} />
-          <Tile label="Open" value={String(totals.statuses.open)} />
-          <Tile label="Closed" value={String(totals.statuses.closed)} />
+          <Tile label="Pending" value={String(totals.statuses.new)} />
+          <Tile label="In progress" value={String(totals.statuses.open)} />
+          <Tile label="Resolved" value={String(totals.statuses.closed)} />
           <Tile label="Complaints" value={String(totals.kinds.complaint)} />
         </div>
       )}
@@ -293,175 +296,174 @@ export default function Enquiries({ fixedKind }: { fixedKind?: Kind } = {}) {
         </Tabs>
       )}
 
-      {form && (
-        <FormPanel
-          // Pinned, this is the same form as the course enquiry one and says
-          // so the same way. Unpinned it keeps its own wording, where "New
-          // enquiry" would not say which of five kinds is being recorded.
-          title={
-            fixedKind
-              ? form.id
-                ? `Edit enquiry — ${form.name}`
-                : 'New enquiry'
-              : form.id
-                ? 'Edit enquiry'
-                : 'Record an enquiry'
-          }
-          onClose={() => setForm(null)}
-          onSubmit={save}
-          busy={busy}
-        >
-          {/*
-            Pinned to one kind, the form does not ask which. The tab has
-            already said — offering the other four is a question with one
-            right answer and four ways to file the record where nobody will
-            look for it. `form.kind` still carries the value; it is simply not
-            somebody's to change here, the same way the course enquiry form
-            never asks what kind of enquiry it is.
-          */}
-          {!fixedKind && (
+      <Panel
+        form={form && (
+          <FormPanel
+            // Pinned, this is the same form as the course enquiry one and says
+            // so the same way. Unpinned it keeps its own wording, where "New
+            // enquiry" would not say which of five kinds is being recorded.
+            title={
+              fixedKind
+                ? form.id
+                  ? `Edit enquiry — ${form.name}`
+                  : 'New enquiry'
+                : form.id
+                  ? 'Edit enquiry'
+                  : 'Record an enquiry'
+            }
+            onClose={() => setForm(null)}
+            onSubmit={save}
+            busy={busy}
+          >
+            {/*
+              Pinned to one kind, the form does not ask which. The tab has
+              already said — offering the other four is a question with one
+              right answer and four ways to file the record where nobody will
+              look for it. `form.kind` still carries the value; it is simply not
+              somebody's to change here, the same way the course enquiry form
+              never asks what kind of enquiry it is.
+            */}
+            {!fixedKind && (
+              <TextField
+                select
+                label="Kind"
+                value={form.kind}
+                onChange={(e) => set('kind', e.target.value)}
+              >
+                {TABS.filter((t) => t.id !== 'all').map((t) => (
+                  <MenuItem key={t.id} value={t.id}>
+                    {t.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
             <TextField
-              select
-              label="Kind"
-              value={form.kind}
-              onChange={(e) => set('kind', e.target.value)}
-            >
-              {TABS.filter((t) => t.id !== 'all').map((t) => (
-                <MenuItem key={t.id} value={t.id}>
-                  {t.label}
-                </MenuItem>
-              ))}
-            </TextField>
-          )}
-          <TextField
-            label="Name"
-            value={form.name}
-            onChange={(e) => set('name', e.target.value)}
-            required
-          />
-          <TextField
-            label="Mobile number"
-            value={form.mobile}
-            onChange={(e) => set('mobile', e.target.value)}
-            required
-          />
-          {/*
-            Required on this book only. A franchise enquiry is answered with a
-            prospectus and a contract, both of which go by email; the other
-            four kinds are answered on the phone, and refusing to record a
-            walk-in without an address would lose the enquiry entirely.
-          */}
-          <TextField
-            label="Email"
-            value={form.email}
-            onChange={(e) => set('email', e.target.value)}
-            required={Boolean(fixedKind)}
-          />
-          <TextField
-            label="Subject"
-            value={form.subject}
-            onChange={(e) => set('subject', e.target.value)}
-          />
-          {/*
-            The course pair, as the course enquiry form has it: the one we run
-            when we run it, typed free when we do not. Columns added by
-            migration 016.
-          */}
-          {fixedKind && (
-            <TextField
-              select
-              label="Course interested"
-              value={form.course_id}
-              onChange={(e) => set('course_id', e.target.value)}
-              slotProps={hint('Leave blank and type it below if we do not run it yet.', true)}
-            >
-              <MenuItem value="">Not on the list</MenuItem>
-              {courseList.map((c) => (
-                <MenuItem key={c.id} value={c.id}>
-                  {c.name}
-                </MenuItem>
-              ))}
-            </TextField>
-          )}
-          {fixedKind && (
-            <TextField
-              label="Other course"
-              value={form.course_interested}
-              onChange={(e) => set('course_interested', e.target.value)}
+              label="Name"
+              value={form.name}
+              onChange={(e) => set('name', e.target.value)}
+              required
             />
-          )}
-          {/*
-            When it came in, which is not when the row was typed: Friday's
-            walk-ins get written up on Monday. The column is new — migration
-            015 — because the course enquiry book has carried one all along
-            and these two forms are meant to ask the same questions.
-          */}
-          {fixedKind && (
-            <DateField
-              label="Enquiry date"
-              value={form.enquiry_date}
-              onChange={(value) => set('enquiry_date', value)}
-            />
-          )}
-          <SourceField
-            label="Enquiry source"
-            value={form.source}
-            onChange={(v) => set('source', v)}
-          />
-          {/*
-            Status and the next attempt's date, in the same places the course
-            enquiry form puts them. The unpinned screen moves status from the
-            row instead — Pick this up, Close it — and a select there would be
-            two controls for one column.
-          */}
-          {fixedKind && (
             <TextField
-              select
-              label="Status"
-              value={form.status}
-              onChange={(e) => set('status', e.target.value)}
-            >
-              {(Object.keys(STATE) as Status[]).map((id) => (
-                <MenuItem key={id} value={id}>
-                  {STATE[id].label}
-                </MenuItem>
-              ))}
-            </TextField>
-          )}
-          {fixedKind && (
-            <DateField
-              label="Follow up on"
-              value={form.follow_up_on}
-              onChange={(value) => set('follow_up_on', value)}
+              label="Mobile number"
+              value={form.mobile}
+              onChange={(e) => set('mobile', e.target.value)}
+              required
             />
-          )}
-          {/*
-            Not on the pinned form: it has a Remark box already, and two
-            multiline boxes side by side is a question about where to type
-            that nobody can answer from the labels.
-          */}
-          {!fixedKind && (
+            {/*
+              Required on this book only. A franchise enquiry is answered with a
+              prospectus and a contract, both of which go by email; the other
+              four kinds are answered on the phone, and refusing to record a
+              walk-in without an address would lose the enquiry entirely.
+            */}
             <TextField
-              label="What they said"
-              value={form.message}
-              onChange={(e) => set('message', e.target.value)}
+              label="Email"
+              value={form.email}
+              onChange={(e) => set('email', e.target.value)}
+              required={Boolean(fixedKind)}
+            />
+            <TextField
+              label="Subject"
+              value={form.subject}
+              onChange={(e) => set('subject', e.target.value)}
+            />
+            {/*
+              The course pair, as the course enquiry form has it: the one we run
+              when we run it, typed free when we do not. Columns added by
+              migration 016.
+            */}
+            {fixedKind && (
+              <TextField
+                select
+                label="Course interested"
+                value={form.course_id}
+                onChange={(e) => set('course_id', e.target.value)}
+                slotProps={hint('Leave blank and type it below if we do not run it yet.', true)}
+              >
+                <MenuItem value="">Not on the list</MenuItem>
+                {courseList.map((c) => (
+                  <MenuItem key={c.id} value={c.id}>
+                    {c.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
+            {fixedKind && (
+              <TextField
+                label="Other course"
+                value={form.course_interested}
+                onChange={(e) => set('course_interested', e.target.value)}
+              />
+            )}
+            {/*
+              When it came in, which is not when the row was typed: Friday's
+              walk-ins get written up on Monday. The column is new — migration
+              015 — because the course enquiry book has carried one all along
+              and these two forms are meant to ask the same questions.
+            */}
+            {fixedKind && (
+              <DateField
+                label="Enquiry date"
+                value={form.enquiry_date}
+                onChange={(value) => set('enquiry_date', value)}
+              />
+            )}
+            <SourceField
+              label="Enquiry source"
+              value={form.source}
+              onChange={(v) => set('source', v)}
+            />
+            {/*
+              Status and the next attempt's date, in the same places the course
+              enquiry form puts them. The unpinned screen moves status from the
+              row instead — Mark in progress, Mark resolved — and a select there would be
+              two controls for one column.
+            */}
+            {fixedKind && (
+              <TextField
+                select
+                label="Status"
+                value={form.status}
+                onChange={(e) => set('status', e.target.value)}
+              >
+                {(Object.keys(STATE) as Status[]).map((id) => (
+                  <MenuItem key={id} value={id}>
+                    {STATE[id].label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
+            {fixedKind && (
+              <DateField
+                label="Follow up on"
+                value={form.follow_up_on}
+                onChange={(value) => set('follow_up_on', value)}
+              />
+            )}
+            {/*
+              Not on the pinned form: it has a Remark box already, and two
+              multiline boxes side by side is a question about where to type
+              that nobody can answer from the labels.
+            */}
+            {!fixedKind && (
+              <TextField
+                label="What they said"
+                value={form.message}
+                onChange={(e) => set('message', e.target.value)}
+                multiline
+                minRows={2}
+                sx={{ gridColumn: '1 / -1' }}
+              />
+            )}
+            <TextField
+              label="Remark"
+              value={form.remark}
+              onChange={(e) => set('remark', e.target.value)}
               multiline
               minRows={2}
               sx={{ gridColumn: '1 / -1' }}
             />
-          )}
-          <TextField
-            label="Remark"
-            value={form.remark}
-            onChange={(e) => set('remark', e.target.value)}
-            multiline
-            minRows={2}
-            sx={{ gridColumn: '1 / -1' }}
-          />
-        </FormPanel>
-      )}
-
-      <Panel
+          </FormPanel>
+        )}
         title="Enquiries"
         count={source.data ? `${source.data.meta.total.toLocaleString()} enquiries` : 'Loading…'}
         footer={<Pager meta={source.data?.meta} onPage={(n) => go({ page: n })} />}
@@ -485,9 +487,9 @@ export default function Enquiries({ fixedKind }: { fixedKind?: Kind } = {}) {
               sx={{ width: 160, flexShrink: 0 }}
             >
               <MenuItem value="all">All</MenuItem>
-              <MenuItem value="new">New</MenuItem>
-              <MenuItem value="open">Open</MenuItem>
-              <MenuItem value="closed">Closed</MenuItem>
+              <MenuItem value="new">Pending</MenuItem>
+              <MenuItem value="open">In progress</MenuItem>
+              <MenuItem value="closed">Resolved</MenuItem>
             </TextField>
             <SearchField
               width={340}
@@ -535,7 +537,14 @@ export default function Enquiries({ fixedKind }: { fixedKind?: Kind } = {}) {
             </TableHead>
             <TableBody>
               {rows.map((e, index) => (
-                <TableRow key={e.id} hover>
+                <TableRow
+                  key={e.id}
+                  hover
+                  // The whole row opens the enquiry: who it is and everything
+                  // tried so far. The actions cell keeps its clicks to itself.
+                  onClick={() => setViewing(e)}
+                  sx={{ cursor: 'pointer' }}
+                >
                   <TableCell className="mono">{index + 1}</TableCell>
                   <TableCell sx={{ whiteSpace: 'normal', minWidth: 150 }}>{e.name}</TableCell>
                   <TableCell className="mono">{e.mobile}</TableCell>
@@ -566,7 +575,7 @@ export default function Enquiries({ fixedKind }: { fixedKind?: Kind } = {}) {
                     )}
                   </TableCell>
                   <TableCell>{e.created_at?.slice(0, 10) ?? '—'}</TableCell>
-                  <TableCell>
+                  <TableCell onClick={(ev) => ev.stopPropagation()} sx={{ cursor: 'default' }}>
                     <RowActions>
                       {/*
                         Following up is the work this screen exists for, so it
@@ -594,7 +603,7 @@ export default function Enquiries({ fixedKind }: { fixedKind?: Kind } = {}) {
                       />
                       {e.status !== 'closed' && (
                         <IconAction
-                          label={e.status === 'new' ? 'Pick this up' : 'Close it'}
+                          label={e.status === 'new' ? 'Mark in progress' : 'Mark resolved'}
                           icon={e.status === 'new' ? OpenIcon : CloseIcon}
                           overflow
                           onClick={() => move(e, e.status === 'new' ? 'open' : 'closed')}

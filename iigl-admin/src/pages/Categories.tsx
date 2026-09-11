@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Avatar,
@@ -86,6 +86,12 @@ export default function Categories() {
     category_id: string;
     description: string;
   }>({ open: false, name: '', category_id: '', description: '' });
+  // A form belongs to the table it was opened on: switching to another one —
+  // by its tab or from the menu — closes it rather than carrying it across.
+  useEffect(() => {
+    setCatForm(BLANK_CATEGORY);
+    setSubForm({ open: false, name: '', category_id: '', description: '' });
+  }, [showSubs]);
 
   const saveCategory = async () => {
     setBusy(true);
@@ -181,57 +187,56 @@ export default function Categories() {
         nobody asked for — and once open it leaves the list readable underneath
         while it is filled in.
       */}
-      {catForm.open && (
-        <FormPanel
-          title={catForm.id ? `Edit ${catForm.name || 'category'}` : 'Add a category'}
-          onClose={() => setCatForm(BLANK_CATEGORY)}
-          onSubmit={saveCategory}
-          submitLabel={catForm.id ? 'Save changes' : 'Add category'}
-          busy={busy}
-        >
-          <TextField
-            label="Name"
-            value={catForm.name}
-            onChange={(e) => setCatForm({ ...catForm, name: e.target.value })}
-            autoFocus
-            required
-          />
-          <TextField
-            select
-            label="Default weight unit"
-            value={catForm.unit}
-            onChange={(e) => setCatForm({ ...catForm, unit: e.target.value })}
-            required
-          >
-            <MenuItem value="">Select a unit</MenuItem>
-            {(units.data?.data ?? []).map((u) => (
-              <MenuItem key={u.id} value={String(u.id)}>
-                {u.name} ({u.symbol})
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            label="Short description"
-            value={catForm.short_description}
-            onChange={(e) => setCatForm({ ...catForm, short_description: e.target.value })}
-          />
-          {/*
-            The list has had an Icon column since before this form existed, and
-            nothing here could fill it — every picture in it was put there by
-            the Laravel screen. Same bucket as the attribute-value images, which
-            is head-office-only, and this screen already is.
-          */}
-          <FileField
-            label="Image"
-            bucket="icon"
-            value={catForm.icon}
-            onChange={(icon) => setCatForm({ ...catForm, icon })}
-            helperText="Shown against the category in lists."
-          />
-        </FormPanel>
-      )}
-
       <Panel
+        form={catForm.open && (
+          <FormPanel
+            title={catForm.id ? `Edit ${catForm.name || 'category'}` : 'Add a category'}
+            onClose={() => setCatForm(BLANK_CATEGORY)}
+            onSubmit={saveCategory}
+            submitLabel={catForm.id ? 'Save changes' : 'Add category'}
+            busy={busy}
+          >
+            <TextField
+              label="Name"
+              value={catForm.name}
+              onChange={(e) => setCatForm({ ...catForm, name: e.target.value })}
+              autoFocus
+              required
+            />
+            <TextField
+              select
+              label="Default weight unit"
+              value={catForm.unit}
+              onChange={(e) => setCatForm({ ...catForm, unit: e.target.value })}
+              required
+            >
+              <MenuItem value="">Select a unit</MenuItem>
+              {(units.data?.data ?? []).map((u) => (
+                <MenuItem key={u.id} value={String(u.id)}>
+                  {u.name} ({u.symbol})
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="Short description"
+              value={catForm.short_description}
+              onChange={(e) => setCatForm({ ...catForm, short_description: e.target.value })}
+            />
+            {/*
+              The list has had an Icon column since before this form existed, and
+              nothing here could fill it — every picture in it was put there by
+              the Laravel screen. Same bucket as the attribute-value images, which
+              is head-office-only, and this screen already is.
+            */}
+            <FileField
+              label="Image"
+              bucket="icon"
+              value={catForm.icon}
+              onChange={(icon) => setCatForm({ ...catForm, icon })}
+              helperText="Shown against the category in lists."
+            />
+          </FormPanel>
+        )}
         title="Categories"
         count={
           categories.loading ? 'Loading…' : `${shownCats.length} of ${cats.length} categories`
@@ -328,45 +333,44 @@ export default function Categories() {
 
       {showSubs && (
       <>
-      {subForm.open && (
-        <FormPanel
-          title={subForm.id ? 'Edit subcategory' : 'Add subcategory'}
-          onClose={() => setSubForm({ open: false, name: '', category_id: '', description: '' })}
-          onSubmit={saveSubcategory}
-          submitLabel={subForm.id ? 'Save changes' : 'Add subcategory'}
-          busy={busy}
-        >
-          <TextField
-            label="Name"
-            value={subForm.name}
-            onChange={(e) => setSubForm({ ...subForm, name: e.target.value })}
-            required
-          />
-          <TextField
-            select
-            label="Category"
-            value={subForm.category_id}
-            onChange={(e) => setSubForm({ ...subForm, category_id: e.target.value })}
-            required
-          >
-            {cats.map((c) => (
-              <MenuItem key={c.id} value={String(c.id)}>
-                {c.name}
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            label="Description"
-            value={subForm.description}
-            onChange={(e) => setSubForm({ ...subForm, description: e.target.value })}
-            multiline
-            minRows={2}
-            sx={{ gridColumn: '1 / -1' }}
-          />
-        </FormPanel>
-      )}
-
       <Panel
+        form={subForm.open && (
+          <FormPanel
+            title={subForm.id ? 'Edit subcategory' : 'Add subcategory'}
+            onClose={() => setSubForm({ open: false, name: '', category_id: '', description: '' })}
+            onSubmit={saveSubcategory}
+            submitLabel={subForm.id ? 'Save changes' : 'Add subcategory'}
+            busy={busy}
+          >
+            <TextField
+              label="Name"
+              value={subForm.name}
+              onChange={(e) => setSubForm({ ...subForm, name: e.target.value })}
+              required
+            />
+            <TextField
+              select
+              label="Category"
+              value={subForm.category_id}
+              onChange={(e) => setSubForm({ ...subForm, category_id: e.target.value })}
+              required
+            >
+              {cats.map((c) => (
+                <MenuItem key={c.id} value={String(c.id)}>
+                  {c.name}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="Description"
+              value={subForm.description}
+              onChange={(e) => setSubForm({ ...subForm, description: e.target.value })}
+              multiline
+              minRows={2}
+              sx={{ gridColumn: '1 / -1' }}
+            />
+          </FormPanel>
+        )}
         title="Subcategories"
         count={
           subcategories.loading

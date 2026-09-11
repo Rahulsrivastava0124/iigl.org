@@ -92,6 +92,7 @@ export const extraTags = [
   { name: 'Students', description: 'The student pipeline: enquiry, registration, course, discount, certificate. New in this system — the Laravel menu had the entries but no tables.' },
   { name: 'Courses', description: 'The course catalogue, the enrolments on it, and the discount that sits on the fee.' },
   { name: 'Enquiries', description: 'The general enquiry book: questions, visits, leads and complaints.' },
+  { name: 'Statements', description: 'Commission billed to a laboratory on a period, its grace days, and the lock on certificate generation when a statement goes unpaid.' },
 ];
 
 /**
@@ -236,6 +237,48 @@ for (const m of MASTER_DOCS) {
 }
 
 export const extraPaths: Record<string, unknown> = {
+  '/api/statements': {
+    get: {
+      tags: ['Statements'],
+      summary: 'A laboratory’s commission statements',
+      description:
+        'Each finished period (`statement_period` months, from `statement_from`) is billed the day after it ends and falls due `statement_grace_days` later. What it bills is the commission on orders delivered or paid on in it, dated by `order_date`, at the laboratory’s rate. Approved commission payments since billing started settle the oldest statement first.\n\n`standing` is `clear`, `grace` (a billed statement is unpaid and inside its grace days — the reminder) or `locked` (past them: `POST /api/reports` is refused with 423 until head office approves a payment that covers it). `reminder` names the oldest unpaid statement.\n\nHead office names the laboratory with `lab_id`; a laboratory reads its own; a laboratory’s staff receive `standing` alone.',
+      parameters: [{ name: 'lab_id', in: 'query', schema: { type: 'integer' }, description: 'Head office only: which laboratory.' }],
+      responses: {
+        ...guarded,
+        200: ok('The statements, newest first, the running period, and where the laboratory stands.'),
+        400: err('Head office did not name a laboratory.'),
+        403: err('The account is not linked to a laboratory.'),
+        404: err('Laboratory not found.'),
+      },
+    },
+  },
+  '/api/statements/{key}/download': {
+    get: {
+      tags: ['Statements'],
+      summary: 'Download one billed statement',
+      description:
+        'The statement as an A4 sheet: its orders, what was billed, what payments have covered of it, and the laboratory’s outstanding balance. `key` is the period’s first month. Only billed periods can be downloaded. `?format=html` returns the markup the PDF is rendered from.',
+      parameters: [
+        { name: 'key', in: 'path', required: true, schema: { type: 'string', pattern: '^[0-9]{4}-[0-9]{2}$' }, description: 'YYYY-MM, the first month of the period.' },
+        { name: 'lab_id', in: 'query', schema: { type: 'integer' }, description: 'Head office only: which laboratory.' },
+        { name: 'format', in: 'query', schema: { type: 'string', enum: ['html'] }, description: 'Return the markup instead of a PDF.' },
+      ],
+      responses: {
+        200: {
+          description: 'The statement as a PDF, or as HTML when format=html.',
+          content: {
+            'application/pdf': { schema: { type: 'string', format: 'binary' } },
+            'text/html': { schema: { type: 'string' } },
+          },
+        },
+        ...guarded,
+        400: err('The period is not YYYY-MM, or head office did not name a laboratory.'),
+        403: err('Only the laboratory and head office can download it.'),
+        404: err('Laboratory not found, or the period has not been billed yet.'),
+      },
+    },
+  },
   ...masterPaths,
 
   '/api/courses/{id}/students': {
@@ -835,7 +878,7 @@ export const extraPaths: Record<string, unknown> = {
         note: str,
         outcome: {
           type: 'string',
-          enum: ['reached', 'no_answer', 'interested', 'not_interested', 'converted'],
+          enum: ['reached', 'no_answer', 'interested', 'not_interested', 'converted', 'pending', 'in_progress', 'resolved'],
         },
         next_follow_up_on: { type: ['string', 'null'], format: 'date' },
         status: {
@@ -1408,7 +1451,7 @@ export const extraPaths: Record<string, unknown> = {
         note: str,
         outcome: {
           type: 'string',
-          enum: ['reached', 'no_answer', 'interested', 'not_interested', 'converted'],
+          enum: ['reached', 'no_answer', 'interested', 'not_interested', 'converted', 'pending', 'in_progress', 'resolved'],
         },
         next_follow_up_on: { type: ['string', 'null'], format: 'date' },
         status: { type: 'string', enum: ['new', 'open', 'closed'] },

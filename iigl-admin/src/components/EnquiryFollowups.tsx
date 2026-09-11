@@ -35,9 +35,11 @@ const BOOKS: Record<
   enquiry: {
     path: (id) => `/enquiries/${id}/followups`,
     statuses: [
-      { id: 'new', label: 'New' },
-      { id: 'open', label: 'Open' },
-      { id: 'closed', label: 'Closed' },
+      // Stored as new / open / closed; named for what they mean to whoever
+      // is working the list.
+      { id: 'new', label: 'Pending' },
+      { id: 'open', label: 'In progress' },
+      { id: 'closed', label: 'Resolved' },
     ],
   },
   student: {
@@ -64,9 +66,9 @@ const OUTCOMES: {
   tone: Tone;
   moves?: Record<Book, string | undefined>;
 }[] = [
-  { id: 'reached', label: 'Reached them', tone: 'settled', moves: { enquiry: 'open', student: 'contacted' } },
-  { id: 'no_answer', label: 'No answer', tone: 'waiting' },
-  { id: 'interested', label: 'Interested', tone: 'settled', moves: { enquiry: 'open', student: 'interested' } },
+  { id: 'reached', label: 'Reached them', tone: 'followup', moves: { enquiry: 'open', student: 'contacted' } },
+  { id: 'no_answer', label: 'No answer', tone: 'followup' },
+  { id: 'interested', label: 'Interested', tone: 'followup', moves: { enquiry: 'open', student: 'interested' } },
   { id: 'not_interested', label: 'Not interested', tone: 'refused', moves: { enquiry: 'closed', student: 'not_interested' } },
   { id: 'converted', label: 'Converted', tone: 'settled', moves: { enquiry: 'closed', student: 'converted' } },
 ];
@@ -78,8 +80,25 @@ const OUTCOMES: {
  */
 const CLOSING = new Set(['closed', 'converted', 'not_interested']);
 
+/** A stored status by its name in that book: `closed` reads Resolved. */
+const statusLabel = (book: Book, id: string | null) =>
+  BOOKS[book].statuses.find((st) => st.id === id)?.label ?? id ?? '—';
+
+/**
+ * For Ask Me and Complaints. Nobody is being sold anything, so "how it went" is
+ * where the matter now stands, and each answer is the status it leaves.
+ */
+const STANDING: typeof OUTCOMES = [
+  { id: 'pending', label: 'Pending', tone: 'lead', moves: { enquiry: 'new', student: undefined } },
+  { id: 'in_progress', label: 'In progress', tone: 'followup', moves: { enquiry: 'open', student: undefined } },
+  { id: 'resolved', label: 'Resolved', tone: 'settled', moves: { enquiry: 'closed', student: undefined } },
+];
+
+/** The kinds whose follow-ups are recorded as a standing rather than a call. */
+const STANDING_KINDS = new Set(['ask', 'complaint']);
+
 const outcomeOf = (id: string) =>
-  OUTCOMES.find((o) => o.id === id) ?? { id, label: id, tone: 'plain' as Tone };
+  [...OUTCOMES, ...STANDING].find((o) => o.id === id) ?? { id, label: id, tone: 'plain' as Tone };
 
 export interface Followup {
   id: number;
@@ -99,7 +118,15 @@ export interface Followup {
  * under the form when recording a new attempt, where seeing what was said last
  * time is the point of having it open.
  */
-export function FollowupHistory({ rows, loading }: { rows: Followup[]; loading: boolean }) {
+export function FollowupHistory({
+  rows,
+  loading,
+  book = 'enquiry',
+}: {
+  rows: Followup[];
+  loading: boolean;
+  book?: Book;
+}) {
   return (
     <TableFrame
       loading={loading}
@@ -140,7 +167,9 @@ export function FollowupHistory({ rows, loading }: { rows: Followup[]; loading: 
                 </TableCell>
 
                 <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                  {f.status_from ? `${f.status_from} → ${f.status_to}` : '—'}
+                  {f.status_from
+                    ? `${statusLabel(book, f.status_from)} → ${statusLabel(book, f.status_to)}`
+                    : '—'}
                 </TableCell>
 
                 {/* The only column worth wrapping: everything else is a word. */}
@@ -244,7 +273,9 @@ export function FollowupDialog({
   const navigate = useNavigate();
   const { rows, loading } = useFollowups(book, enquiry.id);
 
-  const [outcome, setOutcome] = useState('reached');
+  const standing = book === 'enquiry' && STANDING_KINDS.has(enquiry.kind ?? '');
+  const choices = standing ? STANDING : OUTCOMES;
+  const [outcome, setOutcome] = useState(standing ? 'in_progress' : 'reached');
   const [note, setNote] = useState('');
   const [next, setNext] = useState('');
   const [status, setStatus] = useState('');
@@ -346,7 +377,7 @@ export function FollowupDialog({
             onChange={(e) => setOutcome(e.target.value)}
             sx={{ width: 220 }}
           >
-            {OUTCOMES.map((o) => (
+            {choices.map((o) => (
               <MenuItem key={o.id} value={o.id}>
                 {o.label}
               </MenuItem>
@@ -362,7 +393,8 @@ export function FollowupDialog({
             />
           )}
 
-          {!closing && (
+          {/* A standing is the status already, so it is not asked twice. */}
+          {!closing && !standing && (
             <TextField
               select
               label="Status after this"
@@ -373,7 +405,7 @@ export function FollowupDialog({
               }}
               sx={{ width: 220 }}
             >
-              <MenuItem value="">Leave it as {enquiry.status}</MenuItem>
+              <MenuItem value="">Leave it as {statusLabel(book, enquiry.status)}</MenuItem>
               {BOOKS[book].statuses.map((st) => (
                 <MenuItem key={st.id} value={st.id}>
                   {st.label}
@@ -396,7 +428,7 @@ export function FollowupDialog({
             <Typography sx={{ fontSize: 13.5, fontWeight: 600, mb: 0.5 }}>
               Earlier attempts
             </Typography>
-            <FollowupHistory rows={rows} loading={loading} />
+            <FollowupHistory rows={rows} loading={loading} book={book} />
           </Box>
         )}
       </Stack>
@@ -462,7 +494,7 @@ export function EnquiryViewDialog({
           {line('Kind', enquiry.kind)}
           {line('Source', enquiry.source)}
           {line('Received', enquiry.created_at?.slice(0, 10))}
-          {line('Status', enquiry.status)}
+          {line('Status', statusLabel(book, enquiry.status))}
         </Box>
 
         {(enquiry.subject || enquiry.message) && (
@@ -482,7 +514,7 @@ export function EnquiryViewDialog({
           <Typography sx={{ fontSize: 13.5, fontWeight: 600, mb: 0.5 }}>
             Follow-up history
           </Typography>
-          <FollowupHistory rows={rows} loading={loading} />
+          <FollowupHistory rows={rows} loading={loading} book={book} />
         </Box>
       </Stack>
     </Dialog>

@@ -1,0 +1,116 @@
+<%
+/*
+  A laboratory's commission statement for one billed period.
+
+  Every figure is the one the panel shows: the same orders, the same rate and
+  the same oldest-first allocation of payments, read through the statement
+  service rather than worked out again here.
+*/
+const money = (v) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const v = (x) => (x == null || x === '' ? '' : String(x));
+const monthLabel = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+const periodLabel = period.from.slice(0, 7) === period.to.slice(0, 7)
+  ? monthLabel(period.from)
+  : monthLabel(period.from) + ' – ' + monthLabel(period.to);
+const stateLabel = { paid: 'Paid', due: 'Due', overdue: 'Overdue' }[period.state];
+%>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Commission statement — <%= v(lab.fullname) %> — <%= periodLabel %></title>
+  <style>
+    @page { size: A4; margin: 14mm; }
+    * { box-sizing: border-box; }
+    body { font: 12px/1.5 "Helvetica Neue", Arial, sans-serif; color: #101828; margin: 0; }
+    header { display: flex; align-items: center; gap: 12px; border-bottom: 2px solid #0b1f4b; padding-bottom: 10px; }
+    header img { height: 46px; }
+    .name { font-size: 20px; font-weight: 700; color: #0b1f4b; letter-spacing: .5px; }
+    .sub { font-size: 11px; color: #667085; }
+    h1 { font-size: 15px; margin: 18px 0 2px; }
+    .period { color: #667085; font-size: 11.5px; margin-bottom: 14px; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+    .box { border: 1px solid #d0d5dd; border-radius: 6px; padding: 8px 10px; }
+    .box .k { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: #667085; }
+    .box .v { font-size: 14px; font-weight: 600; margin-top: 2px; }
+    .state { display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; color: #fff; }
+    .state.paid { background: #1f6b4b; } .state.due { background: #b7860b; } .state.overdue { background: #97293f; }
+    table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    th, td { border: 1px solid #d0d5dd; padding: 6px 8px; text-align: left; }
+    th { background: #f2f4f7; font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    tr.total td { font-weight: 700; background: #f9fafb; }
+    h2 { font-size: 13px; margin: 18px 0 4px; }
+    .note { margin-top: 14px; font-size: 10.5px; color: #667085; }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="<%= logo %>" alt="">
+    <div>
+      <div class="name">IIGL</div>
+      <div class="sub">Commission statement issued to <%= v(lab.fullname) %><%= lab.city ? ' · ' + v(lab.city) : '' %></div>
+    </div>
+  </header>
+
+  <h1>Commission statement — <%= periodLabel %> <span class="state <%= period.state %>"><%= stateLabel %></span></h1>
+  <div class="period"><%= period.from %> to <%= period.to %> · billed on <%= period.billed_on %> · due by <%= period.due_on %></div>
+
+  <div class="grid">
+    <div class="box"><div class="k">Rate</div><div class="v"><%= perPiece ? '₹ ' + money(rate) + ' / pc' : money(rate) + ' %' %></div></div>
+    <div class="box"><div class="k">Billed</div><div class="v">&#8377; <%= money(period.commission) %></div></div>
+    <div class="box"><div class="k">Paid against it</div><div class="v">&#8377; <%= money(period.paid) %></div></div>
+    <div class="box"><div class="k">Balance</div><div class="v">&#8377; <%= money(period.balance) %></div></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Order</th>
+        <th>Date</th>
+        <th>Status</th>
+        <th class="num">Pieces</th>
+        <th class="num">Collected</th>
+        <th class="num">Commission</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% lines.forEach((l) => { %>
+        <tr>
+          <td><%= v(l.order_no) %></td>
+          <td><%= v(l.day) %></td>
+          <td><%= v(l.status) %></td>
+          <td class="num"><%= l.pieces %></td>
+          <td class="num">&#8377; <%= money(l.collected) %></td>
+          <td class="num">&#8377; <%= money(l.commission) %></td>
+        </tr>
+      <% }) %>
+      <% if (lines.length === 0) { %>
+        <tr><td colspan="6">No order earned commission in this period.</td></tr>
+      <% } %>
+      <tr class="total">
+        <td colspan="3">Billed for <%= periodLabel %></td>
+        <td class="num"><%= period.pieces %></td>
+        <td class="num">&#8377; <%= money(period.collected) %></td>
+        <td class="num">&#8377; <%= money(period.commission) %></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Account</h2>
+  <table>
+    <tbody>
+      <tr><td>Billed since <%= book.starts_on %></td><td class="num">&#8377; <%= money(book.billed) %></td></tr>
+      <tr><td>Paid and approved</td><td class="num">&#8377; <%= money(book.paid) %></td></tr>
+      <% if (book.pending > 0) { %><tr><td>Sent, awaiting head office approval</td><td class="num">&#8377; <%= money(book.pending) %></td></tr><% } %>
+      <tr class="total"><td>Outstanding across all statements</td><td class="num">&#8377; <%= money(book.outstanding) %></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    Payments settle the oldest statement first. A statement not paid in full by
+    its due date locks certificate generation until head office approves a
+    payment that covers it. Issued by <%= v(issuedBy) %> on <%= book.today %>.
+  </div>
+</body>
+</html>

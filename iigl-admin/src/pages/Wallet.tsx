@@ -6,7 +6,8 @@ import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
 import { isLab, isSuper } from '../lib/portal';
-import { Dialog, Notice, Pager, hint, money } from '../components/ui';
+import { Dialog, Notice, Pager, Panel, hint, money } from '../components/ui';
+import { StatementsTable } from '../components/Statements';
 import { useToast } from '../components/Toast';
 import FileField from '../components/FileField';
 import { LedgerTable, LedgerTotals, type LedgerPage } from '../components/Ledger';
@@ -114,6 +115,13 @@ export default function Wallet() {
       )}
 
       <LedgerTotals account={account} />
+
+      {/* A laboratory's commission statements, each with its download. */}
+      {isLab(user) && (
+        <Panel title="Commission statements" sx={{ mb: 2 }}>
+          <StatementsTable />
+        </Panel>
+      )}
 
       {/*
         Pending money is money nobody has agreed to yet: it is on the statement,

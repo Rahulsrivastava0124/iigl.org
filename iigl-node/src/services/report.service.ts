@@ -3,6 +3,7 @@ import type { Kysely } from 'kysely';
 import type { DB } from '../db/types.js';
 import { setting, settingNumber } from './settings.service.js';
 import { agreedPriceFor, refreshOrderMoney } from './pricing.service.js';
+import { assertReportsUnlocked } from './statement.service.js';
 import { caratOf } from '../lib/money.js';
 import { badRequest, conflict } from '../lib/errors.js';
 import type { SessionUser } from '../middleware/auth.js';
@@ -185,6 +186,9 @@ export async function createReport(
     throw badRequest('Your account is not linked to a laboratory, so it cannot issue reports.');
   }
   const labId = user.labId;
+  // A laboratory past the grace days on a commission statement issues nothing
+  // until head office has approved a payment that covers it.
+  await assertReportsUnlocked(labId);
 
   const work = async (trx: Kysely<DB>) => {
     // A report per item, capped by the quantity ordered.

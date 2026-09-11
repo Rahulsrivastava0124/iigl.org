@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Box,
@@ -189,6 +189,9 @@ export default function Courses() {
   );
 
   const [form, setForm] = useState<typeof BLANK_COURSE | null>(null);
+  // A form belongs to the table it was opened on: switching to another one —
+  // by its tab or from the menu — closes it rather than carrying it across.
+  useEffect(() => setForm(null), [tab]);
   const [viewing, setViewing] = useState<Course | null>(null);
   // Fetched by id, so the dialog cannot show one course's totals under
   // another's name.
@@ -608,66 +611,65 @@ export default function Courses() {
 
       {tab === 'catalogue' ? (
         <>
-          {form && (
-            <FormPanel
-              title={form.id ? `Edit ${form.name}` : 'Add a course'}
-              onClose={() => setForm(null)}
-              onSubmit={saveCourse}
-              busy={busy}
-            >
-              <TextField
-                label="Course name"
-                value={form.name}
-                onChange={(e) => set('name', e.target.value)}
-                required
-              />
-              <TextField label="Code" value={form.code} onChange={(e) => set('code', e.target.value)} />
-              <TextField
-                label="Duration"
-                value={form.duration}
-                onChange={(e) => set('duration', e.target.value)}
-                slotProps={hint('As the prospectus states it — "6 months".')}
-              />
-              <TextField
-                label="Course fee"
-                type="number"
-                value={form.fee}
-                onChange={(e) => set('fee', e.target.value)}
-                slotProps={{
-                  htmlInput: { min: 0 },
-                  ...hint('Copied onto an enrolment; changing it here does not re-bill anybody.'),
-                }}
-              />
-              {/*
-                The rate the fee is quoted at: pick one from Master › GST, or
-                type one for this course alone. One control for one question.
-              */}
-              <GstField
-                rates={gstList}
-                value={{ gst_id: form.gst_id, gst_percent: form.gst_percent }}
-                onChange={(next) => setForm({ ...form, ...next })}
-              />
-              <TextField
-                select
-                label="Offered"
-                value={form.is_active ? '1' : '0'}
-                onChange={(e) => set('is_active', e.target.value === '1')}
-              >
-                <MenuItem value="1">Yes</MenuItem>
-                <MenuItem value="0">Retired</MenuItem>
-              </TextField>
-              <TextField
-                label="Description"
-                value={form.description}
-                onChange={(e) => set('description', e.target.value)}
-                multiline
-                minRows={2}
-                sx={{ gridColumn: '1 / -1' }}
-              />
-            </FormPanel>
-          )}
-
           <Panel
+            form={form && (
+              <FormPanel
+                title={form.id ? `Edit ${form.name}` : 'Add a course'}
+                onClose={() => setForm(null)}
+                onSubmit={saveCourse}
+                busy={busy}
+              >
+                <TextField
+                  label="Course name"
+                  value={form.name}
+                  onChange={(e) => set('name', e.target.value)}
+                  required
+                />
+                <TextField label="Code" value={form.code} onChange={(e) => set('code', e.target.value)} />
+                <TextField
+                  label="Duration"
+                  value={form.duration}
+                  onChange={(e) => set('duration', e.target.value)}
+                  slotProps={hint('As the prospectus states it — "6 months".')}
+                />
+                <TextField
+                  label="Course fee"
+                  type="number"
+                  value={form.fee}
+                  onChange={(e) => set('fee', e.target.value)}
+                  slotProps={{
+                    htmlInput: { min: 0 },
+                    ...hint('Copied onto an enrolment; changing it here does not re-bill anybody.'),
+                  }}
+                />
+                {/*
+                  The rate the fee is quoted at: pick one from Master › GST, or
+                  type one for this course alone. One control for one question.
+                */}
+                <GstField
+                  rates={gstList}
+                  value={{ gst_id: form.gst_id, gst_percent: form.gst_percent }}
+                  onChange={(next) => setForm({ ...form, ...next })}
+                />
+                <TextField
+                  select
+                  label="Offered"
+                  value={form.is_active ? '1' : '0'}
+                  onChange={(e) => set('is_active', e.target.value === '1')}
+                >
+                  <MenuItem value="1">Yes</MenuItem>
+                  <MenuItem value="0">Retired</MenuItem>
+                </TextField>
+                <TextField
+                  label="Description"
+                  value={form.description}
+                  onChange={(e) => set('description', e.target.value)}
+                  multiline
+                  minRows={2}
+                  sx={{ gridColumn: '1 / -1' }}
+                />
+              </FormPanel>
+            )}
             title="Courses"
             count={catalogue.data ? `${catalogue.data.meta.total} courses` : 'Loading…'}
             footer={<Pager meta={catalogue.data?.meta} onPage={(n) => go({ page: n })} />}

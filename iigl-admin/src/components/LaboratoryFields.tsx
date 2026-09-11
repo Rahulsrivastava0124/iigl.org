@@ -105,6 +105,12 @@ export interface LabForm {
   commision: string;
   commission_type: string;
   registration_fee: string;
+  /** Months per commission statement: '1', '3', '6' or '12'. */
+  statement_period: string;
+  /** Days after billing to pay a statement in full. */
+  statement_grace_days: string;
+  /** The first month billed, YYYY-MM. Blank is the default start. */
+  statement_from: string;
   profile_photo: string;
   company_logo: string;
   signature: string;
@@ -148,6 +154,9 @@ export const BLANK_LAB: LabForm = {
   commision: '',
   commission_type: 'percent',
   registration_fee: '',
+  statement_period: '1',
+  statement_grace_days: '15',
+  statement_from: '',
   profile_photo: '',
   company_logo: '',
   signature: '',
@@ -183,6 +192,12 @@ export function labFromRecord(d: LabRecord): LabForm {
   // Not every account has been given a reading; a blank one is the percentage
   // everything meant before there was a choice.
   out.commission_type = out.commission_type === 'per_pc' ? 'per_pc' : 'percent';
+
+  // Statement terms: a month input takes YYYY-MM, and an account from before
+  // the columns existed reads as the defaults.
+  out.statement_period = ['1', '3', '6', '12'].includes(out.statement_period) ? out.statement_period : '1';
+  out.statement_grace_days = out.statement_grace_days === '' ? '15' : out.statement_grace_days;
+  out.statement_from = out.statement_from.slice(0, 7);
 
   out.id_proofs = list(d.id_proof_type);
   out.address_proofs = list(d.address_proof_type);
@@ -257,6 +272,9 @@ export function labPatch(form: LabForm): Record<string, string | number | null |
     commision: form.commision === '' ? null : Number(form.commision),
     commission_type: form.commission_type === 'per_pc' ? 'per_pc' : 'percent',
     registration_fee: form.registration_fee === '' ? null : Number(form.registration_fee),
+    statement_period: Number(form.statement_period) || 1,
+    statement_grace_days: form.statement_grace_days === '' ? 15 : Number(form.statement_grace_days),
+    statement_from: form.statement_from || null,
     profile_photo: text(form.profile_photo),
     company_logo: text(form.company_logo),
     signature: text(form.signature),
@@ -845,6 +863,52 @@ export default function LaboratoryFields({ form, set, extra }: Props) {
           slotProps={{
             htmlInput: { min: 0, step: 0.01 },
             ...hint('Printed on the form in figures and in words.'),
+          }}
+        />
+      </Grid>
+
+      {/* ------------------------------------------------- the statement
+
+          How head office bills the commission above. Each period is billed the
+          day after it ends; unpaid in full after the grace days, the
+          laboratory cannot generate certificates until head office approves a
+          payment that covers it. */}
+      <Grid size={cell}>
+        <TextField
+          select
+          label="Statement Period"
+          value={form.statement_period}
+          onChange={(e) => set('statement_period', e.target.value)}
+          slotProps={hint('How often this laboratory is billed its commission. A statement is billed the day after its period ends.', true)}
+        >
+          <MenuItem value="1">Monthly</MenuItem>
+          <MenuItem value="3">Quarterly</MenuItem>
+          <MenuItem value="6">Half-yearly</MenuItem>
+          <MenuItem value="12">Yearly</MenuItem>
+        </TextField>
+      </Grid>
+      <Grid size={cell}>
+        <TextField
+          label="Grace Days"
+          type="number"
+          placeholder="Eg. 15"
+          value={form.statement_grace_days}
+          onChange={(e) => set('statement_grace_days', e.target.value)}
+          slotProps={{
+            htmlInput: { min: 0, max: 365, step: 1 },
+            ...hint('Days after billing to pay in full. After these, certificate generation is locked until head office approves a payment.'),
+          }}
+        />
+      </Grid>
+      <Grid size={cell}>
+        <TextField
+          label="Billing Starts"
+          type="month"
+          value={form.statement_from}
+          onChange={(e) => set('statement_from', e.target.value)}
+          slotProps={{
+            inputLabel: { shrink: true },
+            ...hint('The first month billed. Blank is September 2026, or the month the laboratory was added if that is later.'),
           }}
         />
       </Grid>

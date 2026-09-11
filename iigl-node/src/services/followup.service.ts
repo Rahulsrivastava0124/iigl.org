@@ -17,13 +17,22 @@ import { badRequest, notFound } from '../lib/errors.js';
 export const ENQUIRY_TYPE = ['enquiry', 'student'] as const;
 export type EnquiryType = (typeof ENQUIRY_TYPE)[number];
 
-/** How one attempt to reach somebody went. */
+/**
+ * How one attempt to reach somebody went.
+ *
+ * The last three are for the enquiries that are worked rather than sold to —
+ * Ask Me and Complaints — where the answer to "how did it go" is simply where
+ * the matter now stands.
+ */
 export const FOLLOWUP_OUTCOME = [
   'reached',
   'no_answer',
   'interested',
   'not_interested',
   'converted',
+  'pending',
+  'in_progress',
+  'resolved',
 ] as const;
 
 /**

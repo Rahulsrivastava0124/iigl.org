@@ -75,6 +75,9 @@ export default function Pricing() {
   const gst = useFetch<{ data: GstRate[] }>('/master/gst');
 
   const [form, setForm] = useState(BLANK);
+  // Another scope is another price list: a band opened for editing on one
+  // closes rather than being saved into the next.
+  useEffect(() => setForm(BLANK), [scope]);
   const [deleting, setDeleting] = useState<PriceWithCategory | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -154,90 +157,89 @@ export default function Pricing() {
   return (
     <>
 
-      {form.open && (
-        <FormPanel
-          title={form.id ? 'Edit price band' : 'Add price band'}
-          onClose={() => setForm(BLANK)}
-          onSubmit={save}
-          submitLabel={form.id ? 'Save changes' : 'Add band'}
-          busy={busy}
-        >
-          <TextField
-          select
-          label="Category"
-          value={form.category_id}
-          onChange={(e) => setForm({ ...form, category_id: e.target.value })}
-          // The band's category is fixed once it exists: moving a band between
-          // categories is a delete and an add, not an edit, because the
-          // overlap it has to not create is inside one category.
-          disabled={Boolean(form.id)}
-          required
-        >
-          {cats.map((c) => (
-            <MenuItem key={c.id} value={String(c.id)}>
-              {c.name}
-            </MenuItem>
-          ))}
-        </TextField>
-        <Box sx={{ gridColumn: { sm: 'span 2' }, display: 'flex', gap: 2 }}>
-          <TextField
-            label="From (carat)"
-            type="number"
-            value={form.min_wt}
-            onChange={(e) => setForm({ ...form, min_wt: e.target.value })}
-            slotProps={{ htmlInput: { min: 0, step: 0.001 } }}
-            sx={{ flex: 1 }}
-            required
-          />
-          <TextField
-            label="To (carat)"
-            type="number"
-            value={form.max_wt}
-            onChange={(e) => setForm({ ...form, max_wt: e.target.value })}
-            slotProps={{ htmlInput: { min: 0, step: 0.001 } }}
-            sx={{ flex: 1 }}
-            required
-          />
-        </Box>
-        <TextField
-          label="Smart card price"
-          type="number"
-          value={form.smart_price}
-          onChange={(e) => setForm({ ...form, smart_price: e.target.value })}
-          slotProps={{ htmlInput: { min: 0, style: { width: '100%' } } }}
-          sx={{ minWidth: 150 }}
-          required
-        />
-        <TextField
-          label="Classic card price"
-          type="number"
-          value={form.classic_price}
-          onChange={(e) => setForm({ ...form, classic_price: e.target.value })}
-          slotProps={{ htmlInput: { min: 0, style: { width: '100%' } } }}
-          sx={{ minWidth: 150 }}
-          required
-        />
-        {/*
-          The rate this band is quoted at, from Master › GST.
-
-          "None" is a real value, not an empty string: a Select renders the
-          chosen item's text only when it has one, so at `value=""` it drew an
-          empty box whatever the item said and the field looked unset.
-        */}
-        {/*
-          Pick a rate or type one, in one control. See GstField: two controls
-          and a "Custom" mode was two ways of asking one question.
-        */}
-        <GstField
-          rates={gst.data?.data ?? []}
-          value={{ gst_id: form.gst_id, gst_percent: form.gst_percent }}
-          onChange={(next) => setForm({ ...form, ...next })}
-          sx={{ minWidth: 150 }}
-        />
-        </FormPanel>
-      )}
-
       <Panel
+        form={form.open && (
+          <FormPanel
+            title={form.id ? 'Edit price band' : 'Add price band'}
+            onClose={() => setForm(BLANK)}
+            onSubmit={save}
+            submitLabel={form.id ? 'Save changes' : 'Add band'}
+            busy={busy}
+          >
+            <TextField
+            select
+            label="Category"
+            value={form.category_id}
+            onChange={(e) => setForm({ ...form, category_id: e.target.value })}
+            // The band's category is fixed once it exists: moving a band between
+            // categories is a delete and an add, not an edit, because the
+            // overlap it has to not create is inside one category.
+            disabled={Boolean(form.id)}
+            required
+          >
+            {cats.map((c) => (
+              <MenuItem key={c.id} value={String(c.id)}>
+                {c.name}
+              </MenuItem>
+            ))}
+          </TextField>
+          <Box sx={{ gridColumn: { sm: 'span 2' }, display: 'flex', gap: 2 }}>
+            <TextField
+              label="From (carat)"
+              type="number"
+              value={form.min_wt}
+              onChange={(e) => setForm({ ...form, min_wt: e.target.value })}
+              slotProps={{ htmlInput: { min: 0, step: 0.001 } }}
+              sx={{ flex: 1 }}
+              required
+            />
+            <TextField
+              label="To (carat)"
+              type="number"
+              value={form.max_wt}
+              onChange={(e) => setForm({ ...form, max_wt: e.target.value })}
+              slotProps={{ htmlInput: { min: 0, step: 0.001 } }}
+              sx={{ flex: 1 }}
+              required
+            />
+          </Box>
+          <TextField
+            label="Smart card price"
+            type="number"
+            value={form.smart_price}
+            onChange={(e) => setForm({ ...form, smart_price: e.target.value })}
+            slotProps={{ htmlInput: { min: 0, style: { width: '100%' } } }}
+            sx={{ minWidth: 150 }}
+            required
+          />
+          <TextField
+            label="Classic card price"
+            type="number"
+            value={form.classic_price}
+            onChange={(e) => setForm({ ...form, classic_price: e.target.value })}
+            slotProps={{ htmlInput: { min: 0, style: { width: '100%' } } }}
+            sx={{ minWidth: 150 }}
+            required
+          />
+          {/*
+            The rate this band is quoted at, from Master › GST.
+
+            "None" is a real value, not an empty string: a Select renders the
+            chosen item's text only when it has one, so at `value=""` it drew an
+            empty box whatever the item said and the field looked unset.
+          */}
+          {/*
+            Pick a rate or type one, in one control. See GstField: two controls
+            and a "Custom" mode was two ways of asking one question.
+          */}
+          <GstField
+            rates={gst.data?.data ?? []}
+            value={{ gst_id: form.gst_id, gst_percent: form.gst_percent }}
+            onChange={(next) => setForm({ ...form, ...next })}
+            sx={{ minWidth: 150 }}
+          />
+          </FormPanel>
+        )}
         title="Pricing"
         count={prices.loading ? 'Loading…' : `${rows.length} of ${allPrices.length} bands`}
         actions={

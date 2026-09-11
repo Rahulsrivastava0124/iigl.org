@@ -19,6 +19,7 @@ import CommissionIcon from '@mui/icons-material/PercentOutlined';
 import PaidIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
 import DuesIcon from '@mui/icons-material/PendingActionsOutlined';
 import { useFetch } from '../lib/useFetch';
+import { StatementsTable } from '../components/Statements';
 import {
   Notice,
   Panel,
@@ -100,7 +101,7 @@ const day = (v: string | null | undefined) => (v ? String(v).slice(0, 10) : '—
 export default function LaboratoryView() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<'payments' | 'staff' | 'reports'>('payments');
+  const [tab, setTab] = useState<'payments' | 'staff' | 'reports' | 'statements'>('payments');
 
   const source = useFetch<{ data: Detail }>(`/users/laboratories/${id}/detail`);
   const d = source.data?.data;
@@ -188,6 +189,7 @@ export default function LaboratoryView() {
           <Tab value="payments" label={`Payments (${d?.counts.payments ?? 0})`} />
           <Tab value="staff" label={`Staff (${d?.counts.staff ?? 0})`} />
           <Tab value="reports" label={`Certificates (${d?.counts.reports ?? 0})`} />
+          <Tab value="statements" label="Statements" />
         </Tabs>
 
         {tab === 'payments' && (
@@ -297,11 +299,13 @@ export default function LaboratoryView() {
           </TableFrame>
         )}
 
+        {tab === 'statements' && id && <StatementsTable labId={Number(id)} />}
+
         {/*
           How much of each list is on screen, and where the rest is. One line,
           reading whichever tab is open.
         */}
-        {d && (
+        {d && tab !== 'statements' && (
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
             {tab === 'payments' && `Payments: ${capped(d.counts.payments, d.payments.length)}.`}
             {tab === 'staff' && `Staff: ${capped(d.counts.staff, d.staff.length)}.`}

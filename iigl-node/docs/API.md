@@ -1,6 +1,6 @@
 # IIGL API
 
-230 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
+232 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
 
 The interactive version is at `/docs` when the server is running, and the raw
 document at `/openapi.json`.
@@ -415,6 +415,15 @@ The general enquiry book: questions, visits, leads and complaints.
 | POST | `/api/enquiries/{id}/followups` | session | — | note, outcome, next_follow_up_on, status | 400, 401, 403, 404 | Record a follow-up |
 | GET | `/api/enquiries/summary` | session | — | — | 401, 403 | Counts per kind and per status |
 
+## Statements
+
+Commission billed to a laboratory on a period, its grace days, and the lock on certificate generation when a statement goes unpaid.
+
+| Method | Path | Auth | Query | Body | Fails | Purpose |
+| --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/statements` | session | `lab_id` | — | 400, 401, 403, 404 | A laboratory’s commission statements |
+| GET | `/api/statements/{key}/download` | session | `lab_id`, `format` | — | 400, 401, 403, 404 | Download one billed statement |
+
 ## Settings
 
 | Method | Path | Auth | Query | Body | Fails | Purpose |
@@ -476,4 +485,4 @@ The general enquiry book: questions, visits, leads and complaints.
 
 Bold body fields are required.
 
-230 endpoints: 16 public, 214 requiring a session.
+232 endpoints: 16 public, 216 requiring a session.

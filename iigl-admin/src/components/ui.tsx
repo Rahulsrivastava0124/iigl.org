@@ -1,4 +1,4 @@
-import { Children, isValidElement, useEffect, useState } from 'react';
+import { Children, isValidElement, useEffect, useState, createContext, useContext } from 'react';
 import type { ComponentType, ReactElement, ReactNode } from 'react';
 import { alpha } from '@mui/material/styles';
 import type { SxProps, Theme } from '@mui/material/styles';
@@ -71,6 +71,8 @@ const TONE_COLOUR = {
   // calendar, where the tone is painted from TONE directly; anywhere a
   // Material component picks the colour it reads as the neutral it is.
   holiday: 'default',
+  lead: 'warning',
+  followup: 'default',
   yes: 'success',
   no: 'error',
 } as const satisfies Record<Tone, 'success' | 'warning' | 'error' | 'default'>;
@@ -82,6 +84,8 @@ const TONE_SEVERITY: Record<Tone, 'success' | 'warning' | 'error' | 'info'> = {
   refused: 'error',
   plain: 'info',
   holiday: 'info',
+  lead: 'warning',
+  followup: 'info',
   yes: 'success',
   no: 'error',
 };
@@ -388,12 +392,19 @@ export function Tile({
   );
 }
 
+/**
+ * Set inside a Panel's `form` slot, so the FormPanel rendered there drops its
+ * own card and sits in the list's panel between the header and the table.
+ */
+const InsidePanel = createContext(false);
+
 export function Panel({
   title,
   subtitle,
   count,
   footer,
   actions,
+  form,
   children,
   sx,
 }: {
@@ -417,6 +428,13 @@ export function Panel({
    */
   footer?: ReactNode;
   actions?: ReactNode;
+  /**
+   * The create or edit form for this list — a `FormPanel`, or nothing while it
+   * is closed. It opens under the header and over the table, so the title, the
+   * filters and the New button stay at the top of the screen whether or not a
+   * form is open, rather than being pushed below it.
+   */
+  form?: ReactNode;
   /**
    * Optional, for the panel that is only its header — a strip of state and the
    * controls that change it, with no table under it.
@@ -484,6 +502,7 @@ export function Panel({
           )}
         </Stack>
       )}
+      <InsidePanel.Provider value>{form}</InsidePanel.Provider>
       {children}
       {(count || footer) && (
         <Stack
@@ -546,10 +565,8 @@ export function FormPanel({
   actions?: ReactNode;
   children: ReactNode;
 }) {
-  return (
-    // Panel carries no margin of its own, and a list always follows this.
-    <Box sx={{ mb: 2 }}>
-      <Panel title={title}>
+  const inside = useContext(InsidePanel);
+  const body = (
         <Box
           component="form"
           onSubmit={(e: React.FormEvent) => {
@@ -614,7 +631,25 @@ export function FormPanel({
             </Stack>
           </Stack>
         </Box>
-      </Panel>
+  );
+
+  // In a list's panel: a titled band under its header, ruled off from the
+  // table below, rather than a second card.
+  if (inside) {
+    return (
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'grey.50' }}>
+        <Typography variant="h2" sx={{ px: 2, pt: 1.75, fontSize: 15 }}>
+          {title}
+        </Typography>
+        {body}
+      </Box>
+    );
+  }
+
+  return (
+    // Panel carries no margin of its own, and a list always follows this.
+    <Box sx={{ mb: 2 }}>
+      <Panel title={title}>{body}</Panel>
     </Box>
   );
 }
@@ -1199,6 +1234,7 @@ export function ToneAction({
    */
   hint?: string;
 }) {
+  const colour = TONE_COLOUR[tone];
   const button = (
     <Button
       // Filled rather than outlined: these decide something, and on a row of
@@ -1206,10 +1242,10 @@ export function ToneAction({
       // glance as accept and refuse.
       variant="contained"
       size={size}
-      // `plain` and `holiday` have no Button colour of their own — a toneless
-      // action inherits the surrounding text colour rather than claiming a
-      // semantic one.
-      color={tone === 'plain' || tone === 'holiday' ? 'inherit' : TONE_COLOUR[tone]}
+      // A tone with no Button colour of its own — `plain`, `holiday`,
+      // `followup` — inherits the surrounding text colour rather than claiming
+      // a semantic one.
+      color={colour === 'default' ? 'inherit' : colour}
       startIcon={<Icon fontSize="small" />}
       disabled={disabled}
       onClick={onClick}

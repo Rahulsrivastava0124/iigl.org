@@ -227,114 +227,113 @@ export default function Coupons() {
 
   return (
     <>
-      {form.open && (
-        <FormPanel
-          title={form.id ? `Edit ${form.code}` : 'Write a coupon'}
-          onClose={() => setForm(BLANK)}
-          onSubmit={save}
-          submitLabel={form.id ? 'Save' : 'Create coupon'}
-          busy={busy}
-        >
-          <TextField
-            label="Code"
-            required
-            value={form.code}
-            onChange={(e) => set('code', e.target.value.toUpperCase())}
-            placeholder="NEWYEAR25"
-            slotProps={hint('What somebody types at the counter.')}
-          />
-          <TextField
-            label="Title"
-            value={form.title}
-            onChange={(e) => set('title', e.target.value)}
-            placeholder="New year offer"
-          />
-          <TextField
-            select
-            label="Course"
-            value={form.course_id}
-            onChange={(e) => set('course_id', e.target.value)}
-            slotProps={hint('Any course unless one is chosen.', true)}
-          >
-            <MenuItem value="">Any course</MenuItem>
-            {(courses.data?.data ?? []).map((c) => (
-              <MenuItem key={c.id} value={String(c.id)}>
-                {c.name}
-              </MenuItem>
-            ))}
-          </TextField>
-
-          <TextField
-            select
-            label="Takes off"
-            value={form.discount_type}
-            onChange={(e) => set('discount_type', e.target.value)}
-          >
-            <MenuItem value="percent">A percentage</MenuItem>
-            <MenuItem value="fixed">A fixed amount</MenuItem>
-          </TextField>
-          <TextField
-            label={form.discount_type === 'percent' ? 'Percent off' : 'Rupees off'}
-            required
-            type="number"
-            value={form.discount_value}
-            onChange={(e) => set('discount_value', e.target.value)}
-          />
-          <TextField
-            label="Most it can take off"
-            type="number"
-            value={form.max_discount}
-            onChange={(e) => set('max_discount', e.target.value)}
-            disabled={form.discount_type === 'fixed'}
-            slotProps={hint(
-              form.discount_type === 'fixed' ? 'A fixed coupon caps itself.' : 'Blank is no cap.',
-            )}
-          />
-
-          <TextField
-            label="Minimum course fee"
-            type="number"
-            value={form.min_amount}
-            onChange={(e) => set('min_amount', e.target.value)}
-            slotProps={hint('Blank is any fee.')}
-          />
-          <DateField
-            label="First day"
-            value={form.valid_from}
-            onChange={(value) => set('valid_from', value)}
-          />
-          <DateField
-            label="Last day"
-            value={form.valid_to}
-            onChange={(value) => set('valid_to', value)}
-          />
-
-          <TextField
-            label="Total uses"
-            type="number"
-            value={form.usage_limit}
-            onChange={(e) => set('usage_limit', e.target.value)}
-            slotProps={hint('Blank is unlimited.')}
-          />
-          <TextField
-            label="Uses per student"
-            type="number"
-            value={form.per_student_limit}
-            onChange={(e) => set('per_student_limit', e.target.value)}
-            slotProps={hint('Blank is unlimited.')}
-          />
-          <TextField
-            label="Description"
-            multiline
-            minRows={2}
-            value={form.description}
-            onChange={(e) => set('description', e.target.value)}
-            sx={{ gridColumn: '1 / -1' }}
-          />
-        </FormPanel>
-      )}
-
       <Panel
+        form={form.open && (
+          <FormPanel
+            title={form.id ? `Edit ${form.code}` : 'Write a coupon'}
+            onClose={() => setForm(BLANK)}
+            onSubmit={save}
+            submitLabel={form.id ? 'Save' : 'Create coupon'}
+            busy={busy}
+          >
+            <TextField
+              label="Code"
+              required
+              value={form.code}
+              onChange={(e) => set('code', e.target.value.toUpperCase())}
+              placeholder="NEWYEAR25"
+              slotProps={hint('What somebody types at the counter.')}
+            />
+            <TextField
+              label="Title"
+              value={form.title}
+              onChange={(e) => set('title', e.target.value)}
+              placeholder="New year offer"
+            />
+            <TextField
+              select
+              label="Course"
+              value={form.course_id}
+              onChange={(e) => set('course_id', e.target.value)}
+              slotProps={hint('Any course unless one is chosen.', true)}
+            >
+              <MenuItem value="">Any course</MenuItem>
+              {(courses.data?.data ?? []).map((c) => (
+                <MenuItem key={c.id} value={String(c.id)}>
+                  {c.name}
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <TextField
+              select
+              label="Takes off"
+              value={form.discount_type}
+              onChange={(e) => set('discount_type', e.target.value)}
+            >
+              <MenuItem value="percent">A percentage</MenuItem>
+              <MenuItem value="fixed">A fixed amount</MenuItem>
+            </TextField>
+            <TextField
+              label={form.discount_type === 'percent' ? 'Percent off' : 'Rupees off'}
+              required
+              type="number"
+              value={form.discount_value}
+              onChange={(e) => set('discount_value', e.target.value)}
+            />
+            <TextField
+              label="Most it can take off"
+              type="number"
+              value={form.max_discount}
+              onChange={(e) => set('max_discount', e.target.value)}
+              disabled={form.discount_type === 'fixed'}
+              slotProps={hint(
+                form.discount_type === 'fixed' ? 'A fixed coupon caps itself.' : 'Blank is no cap.',
+              )}
+            />
+
+            <TextField
+              label="Minimum course fee"
+              type="number"
+              value={form.min_amount}
+              onChange={(e) => set('min_amount', e.target.value)}
+              slotProps={hint('Blank is any fee.')}
+            />
+            <DateField
+              label="First day"
+              value={form.valid_from}
+              onChange={(value) => set('valid_from', value)}
+            />
+            <DateField
+              label="Last day"
+              value={form.valid_to}
+              onChange={(value) => set('valid_to', value)}
+            />
+
+            <TextField
+              label="Total uses"
+              type="number"
+              value={form.usage_limit}
+              onChange={(e) => set('usage_limit', e.target.value)}
+              slotProps={hint('Blank is unlimited.')}
+            />
+            <TextField
+              label="Uses per student"
+              type="number"
+              value={form.per_student_limit}
+              onChange={(e) => set('per_student_limit', e.target.value)}
+              slotProps={hint('Blank is unlimited.')}
+            />
+            <TextField
+              label="Description"
+              multiline
+              minRows={2}
+              value={form.description}
+              onChange={(e) => set('description', e.target.value)}
+              sx={{ gridColumn: '1 / -1' }}
+            />
+          </FormPanel>
+        )}
         // No title on this panel. The header is one row by design, and this
         // one already carries a search field, two filters and the Add button —
         // a title beside them truncates to a letter. The breadcrumb above says

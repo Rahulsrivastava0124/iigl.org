@@ -150,100 +150,99 @@ export default function AttributeMaster() {
 
   return (
     <>
-      {form.open && (
-        <FormPanel
-          title={form.id ? `Edit ${form.attr_name || 'master list'}` : 'Add a master list'}
-          onClose={() => setForm(BLANK)}
-          onSubmit={save}
-          submitLabel={form.id ? 'Save changes' : 'Add master list'}
-          busy={busy}
-        >
-          <TextField
-            select
-            label="Category"
-            value={form.category_id}
-            // The attribute list hangs off this, so the name goes with it: a
-            // name left over from the previous category is worse than an empty
-            // box, because it reads as an answer and matches nothing.
-            onChange={(e) => setForm({ ...form, category_id: e.target.value, attr_name: '' })}
-            required
-            disabled={cats.length === 0}
-            helperText="A master belongs to a category, not to a subcategory: the same list serves every subcategory under it."
-          >
-            {cats.map((c) => (
-              <MenuItem key={c.id} value={String(c.id)}>
-                {c.name}
-              </MenuItem>
-            ))}
-          </TextField>
-
-          <Autocomplete
-            freeSolo
-            options={attrNames}
-            // Controlled on both halves: `value` is what has been settled on,
-            // `inputValue` what is in the box. A freeSolo field that only
-            // tracks `value` loses a typed name the moment focus leaves it.
-            value={form.attr_name}
-            onChange={(_, v) => setForm({ ...form, attr_name: (v as string | null) ?? '' })}
-            inputValue={form.attr_name}
-            onInputChange={(_, v) => setForm({ ...form, attr_name: v })}
-            disabled={!form.category_id}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Attribute"
-                placeholder={form.category_id ? 'Choose or type an attribute' : 'Choose a category first'}
-                required
-                autoFocus
-                helperText={
-                  !form.category_id
-                    ? 'The list of attributes follows the category.'
-                    : attrNames.length
-                      ? `${attrNames.length} attribute${attrNames.length === 1 ? '' : 's'} under this category. The name has to match, so choosing beats typing.`
-                      : 'No attributes under this category yet — type the name this list will be offered under.'
-                }
-              />
-            )}
-          />
-
-          {/*
-            Typed, not chosen: a master list is being written here, so there is
-            nothing to choose from yet. `freeSolo` with `multiple` is the chip
-            field that gives — type a value, press Enter, it becomes a chip.
-
-            The order chips are added in is the order they are stored and later
-            offered in. Grades read D, E, F; sorting them alphabetically is the
-            one thing nobody wants, and it is what a plain sort would do.
-          */}
-          <Autocomplete
-            multiple
-            freeSolo
-            options={[] as string[]}
-            value={form.values}
-            onChange={(_, v) =>
-              setForm({
-                ...form,
-                values: (v as string[]).map((one) => one.trim()).filter(Boolean),
-              })
-            }
-            renderValue={(chosen, getProps) =>
-              (chosen as string[]).map((value, i) => (
-                <Chip size="small" label={value} {...getProps({ index: i })} key={value} />
-              ))
-            }
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Values"
-                placeholder="Type a value and press Enter"
-                helperText="In the order they should be offered — D, E, F, not alphabetically."
-              />
-            )}
-          />
-        </FormPanel>
-      )}
-
       <Panel
+        form={form.open && (
+          <FormPanel
+            title={form.id ? `Edit ${form.attr_name || 'master list'}` : 'Add a master list'}
+            onClose={() => setForm(BLANK)}
+            onSubmit={save}
+            submitLabel={form.id ? 'Save changes' : 'Add master list'}
+            busy={busy}
+          >
+            <TextField
+              select
+              label="Category"
+              value={form.category_id}
+              // The attribute list hangs off this, so the name goes with it: a
+              // name left over from the previous category is worse than an empty
+              // box, because it reads as an answer and matches nothing.
+              onChange={(e) => setForm({ ...form, category_id: e.target.value, attr_name: '' })}
+              required
+              disabled={cats.length === 0}
+              helperText="A master belongs to a category, not to a subcategory: the same list serves every subcategory under it."
+            >
+              {cats.map((c) => (
+                <MenuItem key={c.id} value={String(c.id)}>
+                  {c.name}
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <Autocomplete
+              freeSolo
+              options={attrNames}
+              // Controlled on both halves: `value` is what has been settled on,
+              // `inputValue` what is in the box. A freeSolo field that only
+              // tracks `value` loses a typed name the moment focus leaves it.
+              value={form.attr_name}
+              onChange={(_, v) => setForm({ ...form, attr_name: (v as string | null) ?? '' })}
+              inputValue={form.attr_name}
+              onInputChange={(_, v) => setForm({ ...form, attr_name: v })}
+              disabled={!form.category_id}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Attribute"
+                  placeholder={form.category_id ? 'Choose or type an attribute' : 'Choose a category first'}
+                  required
+                  autoFocus
+                  helperText={
+                    !form.category_id
+                      ? 'The list of attributes follows the category.'
+                      : attrNames.length
+                        ? `${attrNames.length} attribute${attrNames.length === 1 ? '' : 's'} under this category. The name has to match, so choosing beats typing.`
+                        : 'No attributes under this category yet — type the name this list will be offered under.'
+                  }
+                />
+              )}
+            />
+
+            {/*
+              Typed, not chosen: a master list is being written here, so there is
+              nothing to choose from yet. `freeSolo` with `multiple` is the chip
+              field that gives — type a value, press Enter, it becomes a chip.
+
+              The order chips are added in is the order they are stored and later
+              offered in. Grades read D, E, F; sorting them alphabetically is the
+              one thing nobody wants, and it is what a plain sort would do.
+            */}
+            <Autocomplete
+              multiple
+              freeSolo
+              options={[] as string[]}
+              value={form.values}
+              onChange={(_, v) =>
+                setForm({
+                  ...form,
+                  values: (v as string[]).map((one) => one.trim()).filter(Boolean),
+                })
+              }
+              renderValue={(chosen, getProps) =>
+                (chosen as string[]).map((value, i) => (
+                  <Chip size="small" label={value} {...getProps({ index: i })} key={value} />
+                ))
+              }
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Values"
+                  placeholder="Type a value and press Enter"
+                  helperText="In the order they should be offered — D, E, F, not alphabetically."
+                />
+              )}
+            />
+          </FormPanel>
+        )}
         title="Attributes Master"
         count={
           masters.loading ? 'Loading…' : `${shown.length} of ${rows.length} master lists`

@@ -21,7 +21,6 @@ import StaffIcon from '@mui/icons-material/BadgeOutlined';
 import RegisteredIcon from '@mui/icons-material/HowToRegOutlined';
 import CustomerIcon from '@mui/icons-material/PersonOutlineOutlined';
 import TodayIcon from '@mui/icons-material/TodayOutlined';
-import CertificateIcon from '@mui/icons-material/WorkspacePremiumOutlined';
 import ItemsIcon from '@mui/icons-material/DiamondOutlined';
 import TransferIcon from '@mui/icons-material/SendOutlined';
 
@@ -290,19 +289,6 @@ function HeadOfficeTiles({ s }: { s: DashboardSummary }) {
             value={money(s.money.dues)}
             fill={owed(s.money.dues)}
             icon={DuesIcon}
-          />
-        </Grid>
-        {/*
-          Certificates issued, all of them. It used to sit under Today, where it
-          was the only figure in the group that was not today's.
-        */}
-        <Grid size={CELL}>
-          <Tile
-            label="Certificates"
-            value={n(s.reports.total)}
-            note="all time"
-            fill="brand"
-            icon={CertificateIcon}
           />
         </Grid>
       </Grid>

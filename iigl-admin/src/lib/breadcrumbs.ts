@@ -64,7 +64,7 @@ const VIEWS: Record<string, Record<string, string>> = {
   enquiries: {
     'kind=ask': 'Ask Me',
     'kind=visit': "Visitor's Diary",
-    'kind=lead': 'Lead Followup',
+    'kind=lead': 'Contact Us',
     'kind=complaint': 'Complaints',
   },
   orders: {

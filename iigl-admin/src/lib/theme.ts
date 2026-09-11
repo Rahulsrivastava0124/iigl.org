@@ -99,6 +99,12 @@ export const TONE = {
   // still open, or absent. Brighter than the amber of a day still open, and
   // with dark text: white on yellow cannot be read.
   holiday: { main: '#f2c230', on: '#3b2f00', soft: '#fdf6dc' },
+  // An enquiry still to chase — new, or open. Yellow, with dark text: white on
+  // yellow cannot be read.
+  lead: { main: '#f2c230', on: '#3b2f00', soft: '#fdf6dc' },
+  // Being followed up: somebody has been reached and the answer is not in yet.
+  // Light blue, with dark text for the same reason.
+  followup: { main: '#bcdcf7', on: '#0b3a66', soft: '#eaf4fd' },
   yes: { main: '#20c020', on: '#ffffff', soft: '#e6f7e6' },
   no: { main: '#fb3b5c', on: '#ffffff', soft: '#feeaee' },
 } as const;

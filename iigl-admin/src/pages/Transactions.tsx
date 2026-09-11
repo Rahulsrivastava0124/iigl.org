@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Button,
@@ -161,6 +161,24 @@ export default function Transactions() {
     setProof(null);
     setPaying(true);
   };
+
+  /*
+    Arriving from the statement reminder's Pay: the dialog opens on what the
+    statements say is outstanding, once — the parameter is dropped as it opens.
+  */
+  const payParam = params.get('pay');
+  useEffect(() => {
+    if (!payParam || !canPay) return;
+    setPayMode('cash');
+    setPayAmount(payParam);
+    setReference('');
+    setProof(null);
+    setPaying(true);
+    const next = new URLSearchParams(params);
+    next.delete('pay');
+    setParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payParam, canPay]);
 
   const payCommission = async () => {
     setSending(true);

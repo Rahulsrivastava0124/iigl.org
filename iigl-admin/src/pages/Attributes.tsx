@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Autocomplete,
@@ -180,6 +180,13 @@ export default function Attributes() {
   const [valueForm, setValueForm] = useState(BLANK_VALUE);
 
   const [form, setForm] = useState(BLANK);
+  // A form belongs to the table it was opened on: switching between attributes
+  // and values closes both. Only the tab — the forms set the category and
+  // attribute selects themselves, so keying on those would close them mid-edit.
+  useEffect(() => {
+    setForm(BLANK);
+    setValueForm(BLANK_VALUE);
+  }, [valuesMode]);
   const [retiring, setRetiring] = useState<Attribute | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -370,109 +377,108 @@ export default function Attributes() {
 
       {valuesMode ? (
         <>
-        {valueForm.open && (
-          <FormPanel
-            title={valueForm.id ? 'Edit value' : 'Add value'}
-            onClose={() => setValueForm(BLANK_VALUE)}
-            onSubmit={saveValue}
-            submitLabel={
-              valueForm.id
-                ? 'Save changes'
-                : valueForm.names.length > 1
-                  ? `Add ${valueForm.names.length} values`
-                  : 'Add value'
-            }
-            busy={busy}
-          >
-            {branchFilters()}
-            <TextField
-              select
-              label="Attribute"
-              value={attrId}
-              onChange={(e) => {
-                setAttrId(e.target.value);
-                setPage(1);
-              }}
-              required
-              disabled={rows.length === 0}
-            >
-              {rows.map((a) => (
-                <MenuItem key={a.id} value={String(a.id)}>
-                  {a.attr_name}
-                </MenuItem>
-              ))}
-            </TextField>
-            {valueForm.id ? (
-              <TextField
-                label="Value"
-                value={valueForm.value_name}
-                onChange={(e) => setValueForm({ ...valueForm, value_name: e.target.value })}
-                required
-                autoFocus
-              />
-            ) : (
-              /*
-                Pick several from the master list, or type ones that are not on
-                it — `freeSolo`, so the field is still the free-text box it was
-                for an attribute no master covers.
-
-                Values this attribute already carries are filtered out of the
-                options rather than shown and refused: the list is there so
-                nobody has to check first.
-              */
-              <Autocomplete
-                multiple
-                freeSolo
-                options={masterValues.filter((v) => !alreadyHeld.has(v.toLowerCase()))}
-                value={valueForm.names}
-                onChange={(_, v) =>
-                  setValueForm({
-                    ...valueForm,
-                    names: (v as string[]).map((one) => one.trim()).filter(Boolean),
-                  })
-                }
-                renderValue={(chosen, getProps) =>
-                  (chosen as string[]).map((value, i) => (
-                    <Chip size="small" label={value} {...getProps({ index: i })} key={value} />
-                  ))
-                }
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Values"
-                    placeholder={
-                      masterValues.length
-                        ? 'Choose from the master list, or type your own'
-                        : 'Type a value and press Enter'
-                    }
-                    autoFocus
-                    helperText={
-                      !attrId
-                        ? 'Choose an attribute first.'
-                        : masterValues.length
-                          ? `${masterValues.length} on the master list for ${attrName}.`
-                          : `No master list for ${attrName || 'this attribute'} \u2014 type the values, or build one under Attributes Master.`
-                    }
-                  />
-                )}
-              />
-            )}
-            <TextField
-              label="Description"
-              value={valueForm.description}
-              onChange={(e) => setValueForm({ ...valueForm, description: e.target.value })}
-              helperText={valueForm.id ? undefined : 'Applies to every value added here. Usually left empty when adding several.'}
-            />
-            <FileField
-              label="Image"
-              bucket="icon"
-              value={valueForm.icon}
-              onChange={(icon) => setValueForm({ ...valueForm, icon })}
-            />
-          </FormPanel>
-        )}
-
         <Panel
+          form={valueForm.open && (
+            <FormPanel
+              title={valueForm.id ? 'Edit value' : 'Add value'}
+              onClose={() => setValueForm(BLANK_VALUE)}
+              onSubmit={saveValue}
+              submitLabel={
+                valueForm.id
+                  ? 'Save changes'
+                  : valueForm.names.length > 1
+                    ? `Add ${valueForm.names.length} values`
+                    : 'Add value'
+              }
+              busy={busy}
+            >
+              {branchFilters()}
+              <TextField
+                select
+                label="Attribute"
+                value={attrId}
+                onChange={(e) => {
+                  setAttrId(e.target.value);
+                  setPage(1);
+                }}
+                required
+                disabled={rows.length === 0}
+              >
+                {rows.map((a) => (
+                  <MenuItem key={a.id} value={String(a.id)}>
+                    {a.attr_name}
+                  </MenuItem>
+                ))}
+              </TextField>
+              {valueForm.id ? (
+                <TextField
+                  label="Value"
+                  value={valueForm.value_name}
+                  onChange={(e) => setValueForm({ ...valueForm, value_name: e.target.value })}
+                  required
+                  autoFocus
+                />
+              ) : (
+                /*
+                  Pick several from the master list, or type ones that are not on
+                  it — `freeSolo`, so the field is still the free-text box it was
+                  for an attribute no master covers.
+
+                  Values this attribute already carries are filtered out of the
+                  options rather than shown and refused: the list is there so
+                  nobody has to check first.
+                */
+                <Autocomplete
+                  multiple
+                  freeSolo
+                  options={masterValues.filter((v) => !alreadyHeld.has(v.toLowerCase()))}
+                  value={valueForm.names}
+                  onChange={(_, v) =>
+                    setValueForm({
+                      ...valueForm,
+                      names: (v as string[]).map((one) => one.trim()).filter(Boolean),
+                    })
+                  }
+                  renderValue={(chosen, getProps) =>
+                    (chosen as string[]).map((value, i) => (
+                      <Chip size="small" label={value} {...getProps({ index: i })} key={value} />
+                    ))
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Values"
+                      placeholder={
+                        masterValues.length
+                          ? 'Choose from the master list, or type your own'
+                          : 'Type a value and press Enter'
+                      }
+                      autoFocus
+                      helperText={
+                        !attrId
+                          ? 'Choose an attribute first.'
+                          : masterValues.length
+                            ? `${masterValues.length} on the master list for ${attrName}.`
+                            : `No master list for ${attrName || 'this attribute'} \u2014 type the values, or build one under Attributes Master.`
+                      }
+                    />
+                  )}
+                />
+              )}
+              <TextField
+                label="Description"
+                value={valueForm.description}
+                onChange={(e) => setValueForm({ ...valueForm, description: e.target.value })}
+                helperText={valueForm.id ? undefined : 'Applies to every value added here. Usually left empty when adding several.'}
+              />
+              <FileField
+                label="Image"
+                bucket="icon"
+                value={valueForm.icon}
+                onChange={(icon) => setValueForm({ ...valueForm, icon })}
+              />
+            </FormPanel>
+          )}
           footer={<Pager meta={values.data?.meta} onPage={setPage} />}
           title="Attribute values"
           actions={
@@ -566,80 +572,79 @@ export default function Attributes() {
         </>
       ) : (
       <>
-      {form.open && (
-        <FormPanel
-          title={form.id ? 'Edit attribute' : 'Add attribute'}
-          onClose={() => setForm(BLANK)}
-          onSubmit={save}
-          submitLabel={form.id ? 'Save changes' : 'Add attribute'}
-          busy={busy}
-        >
-          <TextField
-            select
-            label="Category"
-            value={form.category_id}
-            onChange={(e) => {
-              setForm({ ...form, category_id: e.target.value, subcategory_id: '' });
-              // While adding, the pair doubles as the page filter. While
-              // editing it must not: the row would filter itself out of the
-              // list the moment you moved it.
-              if (!form.id) {
-                setCatId(e.target.value);
-                setSubId('');
-              }
-            }}
-            required
+      <Panel
+        form={form.open && (
+          <FormPanel
+            title={form.id ? 'Edit attribute' : 'Add attribute'}
+            onClose={() => setForm(BLANK)}
+            onSubmit={save}
+            submitLabel={form.id ? 'Save changes' : 'Add attribute'}
+            busy={busy}
           >
-            {cats.map((c) => (
-              <MenuItem key={c.id} value={String(c.id)}>
-                {c.name}
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            select
-            label="Subcategory"
-            value={form.subcategory_id}
-            onChange={(e) => {
-              setForm({ ...form, subcategory_id: e.target.value });
-              if (!form.id) setSubId(e.target.value);
-            }}
-            required
-            disabled={!form.category_id}
-          >
-            {allSubs
-              .filter((s) => String(s.category_id) === form.category_id)
-              .map((s) => (
-                <MenuItem key={s.id} value={String(s.id)}>
-                  {s.name}
+            <TextField
+              select
+              label="Category"
+              value={form.category_id}
+              onChange={(e) => {
+                setForm({ ...form, category_id: e.target.value, subcategory_id: '' });
+                // While adding, the pair doubles as the page filter. While
+                // editing it must not: the row would filter itself out of the
+                // list the moment you moved it.
+                if (!form.id) {
+                  setCatId(e.target.value);
+                  setSubId('');
+                }
+              }}
+              required
+            >
+              {cats.map((c) => (
+                <MenuItem key={c.id} value={String(c.id)}>
+                  {c.name}
                 </MenuItem>
               ))}
-          </TextField>
-          <TextField
-            label="Name"
-            value={form.attr_name}
-            onChange={(e) => setForm({ ...form, attr_name: e.target.value })}
-            required
-          />
-          <TextField
-            label="Print order"
-            type="number"
-            value={form.order_no}
-            onChange={(e) => setForm({ ...form, order_no: e.target.value })}
-            slotProps={{ htmlInput: { min: 0 } }}
-          />
-          <FormGroup row sx={{ gap: 2, gridColumn: '1 / -1' }}>
-            {check('show_in_smart_card', 'Show on smart card')}
-            {check('show_in_classic_card', 'Show on classic card')}
-            {check('show_description', 'Description / comment box')}
-            {check('show_image', 'Upload image')}
-            {check('is_opensource', 'Accept free text')}
-            {check('is_required', 'Required')}
-          </FormGroup>
-        </FormPanel>
-      )}
-
-      <Panel
+            </TextField>
+            <TextField
+              select
+              label="Subcategory"
+              value={form.subcategory_id}
+              onChange={(e) => {
+                setForm({ ...form, subcategory_id: e.target.value });
+                if (!form.id) setSubId(e.target.value);
+              }}
+              required
+              disabled={!form.category_id}
+            >
+              {allSubs
+                .filter((s) => String(s.category_id) === form.category_id)
+                .map((s) => (
+                  <MenuItem key={s.id} value={String(s.id)}>
+                    {s.name}
+                  </MenuItem>
+                ))}
+            </TextField>
+            <TextField
+              label="Name"
+              value={form.attr_name}
+              onChange={(e) => setForm({ ...form, attr_name: e.target.value })}
+              required
+            />
+            <TextField
+              label="Print order"
+              type="number"
+              value={form.order_no}
+              onChange={(e) => setForm({ ...form, order_no: e.target.value })}
+              slotProps={{ htmlInput: { min: 0 } }}
+            />
+            <FormGroup row sx={{ gap: 2, gridColumn: '1 / -1' }}>
+              {check('show_in_smart_card', 'Show on smart card')}
+              {check('show_in_classic_card', 'Show on classic card')}
+              {check('show_description', 'Description / comment box')}
+              {check('show_image', 'Upload image')}
+              {check('is_opensource', 'Accept free text')}
+              {check('is_required', 'Required')}
+            </FormGroup>
+          </FormPanel>
+        )}
         title="Attributes"
         count={
           pickPrompt

@@ -754,6 +754,9 @@ export interface Users {
   role_id: number | null;
   signature: string | null;
   state: string | null;
+  statement_from: Date | null;
+  statement_grace_days: Generated<number>;
+  statement_period: Generated<number>;
   status: number;
   updated_at: Date | null;
   voter_id: string | null;

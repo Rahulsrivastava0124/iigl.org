@@ -169,9 +169,12 @@ export default function Master() {
   const [quickText, setQuickText] = useState('');
   const [quickParent, setQuickParent] = useState('');
 
+  // Another list is another table: its quick box starts empty, and a form
+  // opened on the last one closes rather than editing a row that is not here.
   useEffect(() => {
     setQuickParent('');
     setQuickText('');
+    setForm(null);
   }, [list.id]);
 
   const allRows = rows.data?.data ?? [];
@@ -287,48 +290,47 @@ export default function Master() {
 
   return (
     <>
-      {form && (
-        <FormPanel
-          title={form.id ? `Edit ${list.noun.toLowerCase()}` : `New ${list.noun.toLowerCase()}`}
-          onClose={() => setForm(null)}
-          onSubmit={save}
-          busy={busy}
-        >
-          {list.fields.map((f) =>
-            f.kind === 'parent' ? (
-              <TextField
-                key={f.name}
-                select
-                label={f.label}
-                value={form[f.name] ?? ''}
-                onChange={(e) => set(f.name, e.target.value)}
-                required={f.required}
-                slotProps={f.helperText ? hint(f.helperText, true) : undefined}
-              >
-                {parents.data?.data.map((p) => (
-                  <MenuItem key={p.id} value={String(p.id)}>
-                    {String(p.name)}
-                  </MenuItem>
-                ))}
-              </TextField>
-            ) : (
-              <TextField
-                key={f.name}
-                label={f.label}
-                type={f.kind === 'number' ? 'number' : 'text'}
-                value={form[f.name] ?? ''}
-                onChange={(e) => set(f.name, e.target.value)}
-                required={f.required}
-                // Set once: the code is on every record filed under it.
-                disabled={Boolean(f.createOnly && form.id)}
-                slotProps={f.helperText ? hint(f.helperText) : undefined}
-              />
-            ),
-          )}
-        </FormPanel>
-      )}
-
       <Panel
+        form={form && (
+          <FormPanel
+            title={form.id ? `Edit ${list.noun.toLowerCase()}` : `New ${list.noun.toLowerCase()}`}
+            onClose={() => setForm(null)}
+            onSubmit={save}
+            busy={busy}
+          >
+            {list.fields.map((f) =>
+              f.kind === 'parent' ? (
+                <TextField
+                  key={f.name}
+                  select
+                  label={f.label}
+                  value={form[f.name] ?? ''}
+                  onChange={(e) => set(f.name, e.target.value)}
+                  required={f.required}
+                  slotProps={f.helperText ? hint(f.helperText, true) : undefined}
+                >
+                  {parents.data?.data.map((p) => (
+                    <MenuItem key={p.id} value={String(p.id)}>
+                      {String(p.name)}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              ) : (
+                <TextField
+                  key={f.name}
+                  label={f.label}
+                  type={f.kind === 'number' ? 'number' : 'text'}
+                  value={form[f.name] ?? ''}
+                  onChange={(e) => set(f.name, e.target.value)}
+                  required={f.required}
+                  // Set once: the code is on every record filed under it.
+                  disabled={Boolean(f.createOnly && form.id)}
+                  slotProps={f.helperText ? hint(f.helperText) : undefined}
+                />
+              ),
+            )}
+          </FormPanel>
+        )}
         title={`${list.label} list`}
         count={
           rows.data

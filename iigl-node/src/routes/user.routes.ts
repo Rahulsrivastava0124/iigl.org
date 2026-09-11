@@ -151,6 +151,10 @@ const PUBLIC_COLUMNS = [
   'commision',
   'commission_type',
   'registration_fee',
+  // Head office's billing terms, read back by the form that sets them.
+  'statement_period',
+  'statement_grace_days',
+  'statement_from',
   'is_active',
   'status',
   'role_id',
@@ -1457,6 +1461,29 @@ userRoutes.patch(
       const fee = req.body.registration_fee;
       patch.registration_fee =
         fee === '' || fee === null || fee === undefined ? null : String(Number(fee));
+    }
+    // The statement terms are head office's to set: a laboratory choosing its
+    // own grace days is a laboratory deciding when it pays.
+    const terms = ['statement_period', 'statement_grace_days', 'statement_from'];
+    if (terms.some((k) => req.body?.[k] !== undefined) && req.user.roleId !== ROLE.SUPER) {
+      throw forbidden('Only head office sets a laboratory’s statement terms.');
+    }
+    if (req.body?.statement_period !== undefined) {
+      const months = Number(req.body.statement_period);
+      if (![1, 3, 6, 12].includes(months)) throw badRequest('Statement period is 1, 3, 6 or 12 months.');
+      patch.statement_period = months;
+    }
+    if (req.body?.statement_grace_days !== undefined) {
+      const days = Number(req.body.statement_grace_days);
+      if (!Number.isInteger(days) || days < 0 || days > 365) {
+        throw badRequest('Grace days is a whole number from 0 to 365.');
+      }
+      patch.statement_grace_days = days;
+    }
+    if (req.body?.statement_from !== undefined) {
+      const given = String(req.body.statement_from ?? '').trim();
+      if (given && !/^\d{4}-\d{2}(-\d{2})?$/.test(given)) throw badRequest('Billing starts is a month, YYYY-MM.');
+      patch.statement_from = given ? `${given.slice(0, 7)}-01` : null;
     }
     if (req.body?.empid !== undefined) {
       // Blanking is refused rather than accepted as "no employee ID": an

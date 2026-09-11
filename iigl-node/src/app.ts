@@ -29,6 +29,7 @@ import { fileRoutes } from './routes/file.routes.js';
 import { masterRoutes } from './routes/master.routes.js';
 import { settingsRoutes } from './routes/settings.routes.js';
 import { holidayRoutes } from './routes/holiday.routes.js';
+import { statementRoutes } from './routes/statement.routes.js';
 import { requireAuth } from './middleware/auth.js';
 import { loginLimiter, resetLimiter, verifyLogLimiter, renderLimiter } from './middleware/limits.js';
 import { openApiDocument } from './docs/openapi.js';
@@ -170,6 +171,7 @@ export function createApp() {
   app.use('/api/master', masterRoutes);
   app.use('/api/settings', settingsRoutes);
   app.use('/api/holidays', holidayRoutes);
+  app.use('/api/statements', statementRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
