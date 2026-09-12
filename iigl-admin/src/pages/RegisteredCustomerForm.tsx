@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -87,7 +87,10 @@ export default function RegisteredCustomerForm() {
     };
   }>(editing ? `/customers/accounts/${id}` : null);
 
-  const [form, setForm] = useState(BLANK);
+  /* Opened by Edit on a customer known only from their orders: the form starts
+     from what those orders say about them, and saving registers them. */
+  const prefill = (useLocation().state as { prefill?: Partial<typeof BLANK> } | null)?.prefill;
+  const [form, setForm] = useState(() => ({ ...BLANK, ...(editing ? {} : prefill) }));
   const [discounts, setDiscounts] = useState<Record<number, DiscountRow>>({});
   // The "every category" row. Kept apart from the per-category rows so a person
   // can still correct one category after setting them all.
@@ -127,6 +130,24 @@ export default function RegisteredCustomerForm() {
     );
   }, [existing.data]);
 
+  /*
+    The "All categories" row reads back what it wrote.
+
+    It was only ever set by typing into it, so a customer saved at 10% on every
+    category reopened with that row blank — the one row somebody looks at — and
+    the discount read as lost although each category below still held it. When
+    every category carries the same discount, the top row shows it.
+  */
+  useEffect(() => {
+    const saved = existing.data?.data.discounts ?? [];
+    const first = saved[0];
+    if (!first || cats.length === 0) return;
+    const uniform =
+      cats.every((c) => saved.some((x) => x.category_id === c.id)) &&
+      saved.every((x) => x.discount_type === first.discount_type && Number(x.value) === Number(first.value));
+    if (uniform) setAll({ discount_type: first.discount_type, value: String(first.value) });
+  }, [existing.data, categories.data]);
+
   const rowFor = (categoryId: number): DiscountRow =>
     discounts[categoryId] ?? { discount_type: 'percent', value: '' };
 
@@ -154,7 +175,8 @@ export default function RegisteredCustomerForm() {
     setBusy(true);
     try {
       const body = {
-        ...(admin && !editing ? { lab_id: Number(form.lab_id) } : {}),
+        // Optional: none is head office's own customer.
+        ...(admin && !editing && form.lab_id ? { lab_id: Number(form.lab_id) } : {}),
         company_name: form.company_name,
         owner_name: form.owner_name,
         mobile: form.mobile,
@@ -217,9 +239,15 @@ export default function RegisteredCustomerForm() {
                   label="Laboratory"
                   value={form.lab_id}
                   onChange={(e) => set('lab_id', e.target.value)}
-                  required
-                  slotProps={hint('The laboratory this customer is registered with. Its terms apply there only.', true)}
+                  slotProps={hint(
+                    'Optional. The laboratory this customer is registered with, whose terms apply there only. Left blank, the customer is created by Super Admin as its own.',
+                    true,
+                  )}
                 >
+                  {/* Blank in the field; this is only how to clear a choice. */}
+                  <MenuItem value="">
+                    <em>None — Super Admin</em>
+                  </MenuItem>
                   {(labs.data?.data ?? []).map((l) => (
                     <MenuItem key={l.id} value={String(l.id)}>
                       {l.fullname}

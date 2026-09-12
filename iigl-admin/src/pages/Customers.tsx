@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link as RouterLink, useSearchParams } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Button,
   Table,
@@ -73,6 +73,8 @@ interface Customer {
     `account_id` is null.
   */
   account_id?: number | null;
+  /** The laboratory a stored account is registered with. Null: Super Admin's own. */
+  lab_id?: number | null;
   company_name?: string | null;
   owner_name?: string | null;
 }
@@ -113,7 +115,15 @@ export default function Customers() {
   // Granted like everything else about customers: a laboratory and head office
   // always may, staff when they have been given it.
   const mayRegister = registered && can('customer', 'create');
-  const mayEdit = registered && can('customer', 'update');
+  /*
+    Edit on every row, on every tab. A stored account opens its own record; a
+    customer known only from their orders has none yet, so Edit opens the
+    registration form filled from those orders — saving creates the record, and
+    the orders already billed are left exactly as they were.
+  */
+  const mayEdit = can('customer', 'update');
+  const mayCreate = can('customer', 'create');
+  const navigate = useNavigate();
 
   // The term is component state rather than another URL parameter: `setPage`
   // and `setTab` below rewrite the whole query string, and a third value in it
@@ -209,7 +219,7 @@ export default function Customers() {
                 <TableCell align="right">Paid</TableCell>
                 <TableCell align="right">Due</TableCell>
                 <TableCell>Last order</TableCell>
-                {(canView || mayEdit) && <TableCell />}
+                {(canView || mayEdit || mayCreate) && <TableCell />}
               </TableRow>
             </TableHead>
             <TableBody>
@@ -234,7 +244,10 @@ export default function Customers() {
                   <TableCell className="mono">{r.mobile}</TableCell>
                   {admin && (
                     <TableCell sx={{ whiteSpace: 'normal', minWidth: 150 }}>
-                      {r.laboratories || '—'}
+                      {r.laboratories ||
+                        // A stored account with no laboratory was created by
+                        // Super Admin as its own.
+                        (r.account_id && r.lab_id == null ? 'Super Admin' : '—')}
                     </TableCell>
                   )}
                   {!registered && <TableCell>{r.email ?? '—'}</TableCell>}
@@ -257,7 +270,7 @@ export default function Customers() {
                     {money(r.due ?? 0)}
                   </TableCell>
                   <TableCell>{r.last_order ?? '—'}</TableCell>
-                  {(canView || mayEdit) && (
+                  {(canView || mayEdit || mayCreate) && (
                     <TableCell>
                       {/* What they have ordered, and what it came to. The list
                           can only say how many and when. */}
@@ -269,15 +282,33 @@ export default function Customers() {
                             to={`/customers/${encodeURIComponent(r.mobile)}`}
                           />
                         )}
-                        {/* Only a stored account has a record to edit. A GST
-                            customer known from an order has nothing to open. */}
-                        {mayEdit && r.account_id && (
-                          <IconAction
-                            label="Edit customer and discount"
-                            icon={EditIcon}
-                            to={`/customers/${r.account_id}/edit`}
-                          />
-                        )}
+                        {r.account_id
+                          ? mayEdit && (
+                              <IconAction
+                                label="Edit customer"
+                                icon={EditIcon}
+                                to={`/customers/${r.account_id}/edit`}
+                              />
+                            )
+                          : mayCreate && (
+                              <IconAction
+                                label="Edit customer"
+                                icon={EditIcon}
+                                onClick={() =>
+                                  navigate('/customers/new', {
+                                    state: {
+                                      prefill: {
+                                        company_name: r.customer_name ?? '',
+                                        owner_name: r.customer_name ?? '',
+                                        mobile: r.mobile,
+                                        email: r.email ?? '',
+                                        gst_no: r.gst ?? '',
+                                      },
+                                    },
+                                  })
+                                }
+                              />
+                            )}
                       </RowActions>
                     </TableCell>
                   )}

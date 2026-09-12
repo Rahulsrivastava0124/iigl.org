@@ -69,6 +69,7 @@ Every file also carries its own rollback in a comment at the bottom.
 | `048-employment-shift-times.sql` | **applied** | `employements.shift_start` and `shift_end` (`TIME`): the shift as the form takes it, a start and an end. `working_hours` is written from them whenever they are given, so the calendar reads it unchanged; a shift past midnight wraps. A new file because 047 is applied. Additive. |
 | `049-lab-statements.sql` | **applied** | `users.statement_period` (months per commission statement, default 1), `statement_grace_days` (default 15) and `statement_from` (first month billed; NULL reads as September 2026 or the month the laboratory was added). A statement unpaid past its grace days locks certificate generation until head office approves a payment. Additive; nothing before September 2026 is billed. |
 | `052-remove-certificate-settings.sql` | **applied** | Deletes the `certificate.prefix` (was `iigl`) and `certificate.counter_width` (was `2`) rows from `settings`. Settings › Certificate is removed and new certificates are numbered in the ported twelve-digit form again. Issued certificates keep their numbers. The rollback re-inserts the two values. |
+| `053-registered-customer-lab-optional.sql` | **applied** | `registered_customers.lab_id` may be NULL: head office's own registered customer, filed under no laboratory. Laboratories still see only their own. The (lab_id, mobile) unique key stays; the API checks NULL-lab mobiles for repeats itself. Loosens a constraint only. |
 
 ---
 

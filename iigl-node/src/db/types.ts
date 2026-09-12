@@ -426,7 +426,7 @@ export interface RegisteredCustomers {
   email: string | null;
   gst_no: string | null;
   id: Generated<number>;
-  lab_id: number;
+  lab_id: number | null;
   mobile: string;
   owner_name: string;
   show_image_in_card: Generated<number>;

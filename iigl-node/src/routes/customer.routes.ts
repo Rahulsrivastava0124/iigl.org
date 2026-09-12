@@ -352,14 +352,15 @@ function cardDisplay(body: Record<string, unknown> | undefined) {
  * Which laboratory a new account belongs to.
  *
  * A laboratory registers its own customers and its staff register them for it,
- * so for both the session already says. Head office belongs to no laboratory,
- * so it has to name one — a registered customer with no owner is a set of terms
- * no franchise would ever apply.
+ * so for both the session already says. Head office may name one, or none: a
+ * customer with no laboratory is head office's own (migration 053), and only
+ * head office sees it.
  */
-function owningLab(user: Express.Request['user'], given: unknown): number {
+function owningLab(user: Express.Request['user'], given: unknown): number | null {
   if (user.roleId === ROLE.SUPER) {
+    if (given === undefined || given === null || given === '') return null;
     const id = Number(given);
-    if (!Number.isInteger(id) || id <= 0) throw badRequest('Choose the laboratory this customer belongs to.');
+    if (!Number.isInteger(id) || id <= 0) throw badRequest('That is not a laboratory.');
     return id;
   }
   if (!user.labId) throw forbidden('This account does not belong to a laboratory.');
@@ -442,7 +443,7 @@ customerRoutes.get(
           email: a.email,
           city: a.city,
           gst: a.gst_no,
-          lab_id: Number(a.lab_id),
+          lab_id: a.lab_id === null ? null : Number(a.lab_id),
           laboratories: s?.laboratories ?? null,
           orders: Number(s?.orders ?? 0),
           billed: s?.billed ?? 0,
@@ -527,13 +528,21 @@ customerRoutes.post(
     };
     const discounts = readDiscounts(req.body?.discounts);
 
+    // `lab_id = NULL` matches nothing, and the unique key lets NULLs repeat, so
+    // head office's own customers are checked with IS NULL.
     const clash = await db
       .selectFrom('registered_customers')
       .select('id')
-      .where('lab_id', '=', labId)
+      .where('lab_id', labId === null ? 'is' : '=', labId)
       .where('mobile', '=', mobile)
       .executeTakeFirst();
-    if (clash) throw conflict('That contact number is already a registered customer of this laboratory.');
+    if (clash) {
+      throw conflict(
+        labId === null
+          ? 'That contact number is already one of head office’s registered customers.'
+          : 'That contact number is already a registered customer of this laboratory.',
+      );
+    }
 
     const id = await db.transaction().execute(async (trx) => {
       const now = new Date();
@@ -580,7 +589,7 @@ customerRoutes.patch(
       const clash = await db
         .selectFrom('registered_customers')
         .select('id')
-        .where('lab_id', '=', Number(account.lab_id))
+        .where('lab_id', account.lab_id === null ? 'is' : '=', account.lab_id)
         .where('mobile', '=', mobile)
         .where('id', '!=', Number(account.id))
         .executeTakeFirst();

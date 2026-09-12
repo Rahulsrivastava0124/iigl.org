@@ -1548,10 +1548,10 @@ export const extraPaths: Record<string, unknown> = {
       tags: ['Customers'],
       summary: 'Register a customer',
       description:
-        'A laboratory registers its own customers and its staff register them for it. Head office belongs to no laboratory and must send `lab_id`. A GST number is required: registered has always meant one here. The discount is stored per category and **not yet applied to an order** — pricing is ported behaviour verified against Laravel, and billing a discount is its own change.',
+        'A laboratory registers its own customers and its staff register them for it. Head office may send `lab_id`, or leave it out for a customer of its own that belongs to no laboratory — only head office sees those. A GST number is required: registered has always meant one here. The discount is stored per category and **not yet applied to an order** — pricing is ported behaviour verified against Laravel, and billing a discount is its own change.',
       requestBody: body(
         {
-          lab_id: { type: 'integer', description: 'Head office only.' },
+          lab_id: { type: ['integer', 'null'], description: 'Head office only, and optional: none is head office’s own customer.' },
           company_name: { type: 'string' },
           owner_name: { type: 'string' },
           mobile: { type: 'string', pattern: '^\\d{10}$' },
