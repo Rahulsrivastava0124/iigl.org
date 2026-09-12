@@ -15,15 +15,17 @@ import {
 import IssueIcon from '@mui/icons-material/WorkspacePremiumOutlined';
 import EditIcon from '@mui/icons-material/EditOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
+import PrintIcon from '@mui/icons-material/PrintOutlined';
 import { useDebounced, useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
+import { apiUrl } from '../lib/config';
 import { messageOf } from '../lib/auth';
 import { useToast } from '../components/Toast';
 import {
   DateField,
   Dialog,
   IconAction,
-  Pager,
+  DEFAULT_PER_PAGE, Pager,
   Panel,
   RowActions,
   SearchField,
@@ -71,6 +73,9 @@ export default function StudentCertificates() {
   const toast = useToast();
   const [params, setParams] = useSearchParams();
   const page = Number(params.get('page') ?? 1);
+  /** Rows per page. Component state, not a URL parameter: it is how somebody
+   * likes to read a list, not which list they are looking at. */
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
   /** Set when opened from a registration: that one student's certificates. */
   const studentId = params.get('student_id');
   /** Paging and searching keep the student filter rather than dropping it. */
@@ -80,7 +85,7 @@ export default function StudentCertificates() {
   const [search, setSearch] = useState('');
   const term = useDebounced(search);
 
-  const query = new URLSearchParams({ page: String(page), per_page: '25' });
+  const query = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (term.trim()) query.set('q', term.trim());
   if (studentId) query.set('student_id', studentId);
 
@@ -252,6 +257,10 @@ export default function StudentCertificates() {
           <Pager
             meta={source.data?.meta}
             onPage={(n) => keep(n > 1 ? { page: String(n) } : {})}
+            onPerPage={(n) => {
+              setPerPage(n);
+              keep();
+            }}
           />
         }
         actions={
@@ -293,12 +302,7 @@ export default function StudentCertificates() {
               {rows.map((c) => (
                 <TableRow key={c.id} hover>
                   <TableCell className="mono">{c.certificate_no}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'normal', minWidth: 150 }}>
-                    {c.student_name}
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                      {c.registration_no}
-                    </Typography>
-                  </TableCell>
+                  <TableCell sx={{ whiteSpace: 'normal', minWidth: 150 }}>{c.student_name}</TableCell>
                   <TableCell>
                     {c.course_name}
                     {c.batch && (
@@ -311,6 +315,28 @@ export default function StudentCertificates() {
                   <TableCell>{c.issued_on?.slice(0, 10) ?? '—'}</TableCell>
                   <TableCell>
                     <RowActions>
+                      {/*
+                        Opened rather than fetched: the response is a PDF, and a
+                        plain navigation lets the browser's own viewer print it,
+                        which is the one place a print dialog belongs. The
+                        session cookie rides along because the API is the same
+                        site as the panel.
+
+                        A course with no design uploaded answers 404 with a
+                        sentence saying so, which the viewer shows. That is the
+                        intended path: the fix is an upload on the course.
+                      */}
+                      <IconAction
+                        label="Print certificate"
+                        icon={PrintIcon}
+                        onClick={() =>
+                          window.open(
+                            apiUrl(`/student-certificates/${c.id}/print`),
+                            '_blank',
+                            'noopener',
+                          )
+                        }
+                      />
                       <IconAction
                         label="Edit certificate"
                         icon={EditIcon}

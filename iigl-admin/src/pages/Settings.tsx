@@ -56,12 +56,18 @@ const GROUPS: { id: string; label: string; note: string }[] = [
     label: 'Company',
     note: 'Printed on certificates and invoices.',
   },
-  {
-    id: 'certificate',
-    label: 'Certificate',
-    note:
-      'Applies to certificates issued from now on. Ones already printed keep the number they carry.',
-  },
+  /*
+    No Certificate tab.
+
+    The two settings behind it — certificate.prefix and
+    certificate.counter_width — still exist and still compose every new
+    certificate number (iigl-node/src/services/report.service.ts). They are not
+    deleted, only unlisted: whatever they are set to now goes on applying, and
+    nothing about numbering changes by removing this tab.
+
+    A group the API sends but no tab names is dropped by the filter below, so
+    this list is the whole of the decision.
+  */
   {
     id: 'holidays',
     label: 'Holidays',

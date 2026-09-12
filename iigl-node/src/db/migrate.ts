@@ -70,7 +70,20 @@ function read(): File[] {
       return {
         name,
         sql,
-        checksum: createHash('sha256').update(sql).digest('hex').slice(0, 16),
+        /*
+          Hashed with line endings normalised.
+
+          .gitattributes is `* text=auto`, so git stores LF and hands a Windows
+          checkout CRLF. Hashing the raw bytes made the ending part of a
+          migration's identity: the same file, applied from a Linux container
+          and then read on a Windows desktop, is two different migrations — and
+          the runner reported every one of them as edited and refused to do
+          anything, including --status.
+
+          What a migration is, is the statements it runs. Those do not change
+          with the ending, so neither does this.
+        */
+        checksum: createHash('sha256').update(sql.replace(/\r\n/g, '\n')).digest('hex').slice(0, 16),
         blocked,
         drops,
       };

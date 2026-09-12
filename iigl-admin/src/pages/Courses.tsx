@@ -39,7 +39,8 @@ import { messageOf } from '../lib/auth';
 import { apiUrl, fileUrl } from '../lib/config';
 import GstField, { type GstRate } from '../components/GstField';
 import { useToast } from '../components/Toast';
-import { hint, money, ConfirmDialog, Dialog, FormPanel, IconAction, Pager, Panel, RowActions, SearchField, StateChip, TableFrame, Tile, TILE_CELL, ToneAction, YesNo } from '../components/ui';
+import FileField from '../components/FileField';
+import { hint, money, ConfirmDialog, Dialog, FormPanel, IconAction, DEFAULT_PER_PAGE, Pager, Panel, RowActions, SearchField, StateChip, TableFrame, Tile, TILE_CELL, ToneAction, YesNo } from '../components/ui';
 import type { Tone } from '../components/ui';
 import ViewIcon from '@mui/icons-material/VisibilityOutlined';
 import BilledIcon from '@mui/icons-material/ReceiptLongOutlined';
@@ -66,6 +67,12 @@ interface Course {
   /** A rate typed for this course alone. Set only when `gst_id` is null. */
   gst_percent: string | null;
   description: string | null;
+  /**
+   * The sheet this course's certificates are printed on, in
+   * `uploads/certificate`. Null means the course cannot be printed yet: the
+   * print action refuses rather than inventing a layout.
+   */
+  certificate_template: string | null;
   is_active: number;
   /** How many are on it. Counted by the list endpoint. */
   enrolled?: number;
@@ -151,6 +158,7 @@ const BLANK_COURSE = {
   /** A rate typed for this course alone, when it is not one from the list. */
   gst_percent: '',
   description: '',
+  certificate_template: null as string | null,
   is_active: true,
 };
 
@@ -169,11 +177,14 @@ export default function Courses() {
   const tab = params.get('tab') === 'enrolments' ? 'enrolments' : 'catalogue';
   const status = params.get('status') as CourseStatus | null;
   const page = Number(params.get('page') ?? 1);
+  /** Rows per page. Component state, not a URL parameter: it is how somebody
+   * likes to read a list, not which list they are looking at. */
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
 
   const [search, setSearch] = useState('');
   const term = useDebounced(search);
 
-  const query = new URLSearchParams({ page: String(page), per_page: '25' });
+  const query = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (term.trim()) query.set('q', term.trim());
   if (tab === 'enrolments' && status) query.set('status', status);
 
@@ -434,6 +445,7 @@ export default function Courses() {
         gst_id: form.gst_id ? Number(form.gst_id) : null,
         gst_percent: form.gst_id ? null : form.gst_percent || null,
         description: form.description,
+        certificate_template: form.certificate_template,
         is_active: form.is_active,
       };
       if (form.id) {
@@ -668,11 +680,36 @@ export default function Courses() {
                   minRows={2}
                   sx={{ gridColumn: '1 / -1' }}
                 />
+                {/*
+                  The printed sheet, on the course rather than on a certificate:
+                  everybody finishing this course takes away the same design
+                  with a different name on it. Full width because it is a
+                  landscape picture, and a certificate cropped into a third of a
+                  row cannot be checked by looking at it.
+                */}
+                <Box sx={{ gridColumn: '1 / -1' }}>
+                  <FileField
+                    label="Certificate design"
+                    bucket="certificate"
+                    value={form.certificate_template}
+                    onChange={(certificate_template) =>
+                      setForm({ ...form, certificate_template })
+                    }
+                    fill
+                    helperText={
+                      'The blank sheet certificates print on. The name, course, grade, number ' +
+                      'and date are laid over it. Without one, this course cannot be printed.'
+                    }
+                  />
+                </Box>
               </FormPanel>
             )}
             title="Courses"
             count={catalogue.data ? `${catalogue.data.meta.total} courses` : 'Loading…'}
-            footer={<Pager meta={catalogue.data?.meta} onPage={(n) => go({ page: n })} />}
+            footer={<Pager meta={catalogue.data?.meta} onPage={(n) => go({ page: n })} onPerPage={(n) => {
+            setPerPage(n);
+            go({ page: 1 });
+          }} />}
             actions={
               <>
                 <SearchField
@@ -769,6 +806,7 @@ export default function Courses() {
                                 gst_id: c.gst_id ? String(c.gst_id) : '',
                                 gst_percent: c.gst_percent == null ? '' : String(c.gst_percent),
                                 description: c.description ?? '',
+                                certificate_template: c.certificate_template,
                                 is_active: Boolean(c.is_active),
                               })
                             }
@@ -792,7 +830,10 @@ export default function Courses() {
         <Panel
           title="Enrolments"
           count={enrolments.data ? `${enrolments.data.meta.total} enrolments` : 'Loading…'}
-          footer={<Pager meta={enrolments.data?.meta} onPage={(n) => go({ page: n })} />}
+          footer={<Pager meta={enrolments.data?.meta} onPage={(n) => go({ page: n })} onPerPage={(n) => {
+            setPerPage(n);
+            go({ page: 1 });
+          }} />}
           actions={
             <>
               <TextField

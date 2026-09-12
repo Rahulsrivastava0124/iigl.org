@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
+  Avatar,
   Button,
+  Checkbox,
   Grid,
   Stack,
   Table,
@@ -19,6 +21,11 @@ import CommissionIcon from '@mui/icons-material/PercentOutlined';
 import PaidIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
 import DuesIcon from '@mui/icons-material/PendingActionsOutlined';
 import { useFetch } from '../lib/useFetch';
+import { api } from '../lib/api';
+import { fileUrl } from '../lib/config';
+import { messageOf } from '../lib/auth';
+import { useToast } from '../components/Toast';
+import FilePreview from '../components/FilePreview';
 import { StatementsTable } from '../components/Statements';
 import {
   Notice,
@@ -72,6 +79,10 @@ interface Report {
   carat_weight: string | null;
   gross_weight: string | null;
   created_at: string | null;
+  /** The stone as it is printed on the card. */
+  item_image: string | null;
+  /** 1 when the public verification endpoint will not answer for this number. */
+  hidden_on_site: number;
 }
 
 interface Detail {
@@ -107,9 +118,37 @@ export default function LaboratoryView() {
   const d = source.data?.data;
   const lab = d?.laboratory;
 
-  /** A list is capped; say so rather than letting a count and a table disagree. */
-  const capped = (total: number, listed: number) =>
-    total > listed ? `${listed} of ${total.toLocaleString()} shown` : `${total.toLocaleString()}`;
+  const toast = useToast();
+  const reports = d?.reports ?? [];
+  const [saving, setSaving] = useState(false);
+  const [preview, setPreview] = useState<{ path: string; name: string } | null>(null);
+
+  /**
+   * Publish or withhold certificates, written the moment the box is ticked.
+   *
+   * The box **is** the setting rather than a selection to act on later: there
+   * was a Save alongside it, and a tickbox next to a button is a question about
+   * whether the tick has happened yet. Ticked means the public site will not
+   * answer for that number.
+   *
+   * Reloaded rather than patched in place, so what is on screen is what the
+   * database says — a tick that appears to have taken and did not is the one
+   * failure this must not have.
+   */
+  const setHidden = async (ids: number[], hidden: boolean) => {
+    setSaving(true);
+    try {
+      await api.patch('/reports/visibility', { report_ids: ids, hidden });
+      await source.reload();
+    } catch (e) {
+      toast.error(messageOf(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /** "All" is the rows on screen: this tab is a capped preview of the history. */
+  const allHidden = reports.length > 0 && reports.every((r) => r.hidden_on_site);
 
   if (source.error) return <Notice kind="error">{source.error}</Notice>;
 
@@ -266,54 +305,114 @@ export default function LaboratoryView() {
         )}
 
         {tab === 'reports' && (
-          <TableFrame
-            loading={source.loading}
-            error={source.error}
-            empty={(d?.reports.length ?? 0) === 0}
-            emptyText="This laboratory has issued no certificates."
-          >
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Certificate</TableCell>
-                  <TableCell align="right">Carat</TableCell>
-                  <TableCell align="right">Gross</TableCell>
-                  <TableCell>Issued</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {(d?.reports ?? []).map((r) => (
-                  <TableRow key={r.id} hover>
-                    <TableCell className="mono">{r.report_no}</TableCell>
-                    <TableCell align="right" className="tabular">
-                      {r.carat_weight || '—'}
+          <>
+            <TableFrame
+              loading={source.loading}
+              error={source.error}
+              empty={reports.length === 0}
+              emptyText="This laboratory has issued no certificates."
+            >
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ width: 56 }}>Item</TableCell>
+                    <TableCell>Certificate</TableCell>
+                    <TableCell align="right">Carat</TableCell>
+                    <TableCell align="right">Gross</TableCell>
+                    <TableCell>Issued</TableCell>
+                    {/*
+                      Last, and named. A tickbox in the first column is read as
+                      "pick this row"; this one is the setting itself, and the
+                      only thing that says so is the word above it.
+                    */}
+                    <TableCell padding="checkbox" sx={{ whiteSpace: 'nowrap' }}>
+                      <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                        <Checkbox
+                          size="small"
+                          checked={allHidden}
+                          indeterminate={!allHidden && reports.some((r) => !!r.hidden_on_site)}
+                          disabled={saving || reports.length === 0}
+                          onChange={() => setHidden(reports.map((r) => r.id), !allHidden)}
+                          slotProps={{
+                            input: { 'aria-label': 'Hide every certificate shown from the public site' },
+                          }}
+                        />
+                        <span>Hidden</span>
+                      </Stack>
                     </TableCell>
-                    <TableCell align="right" className="tabular">
-                      {r.gross_weight || '—'}
-                    </TableCell>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>{day(r.created_at)}</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableFrame>
+                </TableHead>
+                <TableBody>
+                  {reports.map((r) => (
+                    <TableRow key={r.id} hover selected={!!r.hidden_on_site}>
+                      <TableCell>
+                        {/*
+                          Avatar rather than a bare <img>: it draws its fallback
+                          when the file is missing, and the older certificates
+                          were written by the Laravel application, so some of
+                          those files are gone.
+                        */}
+                        <Avatar
+                          variant="rounded"
+                          src={fileUrl(r.item_image) ?? undefined}
+                          alt=""
+                          onClick={
+                            r.item_image
+                              ? () => setPreview({ path: r.item_image!, name: r.report_no })
+                              : undefined
+                          }
+                          // The whole stone, not a square crop of it.
+                          slotProps={{ img: { sx: { objectFit: 'contain' } } }}
+                          sx={{
+                            width: 36,
+                            height: 36,
+                            bgcolor: 'action.hover',
+                            color: 'text.secondary',
+                            fontSize: 12,
+                            cursor: r.item_image ? 'zoom-in' : 'default',
+                          }}
+                        >
+                          —
+                        </Avatar>
+                      </TableCell>
+                      <TableCell className="mono">{r.report_no}</TableCell>
+                      <TableCell align="right" className="tabular">
+                        {r.carat_weight || '—'}
+                      </TableCell>
+                      <TableCell align="right" className="tabular">
+                        {r.gross_weight || '—'}
+                      </TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>{day(r.created_at)}</TableCell>
+                      <TableCell padding="checkbox">
+                        <Checkbox
+                          size="small"
+                          checked={!!r.hidden_on_site}
+                          disabled={saving}
+                          onChange={() => setHidden([r.id], !r.hidden_on_site)}
+                          slotProps={{
+                            input: { 'aria-label': `Hide ${r.report_no} from the public site` },
+                          }}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableFrame>
+          </>
         )}
 
         {tab === 'statements' && id && <StatementsTable labId={Number(id)} />}
 
-        {/*
-          How much of each list is on screen, and where the rest is. One line,
-          reading whichever tab is open.
-        */}
-        {d && tab !== 'statements' && (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
-            {tab === 'payments' && `Payments: ${capped(d.counts.payments, d.payments.length)}.`}
-            {tab === 'staff' && `Staff: ${capped(d.counts.staff, d.staff.length)}.`}
-            {tab === 'reports' && `Certificates: ${capped(d.counts.reports, d.reports.length)}.`}
-            {' The full history is on the screen that owns it.'}
-          </Typography>
-        )}
       </Panel>
+
+      {preview && (
+        <FilePreview
+          stored={preview.path}
+          title={preview.name}
+          onClose={() => setPreview(null)}
+        />
+      )}
     </>
   );
 }

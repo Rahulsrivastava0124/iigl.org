@@ -1298,6 +1298,31 @@ export const extraPaths: Record<string, unknown> = {
     },
   },
 
+  '/api/student-certificates/{id}/print': {
+    get: {
+      tags: ['Students'],
+      summary: 'Print the certificate',
+      description:
+        "Printed on the artwork the **course** carries, in `courses.certificate_template` — the design belongs to the course, because every student finishing it takes away the same sheet with a different name on it. The student name, course, grade, certificate number and issue date are laid over that image.\n\nA course with no design uploaded returns 404 naming the course rather than printing an invented layout: the fix is an upload, not a retry. Landscape unless `?orientation=portrait`. `?format=html` returns the markup the PDF is rendered from.",
+      parameters: [
+        idParam,
+        { name: 'orientation', in: 'query', schema: { type: 'string', enum: ['portrait', 'landscape'] }, description: 'Page orientation. Landscape by default.' },
+        { name: 'format', in: 'query', schema: { type: 'string', enum: ['html'] }, description: 'Return the markup instead of a PDF.' },
+      ],
+      responses: {
+        200: {
+          description: 'The certificate as a PDF, or as HTML when format=html.',
+          content: {
+            'application/pdf': { schema: { type: 'string', format: 'binary' } },
+            'text/html': { schema: { type: 'string' } },
+          },
+        },
+        404: err('Certificate not found, or the course has no design uploaded.'),
+        ...guarded,
+      },
+    },
+  },
+
   '/api/student-certificates/{id}': {
     patch: {
       tags: ['Students'],

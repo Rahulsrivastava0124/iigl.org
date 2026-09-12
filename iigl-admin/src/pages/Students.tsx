@@ -33,7 +33,7 @@ import {
   DateField,
   Dialog,
   IconAction,
-  Pager,
+  DEFAULT_PER_PAGE, Pager,
   Panel,
   RowActions,
   SearchField,
@@ -95,11 +95,14 @@ export default function Students() {
   const [params, setParams] = useSearchParams();
   const status = (params.get('status') as Status | null) ?? 'all';
   const page = Number(params.get('page') ?? 1);
+  /** Rows per page. Component state, not a URL parameter: it is how somebody
+   * likes to read a list, not which list they are looking at. */
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
 
   const [search, setSearch] = useState('');
   const term = useDebounced(search);
 
-  const query = new URLSearchParams({ page: String(page), per_page: '25' });
+  const query = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (status !== 'all') query.set('status', status);
   if (term.trim()) query.set('q', term.trim());
 
@@ -178,7 +181,10 @@ export default function Students() {
       <Panel
         title="Registrations"
         count={source.data ? `${source.data.meta.total.toLocaleString()} students` : 'Loading…'}
-        footer={<Pager meta={source.data?.meta} onPage={(n) => go({ page: n })} />}
+        footer={<Pager meta={source.data?.meta} onPage={(n) => go({ page: n })} onPerPage={(n) => {
+            setPerPage(n);
+            go({ page: 1 });
+          }} />}
         actions={
           <>
             <SearchField

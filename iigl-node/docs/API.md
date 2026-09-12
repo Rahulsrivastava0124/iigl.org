@@ -1,6 +1,6 @@
 # IIGL API
 
-232 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
+234 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
 
 The interactive version is at `/docs` when the server is running, and the raw
 document at `/openapi.json`.
@@ -166,6 +166,7 @@ Certificates issued against order items.
 | POST | `/api/reports` | session | — | — | 400, 401, 403, 409 | Issue a certificate |
 | GET | `/api/reports/{id}` | session | — | — | 401, 403, 404 | Read a certificate |
 | PATCH | `/api/reports/{id}` | session | — | subcategory_id, gross_weight, gross_wt_unit, carat_weight, stone_wt_unit, size, comments, is_approx, +2 more | 400, 401, 403, 404 | Amend a certificate |
+| PATCH | `/api/reports/visibility` | session | — | **report_ids**, **hidden** | 400, 401, 403, 404 | Publish or withhold certificates |
 
 ## Transactions
 
@@ -367,6 +368,7 @@ The student pipeline: enquiry, registration, course, discount, certificate. New 
 | POST | `/api/student-certificates` | session | — | **student_course_id**, issued_on, grade, remark, file | 400, 401, 403, 404, 409 | Issue a certificate |
 | PATCH | `/api/student-certificates/{id}` | session | — | issued_on, grade, remark, file | 400, 401, 403, 404 | Update a certificate |
 | DELETE | `/api/student-certificates/{id}` | session | — | — | 401, 403, 404 | Delete a certificate |
+| GET | `/api/student-certificates/{id}/print` | session | `orientation`, `format` | — | 401, 403, 404 | Print the certificate |
 | GET | `/api/student-certificates/pending` | session | — | — | 401, 403 | Completed courses with no certificate yet |
 | GET | `/api/students` | session | `page`, `per_page`, `status`, `q` | — | 401, 403 | List registrations |
 | POST | `/api/students` | session | — | **name**, father_name, dob, gender, **mobile**, alt_mobile, email, address, +10 more | 400, 401, 403 | Register a student |
@@ -485,4 +487,4 @@ Commission billed to a laboratory on a period, its grace days, and the lock on c
 
 Bold body fields are required.
 
-232 endpoints: 16 public, 216 requiring a session.
+234 endpoints: 16 public, 218 requiring a session.

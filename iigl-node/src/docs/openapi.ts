@@ -1578,6 +1578,36 @@ const document = {
       },
     },
 
+    '/api/reports/visibility': {
+      patch: {
+        tags: ['Reports'],
+        summary: 'Publish or withhold certificates',
+        description:
+          "Whether the public verification endpoint answers for these certificates. A withheld one returns the same 404 as a number that was never issued - same status, same wording - because a refusal an outsider could tell apart would itself disclose that the certificate exists.\n\nA set rather than one at a time. Every id is checked for ownership before anything is written, so a set containing another laboratory's certificate changes nothing at all.",
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  report_ids: { type: 'array', items: { type: 'integer' } },
+                  hidden: { type: 'boolean' },
+                },
+                required: ['report_ids', 'hidden'],
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'How many were changed, and to what.' },
+          400: errorResponse('No ids given, or hidden was not a boolean.'),
+          404: errorResponse('One of the certificates does not exist.'),
+          ...guarded,
+        },
+      },
+    },
+
     '/api/reports/{id}': {
       patch: {
         tags: ['Reports'],

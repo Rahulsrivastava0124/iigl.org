@@ -17,7 +17,7 @@ import { isSuper } from '../lib/portal';
 import { usePermissions } from '../lib/permissions';
 import {
   IconAction,
-  Pager,
+  DEFAULT_PER_PAGE, Pager,
   Panel,
   RowActions,
   SearchField,
@@ -87,6 +87,9 @@ export default function Customers() {
   const [params, setParams] = useSearchParams();
   const tab = (params.get('tab') as Tab) ?? 'registered';
   const page = Number(params.get('page') ?? 1);
+  /** Rows per page. Component state, not a URL parameter: it is how somebody
+   * likes to read a list, not which list they are looking at. */
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
 
   const { user } = useAuth();
   const admin = isSuper(user);
@@ -118,7 +121,7 @@ export default function Customers() {
   const [search, setSearch] = useState('');
   const term = useDebounced(search);
 
-  const query = new URLSearchParams({ page: String(page), per_page: '25' });
+  const query = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (term.trim()) query.set('q', term.trim());
 
   /*
@@ -158,7 +161,10 @@ export default function Customers() {
       </Tabs>
 
       <Panel
-        footer={<Pager meta={source.data?.meta} onPage={setPage} />}
+        footer={<Pager meta={source.data?.meta} onPage={setPage} onPerPage={(n) => {
+            setPerPage(n);
+            setPage(1);
+          }} />}
         title="Customers"
         count={source.data ? `${source.data.meta.total.toLocaleString()} people` : 'Loading…'}
         actions={

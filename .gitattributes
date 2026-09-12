@@ -1,2 +1,8 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Migrations are checksummed, and the checksum is what stops two databases
+# quietly disagreeing about what has run. Pinned to LF so a Windows checkout
+# does not rewrite every one of them into a different file than the one that
+# was applied.
+migrations/*.sql text eol=lf

@@ -83,7 +83,7 @@ export default function Dashboard() {
             reply carries is what chooses the screen.
           */}
           {s.mine ? (
-            <StaffTiles mine={s.mine} />
+            <StaffTiles mine={s.mine} wallet={s.wallet} />
           ) : s.lab ? (
             <LaboratoryTiles s={s} lab={s.lab} />
           ) : (
@@ -134,6 +134,52 @@ export default function Dashboard() {
           )}
         </>
       )}
+    </>
+  );
+}
+
+/**
+ * The signed-in account's own wallet.
+ *
+ * Two figures, not head office's four. `balance` is approved money in less
+ * approved money out for **this account**, which the API computes for everyone
+ * — it is not a head-office quantity that happens to be scoped down. The two
+ * commission tiles are left off on purpose: a laboratory already carries its
+ * commission as Admin commission, and a team member accrues none at all, so
+ * both would be a number with nothing behind it.
+ *
+ * Pending transfers are reported beside the balance rather than folded into it,
+ * because a transfer nobody has approved has not moved — the same distinction
+ * the ledger draws.
+ */
+function WalletCard({ wallet }: { wallet: DashboardSummary['wallet'] }) {
+  return (
+    <>
+      <Typography variant="h2" sx={{ mt: 2.5, mb: 1 }}>
+        Wallet
+      </Typography>
+      <Grid container spacing={2}>
+        <Grid size={CELL}>
+          <Tile
+            label="Current wallet"
+            value={money(wallet.balance)}
+            fill="brand"
+            icon={WalletIcon}
+            to="/wallet"
+          />
+        </Grid>
+        <Grid size={CELL}>
+          <Tile
+            label="On approval"
+            value={money(wallet.on_approval)}
+            note="waiting on a decision"
+            // Amber only while something is actually waiting: a warning colour
+            // over a zero is a warning nobody reads.
+            fill={wallet.on_approval > 0 ? 'waiting' : 'plain'}
+            icon={ApprovalIcon}
+          />
+        </Grid>
+      </Grid>
     </>
   );
 }
@@ -393,7 +439,13 @@ function HeadOfficeTiles({ s }: { s: DashboardSummary }) {
  * employs, what they are collectively holding, what it owes head office — and
  * an employee cannot act on any of them.
  */
-function StaffTiles({ mine }: { mine: NonNullable<DashboardSummary['mine']> }) {
+function StaffTiles({
+  mine,
+  wallet,
+}: {
+  mine: NonNullable<DashboardSummary['mine']>;
+  wallet: DashboardSummary['wallet'];
+}) {
   return (
     <>
       <Typography variant="h2" sx={{ mt: 0, mb: 1 }}>
@@ -512,6 +564,8 @@ function StaffTiles({ mine }: { mine: NonNullable<DashboardSummary['mine']> }) {
           />
         </Grid>
       </Grid>
+
+      <WalletCard wallet={wallet} />
     </>
   );
 }
@@ -696,6 +750,8 @@ function LaboratoryTiles({
           />
         </Grid>
       </Grid>
+
+      <WalletCard wallet={s.wallet} />
     </>
   );
 }

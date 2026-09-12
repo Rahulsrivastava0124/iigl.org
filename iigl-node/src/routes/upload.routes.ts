@@ -8,7 +8,18 @@ export const uploadRoutes = Router();
 uploadRoutes.use(requireLabScope);
 
 /** Buckets only an administrator may write to: site content, not lab work. */
-const ADMIN_ONLY = new Set(['banner', 'icon', 'website', 'signature', 'documentation']);
+const ADMIN_ONLY = new Set([
+  'banner',
+  'icon',
+  'website',
+  'signature',
+  'documentation',
+  // The course catalogue is head office's (courseRoutes uses requireAdmin,
+  // which is requireSuper), so the artwork its certificates print on is too.
+  // Anything looser would let a laboratory change what every course's students
+  // take away.
+  'certificate',
+]);
 
 /**
  * Accepts one or more files and returns the paths to store on a record.

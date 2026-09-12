@@ -25,7 +25,7 @@ import {
   ConfirmDialog,
   FormPanel,
   IconAction,
-  Pager,
+  DEFAULT_PER_PAGE, Pager,
   Panel,
   RowActions,
   SearchField,
@@ -134,7 +134,10 @@ export default function Attributes() {
   // subcategory, else the whole category. 3,899 of them sit under a single
   // category, so the list is paged rather than poured onto the screen.
   const [page, setPage] = useState(1);
-  const valuesQuery = new URLSearchParams({ page: String(page), per_page: '25' });
+  /** Rows per page. Component state, not a URL parameter: it is how somebody
+   * likes to read a list, not which list they are looking at. */
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
+  const valuesQuery = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (attrId) valuesQuery.set('attr_id', attrId);
   else if (chosen) valuesQuery.set('subcategory_id', chosen);
   else if (chosenCat) valuesQuery.set('category_id', chosenCat);
@@ -479,7 +482,10 @@ export default function Attributes() {
               />
             </FormPanel>
           )}
-          footer={<Pager meta={values.data?.meta} onPage={setPage} />}
+          footer={<Pager meta={values.data?.meta} onPage={setPage} onPerPage={(n) => {
+            setPerPage(n);
+            setPage(1);
+          }} />}
           title="Attribute values"
           actions={
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>

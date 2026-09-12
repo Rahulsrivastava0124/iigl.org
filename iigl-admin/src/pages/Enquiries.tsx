@@ -27,7 +27,7 @@ import SourceField from '../components/SourceField';
 import { useToast } from '../components/Toast';
 import { BRAND } from '../lib/theme';
 import { EnquiryViewDialog, FollowupDialog } from '../components/EnquiryFollowups';
-import { hint, today, ConfirmDialog, DateField, FormPanel, IconAction, Pager, Panel, RowActions, SearchField, StateChip, TableFrame, Tile, ToneAction } from '../components/ui';
+import { hint, today, ConfirmDialog, DateField, FormPanel, IconAction, DEFAULT_PER_PAGE, Pager, Panel, RowActions, SearchField, StateChip, TableFrame, Tile, ToneAction } from '../components/ui';
 import type { Paged } from '../lib/api';
 import type { Tone } from '../components/ui';
 
@@ -142,11 +142,14 @@ export default function Enquiries({ fixedKind }: { fixedKind?: Kind } = {}) {
   const kind = fixedKind ?? ((params.get('kind') as Kind | 'all' | null) ?? 'ask');
   const status = params.get('status') as Status | null;
   const page = Number(params.get('page') ?? 1);
+  /** Rows per page. Component state, not a URL parameter: it is how somebody
+   * likes to read a list, not which list they are looking at. */
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
 
   const [search, setSearch] = useState('');
   const term = useDebounced(search);
 
-  const query = new URLSearchParams({ page: String(page), per_page: '25' });
+  const query = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (kind !== 'all') query.set('kind', kind);
   if (status) query.set('status', status);
   if (term.trim()) query.set('q', term.trim());
@@ -466,7 +469,10 @@ export default function Enquiries({ fixedKind }: { fixedKind?: Kind } = {}) {
         )}
         title="Enquiries"
         count={source.data ? `${source.data.meta.total.toLocaleString()} enquiries` : 'Loading…'}
-        footer={<Pager meta={source.data?.meta} onPage={(n) => go({ page: n })} />}
+        footer={<Pager meta={source.data?.meta} onPage={(n) => go({ page: n })} onPerPage={(n) => {
+            setPerPage(n);
+            go({ page: 1 });
+          }} />}
         actions={
           <>
             {/*

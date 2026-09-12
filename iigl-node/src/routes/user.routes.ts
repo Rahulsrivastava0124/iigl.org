@@ -391,7 +391,17 @@ userRoutes.get(
 
       db
         .selectFrom('reports')
-        .select(['id', 'report_no', 'carat_weight', 'gross_weight', 'created_at'])
+        // item_image so the tab can show what was certified, hidden_on_site so
+        // it can say which of these the public site will not answer for.
+        .select([
+          'id',
+          'report_no',
+          'carat_weight',
+          'gross_weight',
+          'created_at',
+          'item_image',
+          'hidden_on_site',
+        ])
         .where('lab_id', '=', labId)
         .orderBy('id', 'desc')
         .limit(RECENT)

@@ -38,8 +38,6 @@ export interface LabStatements {
   reminder: null | { key: string; amount: number; billed_on: string; due_on: string; days_left: number; overdue_days: number };
 }
 
-const PERIOD_NAME: Record<number, string> = { 1: 'Monthly', 3: 'Quarterly', 6: 'Half-yearly', 12: 'Yearly' };
-
 const STATE: Record<StatementPeriod['state'], { tone: Tone; label: string }> = {
   paid: { tone: 'settled', label: 'Paid' },
   due: { tone: 'lead', label: 'Due' },
@@ -73,19 +71,33 @@ export function StatementsTable({ labId }: { labId?: number }) {
 
   return (
     <>
+      {/*
+        What is owed, and the date that belongs to it. Nothing else.
+
+        The terms — period length, grace days, the month billing started — are the
+        laboratory's settings and are read on its own screen; restating them
+        above every statements table pushed the one figure anybody opens this
+        for to the end of a sentence. Billed and Paid totals are in the table,
+        column by column and period by period, which is where a number somebody
+        wants to check belongs.
+
+        Two different dates, because "Outstanding 0" and "Outstanding 4,200"
+        are asking different questions. With something owed, the date wanted is
+        when that was billed — `reminder` is the oldest statement not paid in
+        full, so its billed_on is the one. With nothing owed, the only date
+        worth printing is when the running period bills next, and calling a
+        future date "Billed on" would read as though it already had.
+      */}
       {s && (
         <Box sx={{ px: 2, py: 1.25, borderBottom: 1, borderColor: 'divider' }}>
           <Typography variant="body2">
-            {PERIOD_NAME[s.period_months] ?? `${s.period_months}-monthly`} statements, {s.grace_days} grace days, billed
-            from {month(s.starts_on)}. Billed {money(s.billed)} · Paid {money(s.paid)}
-            {s.pending > 0 ? ` · Awaiting approval ${money(s.pending)}` : ''} · <b>Outstanding {money(s.outstanding)}</b>
+            <b>Outstanding {money(s.outstanding)}</b>
+            {s.reminder
+              ? ` · Billed on ${s.reminder.billed_on}`
+              : s.current
+                ? ` · Next billed on ${s.current.billed_on}`
+                : ''}
           </Typography>
-          {s.current && (
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-              {periodLabel(s.current)} so far: {money(s.current.commission)} on {s.current.orders}{' '}
-              {s.current.orders === 1 ? 'order' : 'orders'}, billed on {s.current.billed_on}.
-            </Typography>
-          )}
         </Box>
       )}
       <TableFrame

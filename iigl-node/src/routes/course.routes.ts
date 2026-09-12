@@ -300,6 +300,9 @@ courseRoutes.post(
         fee: String(money(b.fee, 'Fee')),
         ...gstChoice(b),
         description: text(b.description),
+        // The sheet this course's certificates print on. A path in
+        // uploads/certificate, uploaded separately like every other image here.
+        certificate_template: text(b.certificate_template),
         is_active: b.is_active === false ? 0 : 1,
         added_by: req.user.id,
         created_at: new Date(),
@@ -334,6 +337,9 @@ courseRoutes.patch(
       Object.assign(patch, gstChoice(b));
     }
     if (b.description !== undefined) patch.description = text(b.description);
+    if (b.certificate_template !== undefined) {
+      patch.certificate_template = text(b.certificate_template);
+    }
     if (b.is_active !== undefined) patch.is_active = b.is_active ? 1 : 0;
 
     if (Object.keys(patch).length === 0) throw badRequest('Nothing to update.');

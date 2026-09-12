@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
-import { notFound } from '../lib/errors.js';
+import { badRequest, notFound } from '../lib/errors.js';
 import { paged, readPage, readSearch } from '../lib/paginate.js';
 import { assertLabOwnership, requireLabScope, ROLE } from '../middleware/auth.js';
 import {
@@ -137,6 +137,53 @@ reportRoutes.post(
  * Amend an issued certificate. The report number is never reallocated — it is
  * printed on a document already in circulation.
  */
+/**
+ * Publish or withhold a set of certificates.
+ *
+ * A set rather than one at a time: withholding is something somebody decides
+ * about a batch — an order that was re-done, a customer's consignment — and
+ * doing it a row at a time is the same decision typed six times.
+ *
+ * Every id is checked for ownership before anything is written, so a set
+ * containing one report from another laboratory changes nothing at all rather
+ * than changing the rest and reporting a failure.
+ *
+ * Registered before /:id, which would otherwise match "visibility" as an id.
+ */
+reportRoutes.patch(
+  '/visibility',
+  wrap(async (req, res) => {
+    const b = req.body ?? {};
+    const ids = Array.isArray(b.report_ids) ? b.report_ids.map(Number) : [];
+    if (ids.length === 0) throw badRequest('Name at least one certificate in report_ids.');
+    if (ids.some((n: number) => !Number.isInteger(n) || n <= 0)) {
+      throw badRequest('report_ids must be certificate ids.');
+    }
+    if (typeof b.hidden !== 'boolean') throw badRequest('hidden must be true or false.');
+
+    const rows = await db
+      .selectFrom('reports')
+      .select(['id', 'lab_id'])
+      .where('id', 'in', ids)
+      .execute();
+
+    const found = new Map(rows.map((r) => [Number(r.id), Number(r.lab_id)]));
+    for (const id of ids) {
+      const labId = found.get(id);
+      if (labId === undefined) throw notFound(`Certificate ${id} not found.`);
+      assertLabOwnership(req.user, labId);
+    }
+
+    await db
+      .updateTable('reports')
+      .set({ hidden_on_site: b.hidden ? 1 : 0, updated_at: new Date() })
+      .where('id', 'in', ids)
+      .execute();
+
+    res.json({ data: { updated: ids.length, hidden: b.hidden } });
+  }),
+);
+
 reportRoutes.patch(
   '/:id',
   numericId,

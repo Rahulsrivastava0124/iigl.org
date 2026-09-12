@@ -487,6 +487,95 @@ export async function feeStatementPdf(enrolmentId: number, issuedBy: string): Pr
 }
 
 
+/* ---------------------------------------------------- course certificate */
+
+const COURSE_CERTIFICATE_TEMPLATE = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../templates/course-certificate.ejs',
+);
+
+export type CertificateOrientation = 'landscape' | 'portrait';
+
+/**
+ * One course certificate, printed on the artwork its course carries.
+ *
+ * The design belongs to the course rather than to the certificate: every
+ * student finishing the same course takes away the same sheet with a different
+ * name on it, so the file lives on `courses.certificate_template` and this lays
+ * five fields over it.
+ *
+ * **A course with no artwork does not print.** The alternative is inventing a
+ * layout, and a certificate is a document somebody keeps and shows to an
+ * employer — handing over something head office never approved is worse than a
+ * refusal naming what is missing.
+ *
+ * The artwork becomes a data URI rather than a URL. Puppeteer is given the HTML
+ * directly and has no origin to resolve a relative path against, and a file
+ * fetched over the network would make printing depend on object storage being
+ * reachable at that moment.
+ */
+export async function courseCertificateHtml(
+  certificateId: number,
+  orientation: CertificateOrientation = 'landscape',
+): Promise<string> {
+  const certificate = await db
+    .selectFrom('student_certificates as cert')
+    .leftJoin('students as s', 's.id', 'cert.student_id')
+    .leftJoin('student_courses as sc', 'sc.id', 'cert.student_course_id')
+    .leftJoin('courses as c', 'c.id', 'sc.course_id')
+    .select([
+      'cert.certificate_no',
+      'cert.issued_on',
+      'cert.grade',
+      's.name as student_name',
+      's.registration_no',
+      'c.name as course_name',
+      'c.certificate_template',
+    ])
+    .where('cert.id', '=', certificateId)
+    .executeTakeFirst();
+  if (!certificate) throw notFound('Certificate not found.');
+
+  const artwork = await asDataUri(certificate.certificate_template);
+  if (!artwork) {
+    throw notFound(
+      `No certificate design has been uploaded for ${certificate.course_name ?? 'this course'}. ` +
+        'Add one on the course, then print.',
+    );
+  }
+
+  return ejs.renderFile(
+    COURSE_CERTIFICATE_TEMPLATE,
+    {
+      certificate,
+      artwork,
+      orientation,
+      // Printed the way a certificate reads rather than the way a database
+      // sorts: 4 March 2026, not 2026-03-04.
+      issuedOn: certificate.issued_on
+        ? new Date(certificate.issued_on).toLocaleDateString('en-IN', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          })
+        : null,
+    },
+    { async: true },
+  );
+}
+
+export async function courseCertificatePdf(
+  certificateId: number,
+  orientation: CertificateOrientation = 'landscape',
+): Promise<Buffer> {
+  const html = await courseCertificateHtml(certificateId, orientation);
+  const { renderHtmlToPdf } = await import('./pdf.service.js');
+  // The size in the template's @page rule wins over this, which is what carries
+  // the orientation through; A4 here is the fallback if that rule is ever lost.
+  return renderHtmlToPdf(html, { format: 'A4' });
+}
+
+
 /* --------------------------------------------------------------- payslip */
 
 const PAYSLIP_TEMPLATE = path.resolve(

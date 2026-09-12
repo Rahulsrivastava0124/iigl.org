@@ -96,6 +96,10 @@ publicRoutes.get(
       .selectFrom('reports')
       .select('report_no')
       .where('id', '=', Number(req.params.id))
+      // Withheld here as well as on /verify, not only there: this route
+      // redirects into that one, but it would otherwise confirm the id exists
+      // by the shape of its own answer before ever getting that far.
+      .where('hidden_on_site', '=', 0)
       .executeTakeFirst();
 
     if (!row) {
@@ -133,6 +137,17 @@ publicRoutes.get(
         'created_at',
       ])
       .where('report_no', '=', String(req.params.reportNo))
+      /*
+        Withheld certificates are not published.
+
+        Filtered in the query rather than checked after it, so there is one
+        answer and no branch that could be made to differ: the 404 below is
+        reached by a hidden certificate and by a number nobody ever issued, with
+        the same status, the same body and the same wording. A refusal an
+        outsider could tell apart would itself disclose that the certificate
+        exists, which is the thing being withheld.
+      */
+      .where('hidden_on_site', '=', 0)
       .executeTakeFirst();
 
     if (!report) {

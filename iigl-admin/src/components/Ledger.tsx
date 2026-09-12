@@ -112,6 +112,7 @@ export function LedgerTable({
   title = 'Ledger',
   count,
   footer,
+  bare,
 }: {
   entries: LedgerEntry[];
   loading: boolean;
@@ -119,9 +120,18 @@ export function LedgerTable({
   title?: string;
   count?: string;
   footer?: React.ReactNode;
+  /**
+   * Render the table alone, without the panel around it.
+   *
+   * For a caller that has already opened a panel and is putting this in one of
+   * its tabs — the wallet does, beside the commission statements. Nesting a
+   * panel inside a panel draws two borders around one table and gives it two
+   * titles, one of which is the tab that was just clicked.
+   */
+  bare?: boolean;
 }) {
-  return (
-    <Panel title={title} count={count} footer={footer}>
+  const table = (
+    <>
       <TableFrame
         loading={loading}
         error={error}
@@ -220,6 +230,14 @@ export function LedgerTable({
           </TableBody>
         </Table>
       </TableFrame>
+    </>
+  );
+
+  if (bare) return table;
+
+  return (
+    <Panel title={title} count={count} footer={footer}>
+      {table}
     </Panel>
   );
 }

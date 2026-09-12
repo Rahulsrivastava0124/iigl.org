@@ -23,7 +23,8 @@ import RemoveIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
-import { messageOf } from '../lib/auth';
+import { messageOf, useAuth } from '../lib/auth';
+import { isTeam } from '../lib/portal';
 import { hint, Panel } from '../components/ui';
 import FileField from '../components/FileField';
 import YesNoField from '../components/YesNoField';
@@ -122,6 +123,23 @@ export default function NewOrder() {
   const staff = useFetch<Paged<StaffRow>>('/users/staff?per_page=100');
   const team = (staff.data?.data ?? []).filter((s) => s.is_active);
 
+  /*
+    A team member is writing this order for themselves.
+
+    Somebody at the counter is the one doing the work, so making them pick their
+    own name off a list of their colleagues is a step that is right every time
+    and therefore worth skipping. A laboratory or head office is not doing the
+    work, so it stays on Nobody yet for them.
+
+    Derived during render rather than assigned in an effect: the staff list
+    arrives a moment after the form does, and the option has to exist before the
+    select can hold its value or MUI warns about a value out of range. Reading
+    it this way, the default simply appears with the list.
+  */
+  const { user } = useAuth();
+  const ownId =
+    isTeam(user) && team.some((s) => Number(s.id) === user?.id) ? String(user?.id) : '';
+
   const [customer, setCustomer] = useState({
     customer_name: '',
     mobile: '',
@@ -131,7 +149,19 @@ export default function NewOrder() {
     address: '',
   });
   const [items, setItems] = useState<Item[]>([{ ...BLANK_ITEM }]);
-  const [assignedTo, setAssignedTo] = useState('');
+  /**
+   * Who the order is assigned to, or null while nobody has said.
+   *
+   * Null rather than '' because the two are different answers: null is "not
+   * chosen yet", which the default below fills in, and '' is somebody having
+   * chosen Nobody yet. Loading an existing order writes a real value either
+   * way, so an order deliberately left unassigned is not quietly reassigned by
+   * whoever opens it.
+   */
+  const [assignedTo, setAssignedTo] = useState<string | null>(null);
+
+  /** What the select actually shows: the choice, or the default until there is one. */
+  const assigned = assignedTo ?? ownId;
   /* Two hours out, as the counter picker always opened: a job taken now is
      rarely ready before then, and a blank date is one nobody fills in. */
   const [dues, setDues] = useState(() => dayjs().add(2, 'hour'));
@@ -214,7 +244,7 @@ export default function NewOrder() {
     try {
       const body = {
         ...customer,
-        assigned_to: assignedTo === '' ? null : Number(assignedTo),
+        assigned_to: assigned === '' ? null : Number(assigned),
         dues_date: dues.isValid() ? dues.format(DUES_FORMAT) : null,
         // The answer and what it is an answer to travel together: "no" sends no
         // name and no picture, so a card cannot carry one nobody asked for.
@@ -442,7 +472,7 @@ export default function NewOrder() {
               <TextField
                 select
                 label="Assign to"
-                value={assignedTo}
+                value={assigned}
                 onChange={(e) => setAssignedTo(e.target.value)}
                 disabled={staff.loading}
                 slotProps={{

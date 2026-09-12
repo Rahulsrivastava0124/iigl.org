@@ -14,7 +14,7 @@ import {
 } from '@mui/material';
 import PrintIcon from '@mui/icons-material/PrintOutlined';
 import { useFetch, useDebounced } from '../lib/useFetch';
-import { IconAction, Pager, Panel, RowActions, SearchField, TableFrame } from '../components/ui';
+import { IconAction, DEFAULT_PER_PAGE, Pager, Panel, RowActions, SearchField, TableFrame } from '../components/ui';
 import type { Paged, Report } from '../lib/api';
 import { apiUrl, fileUrl } from '../lib/config';
 import FilePreview from '../components/FilePreview';
@@ -28,6 +28,9 @@ function printCard(id: number, kind: 'smart' | 'classic') {
 
 export default function Reports() {
   const [page, setPage] = useState(1);
+  /** Rows per page. Component state, not a URL parameter: it is how somebody
+   * likes to read a list, not which list they are looking at. */
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
   const [selected, setSelected] = useState<number[]>([]);
   /** The stone being looked at full size, or none. */
   const [preview, setPreview] = useState<{ path: string; name: string } | null>(null);
@@ -36,7 +39,7 @@ export default function Reports() {
   const [search, setSearch] = useState('');
   const term = useDebounced(search);
 
-  const query = new URLSearchParams({ page: String(page), per_page: '25' });
+  const query = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (term.trim()) query.set('q', term.trim());
 
   const { data, loading, error } = useFetch<Paged<Report>>(`/reports?${query}`);
@@ -73,7 +76,19 @@ export default function Reports() {
   return (
     <>
       <Panel
-        footer={<Pager meta={data?.meta} onPage={setPage} />}
+        footer={
+          <Pager
+            meta={data?.meta}
+            onPage={setPage}
+            onPerPage={(n) => {
+              setPerPage(n);
+              setPage(1);
+              // A selection is page-local: 50 ticked rows on the page that is
+              // about to be replaced are 50 ids nobody can see to untick.
+              setSelected([]);
+            }}
+          />
+        }
         title="Certificates"
         count={data ? `${data.meta.total.toLocaleString()} issued` : 'Loading…'}
         actions={

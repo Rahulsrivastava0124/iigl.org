@@ -692,25 +692,91 @@ export function TableFrame({
   return <TableContainer>{children}</TableContainer>;
 }
 
-export function Pager({ meta, onPage }: { meta: PageMeta | undefined; onPage: (page: number) => void }) {
-  if (!meta || meta.total_pages <= 1) return null;
+/**
+ * How many rows a list asks for.
+ *
+ * 200 is the end of the list because it is the API's cap — readPage clamps
+ * per_page there — so offering more would be offering something that silently
+ * does not happen. 50 is the API's default, which is what every list here was
+ * already getting.
+ */
+const PER_PAGE_CHOICES = [10, 50, 100, 200] as const;
+
+/** The default every list starts at. The same number the API would have used. */
+export const DEFAULT_PER_PAGE = 50;
+
+export function Pager({
+  meta,
+  onPage,
+  onPerPage,
+}: {
+  meta: PageMeta | undefined;
+  onPage: (page: number) => void;
+  /**
+   * Change how many rows are fetched. Optional: a list whose length is fixed by
+   * what it is (a dialog showing one student's enrolments) has nothing to
+   * choose, and giving it a chooser would suggest otherwise.
+   *
+   * A caller that supplies this must also put the page back to 1. Page 4 of 10
+   * is nowhere at all once the rows per page becomes 200.
+   */
+  onPerPage?: (perPage: number) => void;
+}) {
+  // Nothing to show at all: one page, and no choice to make about it.
+  if (!meta || (meta.total_pages <= 1 && !onPerPage)) return null;
+
   return (
     // Sits in the Panel's footer row, which supplies the padding and the rule.
     // The total is the count's job on the other side of that row, not repeated
     // here.
     <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', flexShrink: 0 }}>
-      <Typography variant="body2" color="text.secondary" className="tabular">
-        Page {meta.page} of {meta.total_pages}
-      </Typography>
-      <Button disabled={meta.page <= 1} onClick={() => onPage(meta.page - 1)}>
-        Previous
-      </Button>
-      <Button
-        disabled={meta.page >= meta.total_pages}
-        onClick={() => onPage(meta.page + 1)}
-      >
-        Next
-      </Button>
+      {onPerPage && (
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          <Typography variant="body2" color="text.secondary">
+            Rows
+          </Typography>
+          {/*
+            A select rather than a row of buttons: four numbers side by side
+            read as pagination, which is the control immediately to their
+            right, and the two would be mistaken for one another at a glance.
+          */}
+          <TextField
+            select
+            size="small"
+            value={String(meta.per_page)}
+            onChange={(e) => onPerPage(Number(e.target.value))}
+            slotProps={{ htmlInput: { 'aria-label': 'Rows per page' } }}
+            sx={{ width: 88, '& .MuiInputBase-input': { py: 0.75 } }}
+          >
+            {/*
+              Whatever the list is actually on, even when it is not one of the
+              four. A caller may fix its own size, and a select showing a value
+              it does not hold is a control lying about the screen it is on.
+            */}
+            {[...new Set([...PER_PAGE_CHOICES, meta.per_page])]
+              .sort((a, b) => a - b)
+              .map((n) => (
+                <MenuItem key={n} value={String(n)}>
+                  {n}
+                </MenuItem>
+              ))}
+          </TextField>
+        </Stack>
+      )}
+
+      {meta.total_pages > 1 && (
+        <>
+          <Typography variant="body2" color="text.secondary" className="tabular">
+            Page {meta.page} of {meta.total_pages}
+          </Typography>
+          <Button disabled={meta.page <= 1} onClick={() => onPage(meta.page - 1)}>
+            Previous
+          </Button>
+          <Button disabled={meta.page >= meta.total_pages} onClick={() => onPage(meta.page + 1)}>
+            Next
+          </Button>
+        </>
+      )}
     </Stack>
   );
 }

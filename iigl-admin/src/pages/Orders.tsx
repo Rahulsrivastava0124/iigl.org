@@ -24,7 +24,7 @@ import {
   IconAction,
   money,
   OrderChip,
-  Pager,
+  DEFAULT_PER_PAGE, Pager,
   Panel,
   RowActions,
   SearchField,
@@ -47,6 +47,9 @@ export default function Orders() {
   const dues = params.get('dues') === '1';
 
   const [page, setPage] = useState(1);
+  /** Rows per page. Component state, not a URL parameter: it is how somebody
+   * likes to read a list, not which list they are looking at. */
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
 
   // Searched on the server, not in the browser: the list is one page of 25 out
   // of 9,600 orders, so filtering what has already arrived would search the
@@ -58,7 +61,7 @@ export default function Orders() {
   const [search, setSearch] = useState('');
   const term = useDebounced(search);
 
-  const query = new URLSearchParams({ page: String(page), per_page: '25' });
+  const query = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (status) query.set('status', status);
   if (dues) query.set('dues', '1');
   if (term.trim()) query.set('q', term.trim());
@@ -100,7 +103,10 @@ export default function Orders() {
   return (
     <>
       <Panel
-        footer={<Pager meta={data?.meta} onPage={setPage} />}
+        footer={<Pager meta={data?.meta} onPage={setPage} onPerPage={(n) => {
+            setPerPage(n);
+            setPage(1);
+          }} />}
         title={dues ? 'Dues orders' : 'Orders'}
         count={
           data
@@ -212,9 +218,18 @@ export default function Orders() {
                     Owed money reads red, as it does on the order's own page;
                     an order square with the house is not coloured at all,
                     because nothing is outstanding to notice.
+
+                    Both columns are null until the order has been settled once,
+                    and money() draws a null as an em dash — so every order
+                    still in preparation showed two empty cells, which reads as
+                    a figure that failed to load rather than one that does not
+                    exist yet. Read as zero instead: nothing has been taken and
+                    nothing is recorded as owed, which is exactly what an
+                    unsettled order means. The zero stays uncoloured, so it is
+                    still only real outstanding money that is red.
                   */}
                   <TableCell align="right" className="tabular">
-                    {money(o.paid_amount)}
+                    {money(o.paid_amount ?? 0)}
                   </TableCell>
                   <TableCell align="right" className="tabular">
                     <Box
@@ -224,7 +239,7 @@ export default function Orders() {
                         fontWeight: owing ? 600 : 400,
                       }}
                     >
-                      {money(o.dues_amount)}
+                      {money(o.dues_amount ?? 0)}
                     </Box>
                   </TableCell>
                   <TableCell sx={{ whiteSpace: 'normal', minWidth: 100 }}>

@@ -293,9 +293,11 @@ const ADMIN_GROUPS: Group[] = [
  * Departures from the old employee sidebar, for the same reasons the
  * administrator menu departs from its reference:
  *
- *   - **the list comes first.** "Collect New" sits under the order lists rather
- *     than above them, because a person opening Orders is usually looking for
- *     one, and the Add button is on the list itself;
+ *   - **Collect New is not in this menu.** It is the yellow button in the bar,
+ *     which is on every screen rather than three clicks inside one group — a
+ *     person opening Orders is usually looking for an order, not starting one,
+ *     and the same grant governs both so there was never a case where the menu
+ *     said one thing and the bar another;
  *   - **Message is not here.** Both its entries, Send Message and Message
  *     History, are `href="#"` in the old application — the feature was never
  *     built, and listing it would promise a screen that has never existed;
@@ -316,7 +318,6 @@ const FIELD_GROUPS: Group[] = [
       { to: '/orders?status=preparing', label: 'In Progress' },
       { to: '/orders?status=delivered', label: 'Delivered' },
       { to: '/orders?dues=1', label: 'Dues Order' },
-      { to: '/orders/new', label: 'Collect New', needs: 'order-create' },
     ],
   },
   {
@@ -916,27 +917,43 @@ export default function Shell() {
               counter, which is where the work starts. It used to open the
               certificate form instead, which is the step after.
 
-              Shown only to somebody who may actually collect one: the same
-              `product_collection` create grant that decides whether Orders ›
-              Collect New is in the menu, so the two cannot disagree.
+              Shown only to somebody who may actually collect one, on the
+              `product_collection` create grant.
 
               It sits immediately left of the bell for every role, so the one
               thing anybody starts from is in the same place whoever is signed
               in — staff have the clock in the middle, not instead of this.
+
+              This is now the only way in: the Orders group used to carry a
+              Collect New beside its three lists, and one action in two places
+              is two things to keep in step for no gain.
             */}
             {canCollect && (
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
                 onClick={() => navigate('/orders/new')}
-                // Navy on navy is not a button. It inverts here, the same way
-                // the active menu row does.
+                /*
+                  The yellow, not the white it was.
+
+                  Navy on navy is not a button, so this bar's controls have to
+                  invert — but white is also what the avatar, the bell and every
+                  icon up here already are, and the one thing somebody comes to
+                  this panel to *start* was indistinguishable from the furniture
+                  around it. The yellow is the brightest colour the palette has
+                  and nothing else in the bar uses it.
+
+                  Navy text, not white: yellow this bright carries nothing
+                  legible in white. Same pairing as Follow on the enquiry lists,
+                  which is the only other filled yellow control here.
+                */
                 sx={{
                   whiteSpace: 'nowrap',
                   px: 2,
-                  bgcolor: '#fff',
+                  bgcolor: BRAND.yellow,
                   color: BRAND.navy,
-                  '&:hover': { bgcolor: alpha('#fff', 0.88) },
+                  fontWeight: 600,
+                  '&:hover': { bgcolor: BRAND.yellowDark },
                 }}
               >
                 Collect New

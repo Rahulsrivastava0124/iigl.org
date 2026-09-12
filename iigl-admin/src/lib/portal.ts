@@ -145,6 +145,17 @@ export const isSuper = (user?: { roleId: number | null } | null) => user?.roleId
  */
 export const isAdmin = (user?: { roleId: number | null } | null) => user?.roleId === ROLE.ADMIN;
 export const isLab = isAdmin;
+
+/**
+ * Somebody's staff: role 3, and the older 4 and 5 that mean the same thing.
+ *
+ * A comparison rather than an equality, which is why it is worth a name — the
+ * two legacy roles are team members with different job titles, and every call
+ * site that forgets them quietly excludes half the staff. A null role is not a
+ * team member: that person holds only the grants in user_permissions.
+ */
+export const isTeam = (user?: { roleId: number | null } | null) =>
+  (user?.roleId ?? -1) >= ROLE.TEAM;
 /** What the sidebar and the breadcrumb root call each door. */
 export const PORTAL_LABEL: Record<Portal, string> = {
   super: 'Super Admin',

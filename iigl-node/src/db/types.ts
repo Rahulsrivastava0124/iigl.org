@@ -175,6 +175,7 @@ export interface CouponRedemptions {
 
 export interface Courses {
   added_by: number | null;
+  certificate_template: string | null;
   code: string | null;
   created_at: Date | null;
   description: string | null;
@@ -443,6 +444,7 @@ export interface Reports {
   description: string;
   gross_weight: string;
   gross_wt_unit: number;
+  hidden_on_site: Generated<number>;
   id: Generated<number>;
   is_approx: Generated<number>;
   item_image: string;

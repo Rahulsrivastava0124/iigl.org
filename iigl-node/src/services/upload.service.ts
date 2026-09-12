@@ -34,6 +34,8 @@ export const BUCKETS = {
   icon: 'uploads/icon',
   website: 'uploads/website',
   documentation: 'uploads/documentation',
+  /** Course certificate artwork: one design per course, printed under a name. */
+  certificate: 'uploads/certificate',
   /** Payment proof. Laravel writes these to public/screenshots, not uploads/. */
   screenshot: 'screenshots',
 } as const;

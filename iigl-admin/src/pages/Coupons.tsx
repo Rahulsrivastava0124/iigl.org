@@ -22,7 +22,7 @@ import { useDebounced, useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
 import { useToast } from '../components/Toast';
-import { hint, money, DateField, Dialog, FormPanel, IconAction, Pager, Panel, RowActions, SearchField, StateChip, TableFrame } from '../components/ui';
+import { hint, money, DateField, Dialog, FormPanel, IconAction, DEFAULT_PER_PAGE, Pager, Panel, RowActions, SearchField, StateChip, TableFrame } from '../components/ui';
 import type { Paged } from '../lib/api';
 
 interface Coupon {
@@ -124,12 +124,15 @@ function couponState(c: Coupon): { tone: 'settled' | 'waiting' | 'refused' | 'pl
 export default function Coupons() {
   const toast = useToast();
   const [page, setPage] = useState(1);
+  /** Rows per page. Component state, not a URL parameter: it is how somebody
+   * likes to read a list, not which list they are looking at. */
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
   const [search, setSearch] = useState('');
   const term = useDebounced(search);
   const [courseId, setCourseId] = useState('');
   const [active, setActive] = useState('');
 
-  const query = new URLSearchParams({ page: String(page), per_page: '25' });
+  const query = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (term.trim()) query.set('q', term.trim());
   if (courseId) query.set('course_id', courseId);
   if (active) query.set('active', active);
@@ -340,7 +343,10 @@ export default function Coupons() {
         // Discount Coupons, which is the same sentence in the place people
         // look for it.
         count={data?.meta ? `${data.meta.total} coupons` : undefined}
-        footer={<Pager meta={data?.meta} onPage={setPage} />}
+        footer={<Pager meta={data?.meta} onPage={setPage} onPerPage={(n) => {
+            setPerPage(n);
+            setPage(1);
+          }} />}
         actions={
           <>
             <SearchField
@@ -496,8 +502,10 @@ export default function Coupons() {
 /** Where one coupon went: the bill it came off, and who spent it. */
 function RedemptionLog({ coupon, onClose }: { coupon: Coupon; onClose: () => void }) {
   const [page, setPage] = useState(1);
+  /** This dialog was fixed at 10; the footer now offers the usual choices. */
+  const [perPage, setPerPage] = useState(10);
   const { data, loading, error } = useFetch<Paged<Redemption>>(
-    `/coupons/${coupon.id}/redemptions?page=${page}&per_page=10`,
+    `/coupons/${coupon.id}/redemptions?page=${page}&per_page=${perPage}`,
   );
   const rows = data?.data ?? [];
 
@@ -542,7 +550,14 @@ function RedemptionLog({ coupon, onClose }: { coupon: Coupon; onClose: () => voi
       </TableFrame>
       <Box sx={{ mt: 1 }}>
         <Stack direction="row" sx={{ justifyContent: 'flex-end' }}>
-          <Pager meta={data?.meta} onPage={setPage} />
+          <Pager
+            meta={data?.meta}
+            onPage={setPage}
+            onPerPage={(n) => {
+              setPerPage(n);
+              setPage(1);
+            }}
+          />
         </Stack>
       </Box>
     </Dialog>

@@ -25,7 +25,7 @@ import { useFetch, useDebounced } from '../lib/useFetch';
 import { usePermissions } from '../lib/permissions';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import { hint, ConfirmDialog, DateField, IconAction, Pager, Panel, PasswordField, RowActions, SearchField, StateChip, TableFrame, todayState } from '../components/ui';
+import { hint, ConfirmDialog, DateField, IconAction, DEFAULT_PER_PAGE, Pager, Panel, PasswordField, RowActions, SearchField, StateChip, TableFrame, todayState } from '../components/ui';
 import FileField from '../components/FileField';
 import type { Paged } from '../lib/api';
 import { hoursBetween } from '../lib/attendance';
@@ -192,11 +192,14 @@ export default function Staff() {
   const mayAdd = employer && can('employee_management', 'create');
   const mayEdit = employer && can('employee_management', 'update');
   const [page, setPage] = useState(1);
+  /** Rows per page. Component state, not a URL parameter: it is how somebody
+   * likes to read a list, not which list they are looking at. */
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
 
   const [search, setSearch] = useState('');
   const term = useDebounced(search);
 
-  const query = new URLSearchParams({ page: String(page), per_page: '25' });
+  const query = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (term.trim()) query.set('q', term.trim());
 
   const { data, loading, error, reload } = useFetch<Paged<StaffRow>>(`/users/staff?${query}`);
@@ -762,7 +765,10 @@ export default function Staff() {
       )}
 
       <Panel
-        footer={<Pager meta={data?.meta} onPage={setPage} />}
+        footer={<Pager meta={data?.meta} onPage={setPage} onPerPage={(n) => {
+            setPerPage(n);
+            setPage(1);
+          }} />}
         title="Employee"
         count={
           data

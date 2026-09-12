@@ -24,7 +24,7 @@ import {
   Dialog,
   hint,
   OrderChip,
-  Pager,
+  DEFAULT_PER_PAGE, Pager,
   Panel,
   SearchField,
   StatusChip,
@@ -85,13 +85,16 @@ export default function Transactions() {
   const commissionOnly = type === 'commision';
 
   const [page, setPage] = useState(1);
+  /** Rows per page. Component state, not a URL parameter: it is how somebody
+   * likes to read a list, not which list they are looking at. */
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
   const [status, setStatus] = useState(params.get('status') ?? '');
   const [busyId, setBusyId] = useState<number | null>(null);
 
   const [search, setSearch] = useState('');
   const term = useDebounced(search);
 
-  const query = new URLSearchParams({ page: String(page), per_page: '25' });
+  const query = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (status !== '') query.set('status', status);
   if (type !== '') query.set('type', type);
   if (term.trim()) query.set('q', term.trim());
@@ -113,8 +116,11 @@ export default function Transactions() {
      over an empty table, with nothing on the screen saying where the 30 came
      from. */
   const [earnPage, setEarnPage] = useState(1);
+  const [earnPerPage, setEarnPerPage] = useState(DEFAULT_PER_PAGE);
   const earnings = useFetch<Paged<Earning>>(
-    commissionOnly ? `/transactions/commission/earnings?page=${earnPage}&per_page=25` : null,
+    commissionOnly
+      ? `/transactions/commission/earnings?page=${earnPage}&per_page=${earnPerPage}`
+      : null,
   );
   const earned = earnings.data?.data ?? [];
 
@@ -272,7 +278,16 @@ export default function Transactions() {
               ? `${earnings.data.meta.total.toLocaleString()} orders`
               : 'Loading…'
           }
-          footer={<Pager meta={earnings.data?.meta} onPage={setEarnPage} />}
+          footer={
+            <Pager
+              meta={earnings.data?.meta}
+              onPage={setEarnPage}
+              onPerPage={(n) => {
+                setEarnPerPage(n);
+                setEarnPage(1);
+              }}
+            />
+          }
           sx={{ mb: 2 }}
         >
           <TableFrame
@@ -329,7 +344,10 @@ export default function Transactions() {
       )}
 
       <Panel
-        footer={<Pager meta={data?.meta} onPage={setPage} />}
+        footer={<Pager meta={data?.meta} onPage={setPage} onPerPage={(n) => {
+            setPerPage(n);
+            setPage(1);
+          }} />}
         title={
           status === '0'
             ? 'Commission approval'

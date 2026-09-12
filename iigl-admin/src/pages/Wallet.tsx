@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Box, Button, Grid, MenuItem, Stack, TextField, Typography } from '@mui/material';
+import { Box, Button, Grid, MenuItem, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
 import ExpenseIcon from '@mui/icons-material/ReceiptOutlined';
 import SendIcon from '@mui/icons-material/SendOutlined';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
 import { isLab, isSuper } from '../lib/portal';
-import { Dialog, Notice, Pager, Panel, hint, money } from '../components/ui';
+import { Dialog, Notice, DEFAULT_PER_PAGE, Pager, Panel, hint, money } from '../components/ui';
 import { StatementsTable } from '../components/Statements';
 import { useToast } from '../components/Toast';
 import FileField from '../components/FileField';
@@ -31,10 +31,22 @@ import { LedgerTable, LedgerTotals, type LedgerPage } from '../components/Ledger
 export default function Wallet() {
   const { user } = useAuth();
   const [page, setPage] = useState(1);
+  /** Rows per page. Was a constant; the footer now offers it. */
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
+  /**
+   * Which half of the account is on screen.
+   *
+   * A laboratory has two: the movements themselves, and the commission it is
+   * billed for them. They were stacked, and the statements panel sat above the
+   * ledger with an empty table in it for the whole of the first period — a
+   * screen whose first answer is "nothing yet" to a question nobody asked.
+   * Only a laboratory sees the choice; everybody else has one account and no
+   * statements, so no tab strip either.
+   */
+  const [tab, setTab] = useState<'account' | 'statements'>('account');
 
-  const PER_PAGE = 50;
   const ledger = useFetch<{ data: LedgerPage }>(
-    `/transactions/ledger?page=${page}&per_page=${PER_PAGE}`,
+    `/transactions/ledger?page=${page}&per_page=${perPage}`,
   );
   const account = ledger.data?.data;
   const entries = account?.entries ?? [];
@@ -116,13 +128,6 @@ export default function Wallet() {
 
       <LedgerTotals account={account} />
 
-      {/* A laboratory's commission statements, each with its download. */}
-      {isLab(user) && (
-        <Panel title="Commission statements" sx={{ mb: 2 }}>
-          <StatementsTable />
-        </Panel>
-      )}
-
       {/*
         Pending money is money nobody has agreed to yet: it is on the statement,
         marked, but it has not moved the balance. Said once, here, rather than
@@ -135,24 +140,86 @@ export default function Wallet() {
         </Notice>
       )}
 
-      <LedgerTable
-        entries={entries}
-        loading={ledger.loading}
-        error={ledger.error}
-        title={isSuper(user) ? 'Head office account' : 'Your account'}
-        count={ledger.loading ? 'Loading…' : `${total.toLocaleString()} movements`}
-        footer={
-          <Pager
-            meta={{
-              page,
-              per_page: PER_PAGE,
-              total,
-              total_pages: Math.max(1, Math.ceil(total / PER_PAGE)),
-            }}
-            onPage={setPage}
-          />
-        }
-      />
+      {/*
+        The laboratory's two halves, behind tabs and with no panel heading over
+        them: a heading reading "Your account" above a tab named "Your account"
+        put the same words twice on top of each other. Panel drops its whole
+        header row when nothing is passed for it, so the strip lands flush at
+        the top edge and carries its own padding.
+      */}
+      {isLab(user) ? (
+        <Panel
+          count={
+            tab === 'account'
+              ? ledger.loading
+                ? 'Loading…'
+                : `${total.toLocaleString()} movements`
+              : undefined
+          }
+          /* The pager belongs to the ledger. The statements table carries its
+             own, and a footer holding both would page whichever was hidden. */
+          footer={
+            tab === 'account' ? (
+              <Pager
+                meta={{
+                  page,
+                  per_page: perPage,
+                  total,
+                  total_pages: Math.max(1, Math.ceil(total / perPage)),
+                }}
+                onPage={setPage}
+                onPerPage={(n) => {
+                  setPerPage(n);
+                  setPage(1);
+                }}
+              />
+            ) : undefined
+          }
+        >
+          <Tabs
+            value={tab}
+            onChange={(_, v) => setTab(v)}
+            sx={{ px: 2, mb: 1, borderBottom: 1, borderColor: 'divider' }}
+          >
+            <Tab value="account" label="Your account" />
+            <Tab value="statements" label="Commission statements" />
+          </Tabs>
+
+          {tab === 'account' ? (
+            <LedgerTable
+              entries={entries}
+              loading={ledger.loading}
+              error={ledger.error}
+              bare
+            />
+          ) : (
+            <StatementsTable />
+          )}
+        </Panel>
+      ) : (
+        <LedgerTable
+          entries={entries}
+          loading={ledger.loading}
+          error={ledger.error}
+          title={isSuper(user) ? 'Head office account' : 'Your account'}
+          count={ledger.loading ? 'Loading…' : `${total.toLocaleString()} movements`}
+          footer={
+            <Pager
+              meta={{
+                page,
+                per_page: perPage,
+                total,
+                total_pages: Math.max(1, Math.ceil(total / perPage)),
+              }}
+              onPage={setPage}
+              onPerPage={(n) => {
+                setPerPage(n);
+                setPage(1);
+              }}
+            />
+          }
+        />
+      )}
 
       <Box sx={{ mt: 2 }}>
         <Typography variant="caption" color="text.secondary">

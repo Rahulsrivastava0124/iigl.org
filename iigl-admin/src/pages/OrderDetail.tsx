@@ -604,13 +604,23 @@ export default function OrderDetail() {
               </>
             )}
           </Typography>
-          <Stack spacing={2}>
+          {/*
+            One row: how much, and in what form. They are two halves of a single
+            answer somebody gives at the counter in one breath, and stacked they
+            made a two-field dialog as tall as a form.
+
+            Wrapping on a narrow screen rather than squeezing — the amount is
+            typed, and a number field pinched to half a phone's width is worse
+            than a second line.
+          */}
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ alignItems: 'flex-start' }}>
             <TextField
               label="Amount collected"
               type="number"
               value={paid}
               placeholder={String(q.balance_due)}
               onChange={(e) => setPaid(e.target.value)}
+              sx={{ flex: 1 }}
               slotProps={{
                 htmlInput: { min: 0 },
                 ...hint('Leave blank to record the full amount.'),
@@ -621,6 +631,7 @@ export default function OrderDetail() {
               label="Payment mode"
               value={payMode}
               onChange={(e) => setPayMode(e.target.value)}
+              sx={{ flex: 1 }}
             >
               <MenuItem value="cash">Cash</MenuItem>
               <MenuItem value="upi">UPI</MenuItem>

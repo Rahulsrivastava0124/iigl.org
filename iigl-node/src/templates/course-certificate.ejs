@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title><%= certificate.certificate_no %></title>
+<style>
+  /*
+    The artwork is the page.
+
+    A course certificate is a sheet somebody has had designed and printed; this
+    template's whole job is to put five pieces of text on it without disturbing
+    it. So the image is the full bleed, at the page's exact size, and every
+    field is absolutely positioned over it as a percentage of that page — which
+    keeps the layout correct whatever resolution the uploaded file happens to
+    be.
+
+    preferCSSPageSize is on in the renderer, so this @page rule, not the
+    caller, decides the paper.
+  */
+  @page { size: A4 <%= orientation %>; margin: 0; }
+
+  html, body { margin: 0; padding: 0; }
+
+  .sheet {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    overflow: hidden;
+    /* The designed sheet is the record. Stretching it would misprint a border
+       somebody paid to have drawn, so it is contained and centred, and any
+       remainder is white rather than a crop. */
+    background: #fff url("<%= artwork %>") center / contain no-repeat;
+  }
+
+  .field {
+    position: absolute;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-family: "Times New Roman", Times, serif;
+    color: #1a1a1a;
+    /* Artwork often carries a rule or a ribbon exactly where a name sits. Line
+       height is pinned so a long name wraps predictably rather than drifting
+       down into it. */
+    line-height: 1.25;
+  }
+
+  .name    { top: 46%; font-size: 34pt; font-weight: 700; letter-spacing: 0.5pt; }
+  .course  { top: 59%; font-size: 19pt; }
+  .grade   { top: 67%; font-size: 13pt; letter-spacing: 0.4pt; }
+
+  /* The two pieces of provenance, down in the corners where a designed sheet
+     almost always leaves room. Small and unemphatic: they identify the
+     document, they are not the point of it. */
+  .footnote {
+    position: absolute;
+    bottom: 6%;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 9pt;
+    color: #444;
+  }
+  .no   { left: 8%; }
+  .date { right: 8%; }
+</style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="field name"><%= certificate.student_name || '' %></div>
+
+    <div class="field course"><%= certificate.course_name || '' %></div>
+
+    <% if (certificate.grade) { %>
+      <div class="field grade">Grade: <%= certificate.grade %></div>
+    <% } %>
+
+    <div class="footnote no"><%= certificate.certificate_no %></div>
+
+    <% if (issuedOn) { %>
+      <div class="footnote date"><%= issuedOn %></div>
+    <% } %>
+  </div>
+</body>
+</html>

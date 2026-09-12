@@ -5,6 +5,11 @@ import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { paged, readPage } from '../lib/paginate.js';
 import { requireAdmin } from '../middleware/auth.js';
 import { numericId } from '../middleware/params.js';
+import {
+  courseCertificateHtml,
+  courseCertificatePdf,
+  type CertificateOrientation,
+} from '../services/document.service.js';
 
 /**
  * Course certificates — the last stage of the student pipeline.
@@ -189,6 +194,42 @@ studentCertificateRoutes.post(
 
     const row = await certificateQuery().where('cert.id', '=', certificate).executeTakeFirstOrThrow();
     res.status(201).json({ data: row });
+  }),
+);
+
+/**
+ * The certificate as a sheet to hand over.
+ *
+ * Printed on the artwork the **course** carries, not on a layout defined here:
+ * see courses.certificate_template. A course with nothing uploaded returns 404
+ * naming the course, because the fix is an upload rather than a retry.
+ *
+ * Landscape unless asked otherwise. Most certificate stock is landscape, and
+ * guessing from the image would mean decoding it just to choose a page size;
+ * `?orientation=portrait` is the escape hatch for a design that is not.
+ *
+ * Registered before /:id so that PATCH and DELETE keep reading as the pair they
+ * are, and `?format=html` returns the markup the PDF is rendered from — the
+ * same convention as the fee statement and the order documents.
+ */
+studentCertificateRoutes.get(
+  '/:id/print',
+  numericId,
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    const orientation: CertificateOrientation =
+      req.query.orientation === 'portrait' ? 'portrait' : 'landscape';
+
+    if (req.query.format === 'html') {
+      res.type('html').send(await courseCertificateHtml(id, orientation));
+      return;
+    }
+
+    const pdf = await courseCertificatePdf(id, orientation);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="certificate-${id}.pdf"`);
+    res.setHeader('Content-Length', String(pdf.length));
+    res.end(pdf);
   }),
 );
 
