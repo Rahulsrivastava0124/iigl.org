@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Badge,
@@ -13,11 +13,22 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import type { SvgIconComponent } from '@mui/icons-material';
 import BellIcon from '@mui/icons-material/NotificationsNoneOutlined';
 import MoneyIcon from '@mui/icons-material/PaymentsOutlined';
-import MessageIcon from '@mui/icons-material/ForumOutlined';
-import { useFetch } from '../lib/useFetch';
-import { money, toneColour } from './ui';
+import MessageIcon from '@mui/icons-material/ChatBubbleOutlineOutlined';
+import LeaveIcon from '@mui/icons-material/EventBusyOutlined';
+import PunchIcon from '@mui/icons-material/MoreTimeOutlined';
+import RequestIcon from '@mui/icons-material/AssignmentOutlined';
+import ReplyIcon from '@mui/icons-material/ReplyOutlined';
+import NoticeIcon from '@mui/icons-material/CampaignOutlined';
+import CommissionIcon from '@mui/icons-material/PercentOutlined';
+import TransferIcon from '@mui/icons-material/SwapHorizOutlined';
+import ExpenseIcon from '@mui/icons-material/ReceiptLongOutlined';
+import { api } from '../lib/api';
+import { useFetch, useLiveRefresh } from '../lib/useFetch';
+import { TONE } from '../lib/theme';
+import { money, toneColour, type Tone } from './ui';
 import type { Paged, Transaction } from '../lib/api';
 import type { StaffMessage } from './StaffInbox';
 import { useAuth } from '../lib/auth';
@@ -53,6 +64,52 @@ const when = (at: string | null) => {
   });
 };
 
+/**
+ * What a notification is, at a glance: its own icon, in its own colour.
+ *
+ * The colours are the panel's tones, so a leave request is the amber a pending
+ * state is everywhere else and an expense the red of money going out.
+ */
+function messageLook(m: StaffMessage): { icon: SvgIconComponent; tone: Tone } {
+  if (m.kind === 'request') {
+    if (m.topic === 'leave') return { icon: LeaveIcon, tone: 'waiting' };
+    if (m.topic === 'punch') return { icon: PunchIcon, tone: 'followup' };
+    return { icon: RequestIcon, tone: 'lead' };
+  }
+  if (m.reply_to) return { icon: ReplyIcon, tone: 'settled' };
+  if (m.from_role_id === ROLE.SUPER) return { icon: NoticeIcon, tone: 'holiday' };
+  return { icon: MessageIcon, tone: 'plain' };
+}
+
+function transactionLook(t: Transaction): { icon: SvgIconComponent; tone: Tone } {
+  if (t.transaction_type === 'commision') return { icon: CommissionIcon, tone: 'settled' };
+  if (t.transaction_type === 'expense') return { icon: ExpenseIcon, tone: 'refused' };
+  if (t.transaction_type === 'wallet_transfer') return { icon: TransferIcon, tone: 'followup' };
+  return { icon: MoneyIcon, tone: 'plain' };
+}
+
+/** The icon on a tinted disc. Light tones take their dark ink, not their fill. */
+function Glyph({ icon: Icon, tone }: { icon: SvgIconComponent; tone: Tone }) {
+  const t = TONE[tone];
+  const ink = tone === 'lead' || tone === 'followup' || tone === 'holiday' ? t.on : t.main;
+  return (
+    <Box
+      sx={{
+        width: 32,
+        height: 32,
+        borderRadius: '50%',
+        flexShrink: 0,
+        display: 'grid',
+        placeItems: 'center',
+        bgcolor: t.soft,
+        color: ink,
+      }}
+    >
+      <Icon sx={{ fontSize: 18 }} />
+    </Box>
+  );
+}
+
 export default function NotificationBell() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -80,9 +137,37 @@ export default function NotificationBell() {
     setAnchor(null);
   }, [location.pathname]);
 
+  /*
+    And while nobody moves. The bell used to refresh only on a change of page,
+    so somebody sitting on one screen never saw the request that had just come
+    in. Every 30 seconds while the tab is open, on coming back to it, and after
+    any approval or reply made here.
+  */
+  const refresh = useCallback(() => {
+    pending.reload();
+    notes.reload();
+  }, [pending.reload, notes.reload]);
+  useLiveRefresh(refresh);
+
   const go = (to: string) => {
     setAnchor(null);
     navigate(to);
+  };
+
+  /*
+    Opening a message is reading it: it is marked read and leaves the bell.
+    A request stays — being looked at is not being answered, and it waits for
+    Approve or Decline on the page it opens.
+  */
+  const open = (m: StaffMessage) => {
+    go(destination(m));
+    if (m.kind === 'message') {
+      api
+        .patch(`/messages/${m.id}/resolve`, { resolved: true })
+        .catch(() => {
+          /* Still unread; it simply stays in the bell. */
+        });
+    }
   };
 
   /*
@@ -104,8 +189,12 @@ export default function NotificationBell() {
   const { user } = useAuth();
   const employs = isSuper(user) || isLab(user);
   const destination = (m: StaffMessage) =>
-    employs && m.from_role_id !== ROLE.SUPER && m.from_role_id !== ROLE.ADMIN
-      ? `/staff/${m.from_user}`
+    // An employer's messages are on its Messages page, in the tab for whoever
+    // wrote: head office or a laboratory in the first, staff in Employees.
+    employs
+      ? m.from_role_id === ROLE.SUPER || m.from_role_id === ROLE.ADMIN
+        ? '/messages'
+        : '/messages?tab=staff'
       : '/attendance';
 
   return (
@@ -114,7 +203,7 @@ export default function NotificationBell() {
         title={
           waiting === 0
             ? 'Nothing is waiting on you'
-            : `${waiting} transaction${waiting === 1 ? '' : 's'} awaiting your decision`
+            : `${waiting} waiting on you`
         }
       >
         <IconButton
@@ -145,13 +234,10 @@ export default function NotificationBell() {
             {messages.map((m) => (
               <ListItemButton
                 key={`m${m.id}`}
-                onClick={() => go(destination(m))}
+                onClick={() => open(m)}
                 sx={{ alignItems: 'flex-start', gap: 1.25, py: 1.25 }}
               >
-                <MessageIcon
-                  fontSize="small"
-                  sx={{ mt: 0.25, color: m.kind === 'request' ? 'warning.main' : 'primary.main' }}
-                />
+                <Glyph {...messageLook(m)} />
                 <Box sx={{ minWidth: 0, flex: 1 }}>
                   <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
                     <Typography sx={{ fontSize: 13.5, fontWeight: 600 }} noWrap>
@@ -188,7 +274,7 @@ export default function NotificationBell() {
                 onClick={() => go('/transactions?status=0')}
                 sx={{ alignItems: 'flex-start', gap: 1.25, py: 1.25 }}
               >
-                <MoneyIcon fontSize="small" sx={{ mt: 0.25, color: 'primary.main' }} />
+                <Glyph {...transactionLook(t)} />
                 <Box sx={{ minWidth: 0, flex: 1 }}>
                   <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
                     <Typography sx={{ fontSize: 13.5, fontWeight: 600 }} noWrap>

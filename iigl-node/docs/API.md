@@ -470,7 +470,7 @@ Commission billed to a laboratory on a period, its grace days, and the lock on c
 | Method | Path | Auth | Query | Body | Fails | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/messages` | session | `from`, `box`, `open`, `page`, `per_page` | — | 401, 403 | Inbox, or one person’s messages |
-| POST | `/api/messages` | session | — | **body**, kind, topic, about_date, to | 400, 401, 403 | Write a message, to one person or several |
+| POST | `/api/messages` | session | — | **body**, kind, topic, about_date, to, reply_to | 400, 401, 403, 404 | Write a message, to one person or several |
 | PATCH | `/api/messages/{id}/resolve` | session | — | resolved, decision, reply | 401, 403, 404 | Answer one: approve, decline, or simply close it |
 | GET | `/api/messages/employer` | session | — | — | 401, 403 | Who this account writes to |
 | GET | `/api/messages/recipients` | session | — | — | 401, 403 | Everybody this account may write to |
@@ -480,7 +480,7 @@ Commission billed to a laboratory on a period, its grace days, and the lock on c
 | Method | Path | Auth | Query | Body | Fails | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/settings` | session | — | — | 401, 403 | Every setting |
-| PATCH | `/api/settings` | session | — | company.name, certificate.prefix, session.hours, mail.smtp_url | 400, 401, 403 | Save settings |
+| PATCH | `/api/settings` | session | — | company.name, session.hours, mail.smtp_url | 400, 401, 403 | Save settings |
 | POST | `/api/settings/test-smtp` | session | — | url | 400, 401, 403 | Test the mail connection |
 
 ---

@@ -45,6 +45,7 @@ import ContentIcon from '@mui/icons-material/ArticleOutlined';
 import StudentIcon from '@mui/icons-material/SchoolOutlined';
 import EnquiryIcon from '@mui/icons-material/SupportAgentOutlined';
 import AttendanceIcon from '@mui/icons-material/CalendarMonthOutlined';
+import MessagesIcon from '@mui/icons-material/ForumOutlined';
 import SettingsIcon from '@mui/icons-material/SettingsOutlined';
 import LogoutIcon from '@mui/icons-material/LogoutOutlined';
 import { alpha } from '@mui/material/styles';
@@ -180,6 +181,13 @@ const ADMIN_GROUPS: Group[] = [
     ],
   },
   {
+    // Head office's conversations with its laboratories and with staff, on a
+    // page of their own rather than beside an attendance calendar.
+    label: 'Messages',
+    icon: MessagesIcon,
+    items: [{ to: '/messages', label: 'Messages', end: true }],
+  },
+  {
     label: 'Account',
     icon: TransactionsIcon,
     items: [
@@ -275,7 +283,6 @@ const ADMIN_GROUPS: Group[] = [
     adminOnly: true,
     items: [
       { to: '/settings', label: 'Company', end: true },
-      { to: '/settings?tab=certificate', label: 'Certificate' },
       { to: '/settings?tab=holidays', label: 'Holidays' },
       { to: '/settings?tab=session', label: 'Session & Mail' },
     ],
@@ -372,6 +379,14 @@ const FIELD_GROUPS: Group[] = [
     items: [
       { to: '/attendance', label: 'Attendance', end: true, staffOnly: true },
     ],
+  },
+  {
+    // The laboratory's messages — its staff's requests and head office's
+    // notices — on their own page rather than beside a calendar it never punches.
+    label: 'Messages',
+    icon: MessagesIcon,
+    labOnly: true,
+    items: [{ to: '/messages', label: 'Messages', end: true }],
   },
   {
     label: 'Employee',

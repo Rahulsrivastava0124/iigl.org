@@ -287,7 +287,7 @@ export default function Attendance() {
           half, or a month of two-digit dates wraps inside cells too narrow to
           hold the times they carry.
         */}
-        <Grid size={{ xs: 12, lg: 7 }}>
+        <Grid size={{ xs: 12, lg: canReadOthers ? 12 : 7 }}>
       <MonthCalendar
         value={month}
         onChange={setMonth}
@@ -366,21 +366,25 @@ export default function Attendance() {
       />
         </Grid>
 
-        <Grid size={{ xs: 12, lg: 5 }}>
-          {/* Their own: what they asked for, and whether it has been dealt
-              with. Marking one done is their employer's, so it is shown as a
-              state rather than offered as a control. */}
-          <StaffInbox
-            from={user?.id ?? 0}
-            conversation
-            own
-            title="Messages"
-            onCompose={() => setWriting(true)}
-            /* The calendar marks the days these are about, from the same rows
-               rather than a second read of the same list. */
-            onRows={setMessages}
-          />
-        </Grid>
+        {/* Head office and a laboratory read their messages on the Messages
+            page, not here. */}
+        {!canReadOthers && (
+          <Grid size={{ xs: 12, lg: 5 }}>
+            {/* Their own: what they asked for, and whether it has been dealt
+                with. Marking one done is their employer's, so it is shown as a
+                state rather than offered as a control. */}
+            <StaffInbox
+              from={user?.id ?? 0}
+              conversation
+              own
+              title="Messages"
+              onCompose={() => setWriting(true)}
+              /* The calendar marks the days these are about, from the same rows
+                 rather than a second read of the same list. */
+              onRows={setMessages}
+            />
+          </Grid>
+        )}
       </Grid>
     </>
   );

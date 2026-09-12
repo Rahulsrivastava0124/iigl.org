@@ -25,6 +25,7 @@ import Pricing from './pages/Pricing';
 import Roles from './pages/Roles';
 import RoleEdit from './pages/RoleEdit';
 import Attendance from './pages/Attendance';
+import Messages from './pages/Messages';
 import EmployeeView from './pages/EmployeeView';
 import Salary from './pages/Salary';
 import Coupons from './pages/Coupons';
@@ -143,6 +144,7 @@ function Routed() {
             a laboratory here. The endpoint behind it scopes to whoever asks. */}
         <Route path="/wallet" element={<Wallet />} />
         <Route path="/attendance" element={<Attendance />} />
+        <Route path="/messages" element={<Messages />} />
         <Route path="/customers" element={<Customers />} />
         {/* One customer's orders and what they came to. Keyed by mobile, which
             is what a customer is here. */}

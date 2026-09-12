@@ -326,9 +326,18 @@ export default function LaboratoryView() {
                       only thing that says so is the word above it.
                     */}
                     <TableCell padding="checkbox" sx={{ whiteSpace: 'nowrap' }}>
-                      <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                         <Checkbox
                           size="small"
+                          // No padding, like the row boxes under it, so the two
+                          // line up; white, because the default grey does not
+                          // show on the navy header.
+                          sx={{
+                            p: 0,
+                            color: 'common.white',
+                            '&.Mui-checked, &.MuiCheckbox-indeterminate': { color: 'common.white' },
+                            '&.Mui-disabled': { color: 'rgba(255, 255, 255, 0.45)' },
+                          }}
                           checked={allHidden}
                           indeterminate={!allHidden && reports.some((r) => !!r.hidden_on_site)}
                           disabled={saving || reports.length === 0}
@@ -386,6 +395,7 @@ export default function LaboratoryView() {
                       <TableCell padding="checkbox">
                         <Checkbox
                           size="small"
+                          sx={{ p: 0 }}
                           checked={!!r.hidden_on_site}
                           disabled={saving}
                           onChange={() => setHidden([r.id], !r.hidden_on_site)}

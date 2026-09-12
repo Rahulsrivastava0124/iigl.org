@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Button, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/FileDownloadOutlined';
-import { useFetch } from '../lib/useFetch';
+import { useFetch, useLiveRefresh } from '../lib/useFetch';
 import { apiUrl } from '../lib/config';
 import { useAuth } from '../lib/auth';
 import { isLab, isSuper } from '../lib/portal';
@@ -162,6 +162,9 @@ export function StatementReminder() {
   const source = useFetch<{ data: Partial<LabStatements> & { standing: LabStatements['standing'] } }>(
     user && !isSuper(user) ? '/statements' : null,
   );
+  // Standing changes rarely — a statement billed, a payment approved — so every
+  // five minutes, plus on returning to the tab and after a payment is sent.
+  useLiveRefresh(source.reload, 5 * 60_000);
   const s = source.data?.data;
   const r = s?.reminder ?? null;
 

@@ -230,9 +230,30 @@ messageRoutes.post(
         ? [Number(req.body.to)]
         : [];
 
+    /*
+      A reply goes back to whoever wrote the message it answers — whoever that
+      is. Answering somebody who wrote to you needs no other permission: head
+      office writing to a laboratory is exactly how a laboratory comes to write
+      back to head office, which it has no other way to reach.
+    */
+    const rawReply = req.body?.reply_to;
+    const replyTo = rawReply === undefined || rawReply === null || rawReply === '' ? null : Number(rawReply);
+
     let recipients: number[];
 
-    if (asked.length > 0) {
+    if (replyTo !== null) {
+      if (!Number.isInteger(replyTo) || replyTo <= 0) throw badRequest('That is not a message.');
+      const original = await db
+        .selectFrom('staff_messages')
+        .select(['id', 'from_user', 'to_user'])
+        .where('id', '=', replyTo)
+        .executeTakeFirst();
+      if (!original) throw notFound('That message is no longer there.');
+      if (Number(original.to_user) !== req.user.id) {
+        throw forbidden('You can only reply to a message written to you.');
+      }
+      recipients = [Number(original.from_user)];
+    } else if (asked.length > 0) {
       if (asked.some((id) => !Number.isInteger(id) || id <= 0)) {
         throw badRequest('That is not a person.');
       }
@@ -261,6 +282,8 @@ messageRoutes.post(
       topic,
       body,
       about_date: about ? new Date(`${about}T00:00:00`) : null,
+      // Folds the answer under the message it answers, in both inboxes.
+      reply_to: replyTo,
       created_at: now,
       updated_at: now,
     }));
@@ -289,6 +312,7 @@ messageRoutes.get(
     let q = db
       .selectFrom('staff_messages')
       .leftJoin('users as author', 'author.id', 'staff_messages.from_user')
+      .leftJoin('users as recipient', 'recipient.id', 'staff_messages.to_user')
       .select([
         'staff_messages.id as id',
         'staff_messages.kind as kind',
@@ -310,6 +334,9 @@ messageRoutes.get(
         // to a laboratory, has no such page, and opening one showed an empty
         // record reading "That account is not one of your employees".
         'author.role_id as from_role_id',
+        // And whom they were written to, by role — so a laboratory's page can
+        // keep its conversation with head office apart from its staff's.
+        'recipient.role_id as to_role_id',
       ]);
 
     if (req.query.from) {

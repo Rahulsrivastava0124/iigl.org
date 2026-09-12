@@ -6,7 +6,7 @@ import { messageOf } from '../lib/auth';
 import { useToast } from './Toast';
 import FileField from './FileField';
 import DocumentAssets, { type LabDocument } from './DocumentAssets';
-import { FRAME_CELL, WIDE_FRAME_CELL, hint, hintNode } from './ui';
+import { FRAME_CELL, WIDE_FRAME_CELL, hint, hintNode, DateField } from './ui';
 
 /**
  * The laboratory's own details, as the printed Franchisee Form asks for them.
@@ -901,15 +901,14 @@ export default function LaboratoryFields({ form, set, extra }: Props) {
         />
       </Grid>
       <Grid size={cell}>
-        <TextField
+        {/* The panel's own calendar, opened on the months — not the browser's
+            month input, which draws a picker unlike every other date here. */}
+        <DateField
+          month
           label="Billing Starts"
-          type="month"
           value={form.statement_from}
-          onChange={(e) => set('statement_from', e.target.value)}
-          slotProps={{
-            inputLabel: { shrink: true },
-            ...hint('The first month billed. Blank is September 2026, or the month the laboratory was added if that is later.'),
-          }}
+          onChange={(value) => set('statement_from', value)}
+          helperText="The first month billed. Blank is September 2026, or the month the laboratory was added if that is later."
         />
       </Grid>
 

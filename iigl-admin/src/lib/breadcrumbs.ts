@@ -29,6 +29,7 @@ const SECTIONS: Record<string, string> = {
   transactions: 'Account',
   wallet: 'Account',
   attendance: 'Attendance',
+  messages: 'Messages',
   laboratories: 'Laboratory',
   staff: 'Employee Management',
   profile: 'Your profile',
@@ -57,8 +58,8 @@ const SECTIONS: Record<string, string> = {
 const VIEWS: Record<string, Record<string, string>> = {
   courses: { 'tab=enrolments': 'Enrolments' },
   'student-enquiries': { 'tab=laboratory': 'Laboratory' },
+  messages: { 'tab=staff': 'Employees' },
   settings: {
-    'tab=certificate': 'Certificate',
     'tab=session': 'Session & Mail',
   },
   enquiries: {

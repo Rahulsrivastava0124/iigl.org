@@ -41,7 +41,7 @@ const number = (label: string, min: number, max: number) => (value: string) => {
 };
 
 /**
- * Every setting, in the four groups the screen tabs by. The part of the key
+ * Every setting, in the groups the screen tabs by. The part of the key
  * before the dot is the group, so the screen needs no second list.
  */
 export const SETTINGS: SettingSpec[] = [
@@ -72,26 +72,6 @@ export const SETTINGS: SettingSpec[] = [
     kind: 'url',
     fallback: () => env.publicSiteUrl,
     help: 'Also the origin printed QR codes resolve against.',
-  },
-
-  // --------------------------------------------------------- certificate
-  {
-    key: 'certificate.prefix',
-    label: 'Certificate prefix',
-    kind: 'text',
-    fallback: () => '',
-    help:
-      'Put in front of every new certificate number. The number itself is composed ' +
-      'as laboratory, day, counter, year, month — that part is ported behaviour and ' +
-      'is not editable. Certificates already issued keep the number they were printed with.',
-  },
-  {
-    key: 'certificate.counter_width',
-    label: 'Counter width',
-    kind: 'number',
-    fallback: () => '4',
-    help: 'How many digits the daily counter is padded to. Four gives 0001.',
-    check: number('Counter width', 1, 8),
   },
 
   // ---------------------------------------------------------- session and mail

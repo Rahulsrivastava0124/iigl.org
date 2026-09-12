@@ -394,7 +394,6 @@ export const extraPaths: Record<string, unknown> = {
         'Send only what changed, keyed. An empty value puts a setting back to its default by deleting the row — except a secret, where empty means leave what is stored. An unknown key is refused rather than written, since a typo that becomes a row is a setting nothing reads.',
       requestBody: body({
         'company.name': str,
-        'certificate.prefix': str,
         'session.hours': str,
         'mail.smtp_url': str,
       }),
@@ -1883,14 +1882,20 @@ export const extraPaths: Record<string, unknown> = {
             items: { type: 'integer' },
             description: 'Who it is for. Omit it and it goes to your employer, which is what staff do.',
           },
+          reply_to: {
+            type: ['integer', 'null'],
+            description:
+              'Answer a message written to you. It goes back to whoever wrote that message — `to` is ignored — and is folded under it in both inboxes. No other permission is needed: this is how a laboratory writes back to head office.',
+          },
         },
         ['body'],
       ),
       responses: {
         201: ok('Written. `sent` is how many rows that came to.'),
-        400: err('Nothing written, too long, an unknown kind, a malformed date, too many recipients, or nobody to write to.'),
+        400: err('Nothing written, too long, an unknown kind, a malformed date, too many recipients, nobody to write to, or a reply_to that is not a message id.'),
         ...guarded,
-        403: err('That account is not one of your employees.'),
+        403: err('That account is not one of your employees, or the message replied to was not written to you.'),
+        404: err('The message replied to is no longer there.'),
       },
     },
   },

@@ -68,6 +68,7 @@ Every file also carries its own rollback in a comment at the bottom.
 | `047-employment-shift.sql` | **applied** | `employements.working_hours` (hours in a full day, `DECIMAL(4,2)`) and `employements.late_after` (`TIME`, a punch-in after it is marked late). On the employment beside `week_off`: a new posting is a new shift. Empty on existing rows, meaning not set — nobody is marked late or short. Additive. |
 | `048-employment-shift-times.sql` | **applied** | `employements.shift_start` and `shift_end` (`TIME`): the shift as the form takes it, a start and an end. `working_hours` is written from them whenever they are given, so the calendar reads it unchanged; a shift past midnight wraps. A new file because 047 is applied. Additive. |
 | `049-lab-statements.sql` | **applied** | `users.statement_period` (months per commission statement, default 1), `statement_grace_days` (default 15) and `statement_from` (first month billed; NULL reads as September 2026 or the month the laboratory was added). A statement unpaid past its grace days locks certificate generation until head office approves a payment. Additive; nothing before September 2026 is billed. |
+| `052-remove-certificate-settings.sql` | **applied** | Deletes the `certificate.prefix` (was `iigl`) and `certificate.counter_width` (was `2`) rows from `settings`. Settings › Certificate is removed and new certificates are numbered in the ported twelve-digit form again. Issued certificates keep their numbers. The rollback re-inserts the two values. |
 
 ---
 

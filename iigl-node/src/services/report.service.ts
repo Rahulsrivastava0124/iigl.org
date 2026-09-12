@@ -1,7 +1,6 @@
 import { db } from '../db/index.js';
 import type { Kysely } from 'kysely';
 import type { DB } from '../db/types.js';
-import { setting, settingNumber } from './settings.service.js';
 import { agreedPriceFor, refreshOrderMoney } from './pricing.service.js';
 import { assertReportsUnlocked } from './statement.service.js';
 import { caratOf } from '../lib/money.js';
@@ -25,21 +24,14 @@ export interface ReportAttribute {
  * yymm (4). Verified against live rows — 122600012608 is lab 12, day 26,
  * first report of the day, August 2026.
  */
-export function buildReportNo(
-  labId: number,
-  dailyCount: number,
-  now = new Date(),
-  /** From Settings. Defaults reproduce the ported number exactly. */
-  options: { prefix?: string; counterWidth?: number } = {},
-): string {
+export function buildReportNo(labId: number, dailyCount: number, now = new Date()): string {
   const p = (n: number, w: number) => String(n).padStart(w, '0');
   const lab = labId > 9 ? String(labId) : `0${labId}`;
   const yy = String(now.getFullYear()).slice(-2);
-  // The composition — laboratory, day, counter, year, month — is the Laravel
-  // one and is not configurable: it is what every certificate in circulation
-  // is identified by. Only the prefix in front and the counter's width are.
-  const width = options.counterWidth ?? 4;
-  return `${options.prefix ?? ''}${lab}${p(now.getDate(), 2)}${p(dailyCount, width)}${yy}${p(now.getMonth() + 1, 2)}`;
+  // Not configurable: the Laravel composition is what every certificate in
+  // circulation is identified by. (A prefix and counter width were settable
+  // for a while; see migration 052.)
+  return `${lab}${p(now.getDate(), 2)}${p(dailyCount, 4)}${yy}${p(now.getMonth() + 1, 2)}`;
 }
 
 /** Reports already created today by this lab, which seeds the counter. */
@@ -227,11 +219,7 @@ export async function createReport(
      * follow once the existing duplicate is resolved.
      */
     let count = (await dailyCountForLab(labId, trx as unknown as typeof db)) + 1;
-    const numbering = {
-      prefix: await setting('certificate.prefix'),
-      counterWidth: await settingNumber('certificate.counter_width'),
-    };
-    let reportNo = buildReportNo(labId, count, new Date(), numbering);
+    let reportNo = buildReportNo(labId, count, new Date());
 
     for (let attempt = 0; attempt < 25; attempt++) {
       const clash = await trx
@@ -241,7 +229,7 @@ export async function createReport(
         .executeTakeFirst();
       if (!clash) break;
       count++;
-      reportNo = buildReportNo(labId, count, new Date(), numbering);
+      reportNo = buildReportNo(labId, count, new Date());
     }
 
     /*

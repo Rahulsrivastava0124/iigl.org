@@ -42,6 +42,17 @@ export function setSessionLostHandler(fn: () => void) {
  */
 const OFFLINE = 'Cannot reach the API. Check that it is running.';
 
+/**
+ * Fired on `window` after any save succeeds — a POST, PATCH, PUT or DELETE.
+ *
+ * What is waiting on somebody (the bell, the statement banner) changes when
+ * something is approved, answered or paid, and those writes happen on a dozen
+ * screens. Announcing it here, once, means a listener hears every one of them,
+ * including screens written later, rather than each screen having to remember
+ * to say so.
+ */
+export const API_WRITE_EVENT = 'iigl:api-write';
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
@@ -85,6 +96,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       body?.message ?? `Request failed (${res.status})`,
       body?.error ?? 'error',
     );
+  }
+
+  // Sign-in and sign-out are not changes to anything a listener shows.
+  if (init.method && init.method !== 'GET' && !path.startsWith('/auth/')) {
+    window.dispatchEvent(new Event(API_WRITE_EVENT));
   }
 
   return body as T;

@@ -15,10 +15,12 @@ import ApproveIcon from '@mui/icons-material/CheckCircleOutlined';
 import DeclineIcon from '@mui/icons-material/CancelOutlined';
 import DoneIcon from '@mui/icons-material/DoneOutlined';
 import UndoIcon from '@mui/icons-material/UndoOutlined';
+import ReplyIcon from '@mui/icons-material/ReplyOutlined';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { useFetch } from '../lib/useFetch';
-import { Dialog, IconAction, Panel, RowActions, StateChip, TableFrame } from './ui';
+import { useFetch, useLiveRefresh } from '../lib/useFetch';
+import { ROLE } from '../lib/portal';
+import { Dialog, IconAction, Panel, RowActions, StateChip, TableFrame, ToneAction } from './ui';
 import { useToast } from './Toast';
 import type { Paged } from '../lib/api';
 
@@ -54,6 +56,9 @@ export interface StaffMessage {
   from_name: string | null;
   /** The sender's role: 1 head office, 2 a laboratory, 3 and up (or none) staff. */
   from_role_id?: number | null;
+  to_user?: number;
+  /** The recipient's role, on the same scale. */
+  to_role_id?: number | null;
 }
 
 const day = (v: string | null) => String(v ?? '').slice(0, 10);
@@ -107,6 +112,14 @@ export default function StaffInbox({
    * writer's — the API refuses it either way — so the control is not offered.
    */
   own = false,
+  /**
+   * One conversation out of the whole box: with `head_office`, with
+   * `laboratories`, or with `staff` — everybody who is neither. Decided by who
+   * is on the other side of each message, so a reply sits with the conversation
+   * it belongs to.
+   */
+  party,
+  emptyText,
 }: {
   from: number;
   conversation?: boolean;
@@ -114,12 +127,17 @@ export default function StaffInbox({
   onCompose?: () => void;
   onRows?: (rows: StaffMessage[]) => void;
   own?: boolean;
+  party?: 'head_office' | 'laboratories' | 'staff';
+  emptyText?: string;
 }) {
   const toast = useToast();
   const { data, loading, error, reload } = useFetch<Paged<StaffMessage>>(
     conversation ? '/messages?box=all&per_page=50' : `/messages?from=${from}&per_page=50`,
   );
   const all = data?.data ?? [];
+  // A message just written shows at once: any save — sending, replying, marking
+  // read — refreshes the list, as does coming back to the tab and every 30s.
+  useLiveRefresh(reload);
 
   /*
     A reply belongs to the request it answers, not beside it.
@@ -139,7 +157,17 @@ export default function StaffInbox({
     list.push(m);
     repliesTo.set(m.reply_to, list);
   }
-  const rows = all.filter((m) => !m.reply_to || !all.some((p) => p.id === m.reply_to));
+  const otherSide = (m: StaffMessage) => (m.from_user === from ? m.to_role_id : m.from_role_id);
+  const inParty = (m: StaffMessage) => {
+    const role = otherSide(m);
+    if (party === 'head_office') return role === ROLE.SUPER;
+    if (party === 'laboratories') return role === ROLE.ADMIN;
+    if (party === 'staff') return role !== ROLE.SUPER && role !== ROLE.ADMIN;
+    return true;
+  };
+  const rows = all.filter(
+    (m) => (!m.reply_to || !all.some((p) => p.id === m.reply_to)) && inParty(m),
+  );
   // The same rows the calendar beside this marks its days from, handed up so
   // the two cannot show different months of the same list.
   useEffect(() => onRows?.(rows), [data]);
@@ -179,6 +207,34 @@ export default function StaffInbox({
     }
   };
 
+  /*
+    Replying to a message written to you — head office's notice to a laboratory,
+    a laboratory's word to its staff. The answer goes back to whoever wrote it
+    and folds under it, and replying is reading it, so the original is marked
+    read at the same time.
+  */
+  const [replying, setReplying] = useState<StaffMessage | null>(null);
+  const [replyText, setReplyText] = useState('');
+
+  const sendReply = async () => {
+    if (!replying) return;
+    setBusy(true);
+    try {
+      await api.post('/messages', { body: replyText.trim(), reply_to: replying.id });
+      if (!replying.resolved_at) {
+        await api.patch(`/messages/${replying.id}/resolve`, { resolved: true });
+      }
+      toast.ok(`Reply sent to ${replying.from_name ?? 'them'}.`);
+      setReplying(null);
+      setReplyText('');
+      reload();
+    } catch (e) {
+      toast.error(messageOf(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   /** A plain message, or reopening anything: no decision to make. */
   const resolve = async (m: StaffMessage) => {
     try {
@@ -203,10 +259,12 @@ export default function StaffInbox({
       }
     >
       <TableFrame
-        loading={loading}
+        // The spinner only before the first load: a background refresh keeps
+        // the list on screen instead of flashing it away every 30 seconds.
+        loading={loading && !data}
         error={error}
         empty={rows.length === 0}
-        emptyText={own ? 'You have not written anything yet.' : 'Nothing written yet.'}
+        emptyText={emptyText ?? (own ? 'You have not written anything yet.' : 'Nothing written yet.')}
       >
         <List dense disablePadding sx={{ maxHeight: 520, overflowY: 'auto' }}>
           {rows.map((m) => (
@@ -239,33 +297,52 @@ export default function StaffInbox({
                     {m.resolved_at && <StateChip {...outcome(m)} />}
                     <RowActions>
                       {!m.resolved_at && m.kind === 'request' ? (
-                        <>
-                          <IconAction
+                        /* Worded, not bare icons: these two decide somebody's
+                           day off, and the same pair reads the same way on
+                           the transactions queue. */
+                        <Stack direction="row" spacing={0.75}>
+                          <ToneAction
                             label="Approve"
                             icon={ApproveIcon}
+                            tone="settled"
+                            size="small"
                             onClick={() => {
                               setReply('');
                               setAnswering({ message: m, decision: 'approved' });
                             }}
                           />
-                          <IconAction
+                          <ToneAction
                             label="Decline"
                             icon={DeclineIcon}
-                            danger
+                            tone="refused"
+                            size="small"
                             onClick={() => {
                               setReply('');
                               setAnswering({ message: m, decision: 'declined' });
                             }}
                           />
-                        </>
+                        </Stack>
                       ) : (
                         /* A plain message is read and closed; there is nothing
-                           to approve. Reopening is the same control both ways. */
-                        <IconAction
-                          label={m.resolved_at ? 'Reopen' : 'Mark read'}
-                          icon={m.resolved_at ? UndoIcon : DoneIcon}
-                          onClick={() => resolve(m)}
-                        />
+                           to approve. Reopening is the same control both ways.
+                           One written to you can be answered. */
+                        <>
+                          {m.kind === 'message' && m.from_user !== from && (
+                            <IconAction
+                              label="Reply"
+                              icon={ReplyIcon}
+                              onClick={() => {
+                                setReplyText('');
+                                setReplying(m);
+                              }}
+                            />
+                          )}
+                          <IconAction
+                            label={m.resolved_at ? 'Reopen' : 'Mark read'}
+                            icon={m.resolved_at ? UndoIcon : DoneIcon}
+                            onClick={() => resolve(m)}
+                          />
+                        </>
                       )}
                     </RowActions>
                   </Stack>
@@ -345,6 +422,36 @@ export default function StaffInbox({
           ))}
         </List>
       </TableFrame>
+
+      {replying && (
+        <Dialog
+          title={`Reply to ${replying.from_name ?? 'them'}`}
+          maxWidth="xs"
+          onClose={() => setReplying(null)}
+          onSubmit={sendReply}
+          submitLabel="Send reply"
+          busy={busy}
+          disabled={replyText.trim() === ''}
+        >
+          <Stack spacing={2}>
+            <Box>
+              <Typography variant="caption" color="text.secondary">
+                {replying.from_name ?? 'They'} wrote, {day(replying.created_at)}
+              </Typography>
+              <Typography sx={{ fontSize: 13.5, whiteSpace: 'pre-wrap' }}>{replying.body}</Typography>
+            </Box>
+            <TextField
+              label="Reply"
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              multiline
+              minRows={3}
+              autoFocus
+              slotProps={{ htmlInput: { maxLength: 2000 } }}
+            />
+          </Stack>
+        </Dialog>
+      )}
 
       {answering && (
         <Dialog

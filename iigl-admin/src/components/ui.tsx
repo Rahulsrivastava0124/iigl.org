@@ -829,10 +829,11 @@ export function DateField({
   minDate,
   maxDate,
   helperText,
+  month = false,
   sx,
 }: {
   label: string;
-  /** `YYYY-MM-DD`, or empty. */
+  /** `YYYY-MM-DD`, or empty — `YYYY-MM` when `month` is set. */
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
@@ -841,16 +842,26 @@ export function DateField({
   minDate?: string;
   maxDate?: string;
   helperText?: string;
+  /**
+   * A month rather than a day: the calendar opens on the twelve months with
+   * the year above them, shows `Sep 2026`, and the value is `YYYY-MM`. The
+   * short month because the box also carries the hint, clear and calendar
+   * icons, and `September 2026` lost its year behind them.
+   */
+  month?: boolean;
   sx?: object;
 }) {
-  const parsed = value ? dayjs(value, ISO_DATE, true) : null;
+  const valueFormat = month ? 'YYYY-MM' : ISO_DATE;
+  const parsed = value ? dayjs(value, valueFormat, true) : null;
 
   return (
     <DatePicker
       label={label}
-      format="DD-MM-YYYY"
+      format={month ? 'MMM YYYY' : 'DD-MM-YYYY'}
+      views={month ? ['year', 'month'] : undefined}
+      openTo={month ? 'month' : undefined}
       value={parsed?.isValid() ? parsed : null}
-      onChange={(next) => onChange(next?.isValid() ? next.format(ISO_DATE) : '')}
+      onChange={(next) => onChange(next?.isValid() ? next.format(valueFormat) : '')}
       disabled={disabled}
       minDate={minDate ? dayjs(minDate, ISO_DATE, true) : undefined}
       maxDate={maxDate ? dayjs(maxDate, ISO_DATE, true) : undefined}

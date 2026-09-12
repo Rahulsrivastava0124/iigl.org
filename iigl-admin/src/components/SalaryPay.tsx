@@ -114,13 +114,11 @@ export default function SalaryPay({
         </Grid>
       </Grid>
 
-      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
-        {alreadyPaid > 0
-          ? `${money(alreadyPaid)} already paid for ${monthLabel}. `
-          : ''}
-        Opens at the salary for the days attended — {money(suggested)} — which is a suggestion, not
-        a figure anybody has agreed. Part payments are ordinary; record what actually changed hands.
-      </Typography>
+      {alreadyPaid > 0 && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
+          {money(alreadyPaid)} already paid for {monthLabel}.
+        </Typography>
+      )}
     </Dialog>
   );
 }
