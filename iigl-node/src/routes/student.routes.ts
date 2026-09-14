@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
+import { headOfficeOr } from '../services/permission.service.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { paged, readPage } from '../lib/paginate.js';
 import { requireAdmin } from '../middleware/auth.js';
@@ -26,7 +27,19 @@ import { followupCounts, followupsFor, recordFollowup } from '../services/follow
  * Administrators only, which is where the menu put it.
  */
 export const studentRoutes = Router();
-studentRoutes.use(requireAdmin);
+/*
+  The enquiry book is one of head office's employees' permissions (Website —
+  enquiry, by request method); everything else here is head office's alone.
+  Converting an enquiry, below, is an edit rather than an add.
+*/
+const enquiryGuard = headOfficeOr('website_enquiry');
+studentRoutes.use((req, res, next) =>
+  req.path === '/enquiries' || req.path.startsWith('/enquiries/')
+    ? req.path.endsWith('/convert')
+      ? next()
+      : enquiryGuard(req, res, next)
+    : requireAdmin(req, res, next),
+);
 
 export const ENQUIRY_STATUS = [
   'new',
@@ -237,6 +250,7 @@ studentRoutes.post(
  */
 studentRoutes.post(
   '/enquiries/:id/convert',
+  headOfficeOr('website_enquiry', 'update'),
   numericId,
   wrap(async (req, res) => {
     const enquiryId = Number(req.params.id);

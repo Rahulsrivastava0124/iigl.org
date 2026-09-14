@@ -164,9 +164,16 @@ function Document({
 export default function DocumentAssets({
   value,
   onChange,
+  bucket = 'documentation',
 }: {
   value: LabDocument[];
   onChange: (documents: LabDocument[]) => void;
+  /**
+   * Where the files go. `documentation` is head office's and refuses anybody
+   * else, which is right for a laboratory's own record; an employee's papers are
+   * kept by their employer, so the staff form uses `staff_document`.
+   */
+  bucket?: 'documentation' | 'staff_document';
 }) {
   const [busy, setBusy] = useState(false);
   /* How far the upload has got, or null when the browser cannot say. */
@@ -181,7 +188,7 @@ export default function DocumentAssets({
       try {
         // Several at once: paperwork arrives as a folder of scans, and four
         // round trips for four files is three more than the API needs.
-        const stored = await uploadFiles('documentation', files, setPercent);
+        const stored = await uploadFiles(bucket, files, setPercent);
 
         const added: LabDocument[] = stored.map((f, i) => ({
           title: nameOf(files[i]?.name ?? '') || 'Untitled',
@@ -196,7 +203,7 @@ export default function DocumentAssets({
         setBusy(false);
       }
     },
-    [onChange, value],
+    [bucket, onChange, value],
   );
 
   const onDrop = useCallback(

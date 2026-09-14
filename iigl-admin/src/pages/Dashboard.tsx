@@ -22,7 +22,6 @@ import RegisteredIcon from '@mui/icons-material/HowToRegOutlined';
 import CustomerIcon from '@mui/icons-material/PersonOutlineOutlined';
 import TodayIcon from '@mui/icons-material/TodayOutlined';
 import ItemsIcon from '@mui/icons-material/DiamondOutlined';
-import TransferIcon from '@mui/icons-material/SendOutlined';
 
 /**
  * One width for every card here, shared with the rest of the panel: a quarter
@@ -542,26 +541,6 @@ function StaffTiles({
         </Grid>
         <Grid size={CELL}>
           <Tile label="Dues amount" value={money(mine.dues)} fill={owed(mine.dues)} icon={DuesIcon} />
-        </Grid>
-        <Grid size={CELL}>
-          <Tile
-            label="Transfer amount"
-            value={money(mine.transferred)}
-            note="handed on"
-            fill="brand"
-            icon={TransferIcon}
-            to="/transactions"
-          />
-        </Grid>
-        <Grid size={CELL}>
-          <Tile
-            label="My wallet"
-            value={money(mine.wallet)}
-            note="still with me"
-            fill="brand"
-            icon={WalletIcon}
-            to="/wallet"
-          />
         </Grid>
       </Grid>
 

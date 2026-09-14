@@ -79,11 +79,12 @@ const VIEWS: Record<string, Record<string, string>> = {
   transactions: { 'status=0': 'Commission Approval', 'type=commision': 'Commission History' },
   customers: { 'tab=all': 'All Customers', 'tab=unregistered': 'Not Registered' },
   content: {
-    'tab=pages': 'Pages',
-    'tab=types': 'Report Types',
-    'tab=articles': 'Blog',
-    'tab=branches': 'Branches',
     'tab=banners': 'Banners',
+    'tab=types': 'Report Types',
+    'tab=customers': 'Customers',
+    'tab=branches': 'Branches',
+    'tab=articles': 'Blog',
+    'tab=pages': 'Pages',
   },
 };
 

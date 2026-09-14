@@ -17,7 +17,7 @@ import { IconAction, toneColour } from './ui';
 type Bucket =
   | 'report' | 'order' | 'signature' | 'employee'
   | 'banner' | 'icon' | 'website' | 'documentation' | 'screenshot'
-  | 'certificate';
+  | 'certificate' | 'staff_document';
 
 
 /** How tall a shaped drop zone is. The width follows from the ratio. */

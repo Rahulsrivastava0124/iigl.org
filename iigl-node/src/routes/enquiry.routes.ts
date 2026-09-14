@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
+import { headOfficeOr } from '../services/permission.service.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { paged, readPage } from '../lib/paginate.js';
 import { requireAdmin } from '../middleware/auth.js';
@@ -23,7 +24,9 @@ import { followupCounts, followupsFor, recordFollowup } from '../services/follow
  * a captcha decision of its own, which is a separate piece of work.
  */
 export const enquiryRoutes = Router();
-enquiryRoutes.use(requireAdmin);
+// Head office, or one of its employees with Visitor book — view to read,
+// add to record an enquiry or a follow-up, edit, delete, by request method.
+enquiryRoutes.use(headOfficeOr('visitor_book'));
 
 /**
  * What the enquiry is about. The old menu's four entries, plus one.

@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { refreshOrderMoney } from '../services/pricing.service.js';
+import { accountStatementHtml, accountStatementPdf } from '../services/document.service.js';
 import { wrap } from '../lib/async.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { paged, readPage, readSearch } from '../lib/paginate.js';
-import { assertLabOwnership, requireLabScope, ROLE } from '../middleware/auth.js';
-import { accruedByLab, commissionEarnings, COMMISSION_TYPE, ledgerFor, sendCommission, TRANSACTION_TYPE, validateCommissionInput, notAnExpense } from '../services/commission.service.js';
+import { assertEmploys, assertLabOwnership, requireLabScope, ROLE } from '../middleware/auth.js';
+import { accruedByLab, commissionEarnings, COMMISSION_TYPE, expenseWallets, ledgerFor, sendCommission, TRANSACTION_TYPE, validateCommissionInput, notAnExpense, type LedgerScope } from '../services/commission.service.js';
 import { numericId, numericParams } from '../middleware/params.js';
 
 export const transactionRoutes = Router();
@@ -183,16 +184,94 @@ transactionRoutes.post(
 );
 
 /**
+ * Send an employee a float to spend on the laboratory's behalf.
+ *
+ * The one transfer that goes **down**. Every other transfer here goes up — staff
+ * to their laboratory, a laboratory to head office — which is why there was no way
+ * to fund an expense wallet at all until this existed.
+ *
+ * **Approved at once.** Every other transfer waits for its receiver, because the
+ * receiver is the one taking custody of money somebody else says they sent. Here
+ * the sender is the employee's own employer, the account that approves
+ * everything that employee does: there is nobody above it to ask, and an
+ * employee cannot usefully refuse money handed to them. A pending float would be
+ * a wallet that reads zero while the cash is already in their hand.
+ *
+ * Only to one's own working employee. Head office may send to anyone.
+ */
+transactionRoutes.post(
+  '/float',
+  wrap(async (req, res) => {
+    if (req.user.roleId !== ROLE.SUPER && req.user.roleId !== ROLE.LAB) {
+      throw forbidden('A float is sent by a laboratory or head office, to their staff.');
+    }
+    const { user_id, amount, pay_mode, transaction_no, remark } = req.body ?? {};
+
+    const employee = Number(user_id);
+    if (!Number.isInteger(employee) || employee <= 0) throw badRequest('Choose the employee to send it to.');
+    if (employee === req.user.id) throw badRequest('A float is sent to somebody else.');
+
+    const value = Number(amount);
+    if (!Number.isFinite(value) || value <= 0) throw badRequest('Enter an amount greater than zero.');
+    if (!pay_mode) throw badRequest('Select a payment mode.');
+
+    await assertEmploys(req.user, employee);
+
+    const now = new Date();
+    const result = await db
+      .insertInto('transactions')
+      .values({
+        amount: String(value),
+        pay_mode: String(pay_mode),
+        transaction_no: transaction_no ? String(transaction_no) : null,
+        transaction_type: TRANSACTION_TYPE.WALLET_TRANSFER,
+        remark: remark ? String(remark) : 'Expense float',
+        attachment: null,
+        send_by: req.user.id,
+        received_by: employee,
+        status: STATUS.APPROVED,
+        seen_by_sender: 1,
+        seen_by_receiver: 0,
+        created_at: now,
+        updated_at: now,
+      })
+      .executeTakeFirst();
+
+    res.status(201).json({ data: { id: Number(result.insertId) } });
+  }),
+);
+
+/**
+ * The signed-in employee's expense wallet: floats received, less what was spent.
+ *
+ * Its own endpoint rather than a field on the ledger, because the wallet page
+ * shows it on both tabs — including the collection tab, whose ledger response
+ * is scoped to the other wallet and has no float in it to total.
+ */
+transactionRoutes.get(
+  '/expense-wallet',
+  wrap(async (req, res) => {
+    const wallets = await expenseWallets([req.user.id]);
+    res.json({ data: wallets.get(req.user.id) });
+  }),
+);
+
+/**
  * Record an expense: money an employee spent out of what they hold.
  *
- * Staff only. Pending until their employer approves it, exactly as a transfer is
- * — money collected belongs to the laboratory, and an employee writing it off
- * with nobody looking is the one shape this must not take. The employer is
- * `received_by` as the approver, not as a recipient; see TRANSACTION_TYPE.
+ * Staff only. **Approved as it is recorded** — no approval step.
+ *
+ * It used to wait for the employer, when an expense came out of the same pot as
+ * the customers' money and an employee writing that off unseen was the risk.
+ * It now comes out of the expense float only, which is money the employer chose
+ * to hand over for exactly this, so the check is the float itself: the
+ * employer sees every expense against it and a negative balance on the staff
+ * list. The employer is still stored as `received_by` — it names whose float
+ * this is, and every balance already leaves these rows out of its credit.
  *
  * No ceiling at the wallet balance. Somebody who paid a courier out of their own
  * pocket is owed it, and refusing the entry would push that off the books rather
- * than onto them. Approval is the check.
+ * than onto them. The float goes negative instead.
  */
 transactionRoutes.post(
   '/expense',
@@ -210,7 +289,7 @@ transactionRoutes.post(
 
     const approver = req.user.labId;
     if (!approver) {
-      throw badRequest('Your account is not linked to an employer, so there is nobody to approve it.');
+      throw badRequest('Your account is not linked to an employer, so there is no float to spend from.');
     }
 
     const optional = (v: unknown) => {
@@ -230,7 +309,7 @@ transactionRoutes.post(
         attachment: optional(req.body?.attachment),
         send_by: req.user.id,
         received_by: Number(approver),
-        status: STATUS.PENDING,
+        status: STATUS.APPROVED,
         seen_by_sender: 1,
         seen_by_receiver: 0,
         created_at: new Date(),
@@ -556,12 +635,92 @@ transactionRoutes.get(
 transactionRoutes.get(
   '/ledger',
   wrap(async (req, res) => {
-    const target =
-      req.user.roleId === ROLE.SUPER && req.query.user_id
-        ? Number(req.query.user_id)
-        : req.user.id;
-
+    const { target, scope, from, to, status, q, mode } = readLedgerQuery(req);
     const p = readPage(req, 100, 500);
-    res.json({ data: await ledgerFor(target, p.limit, p.offset) });
+    res.json({
+      data: await ledgerFor(target, p.limit, p.offset, scope, { from, to }, { status, q, mode }),
+    });
   }),
 );
+
+/**
+ * The same ledger, over the same wallet and period, as a statement to download.
+ *
+ * Every row in the period, not a page: the totals on a statement have to be the
+ * sum of the rows printed under them. A PDF inline, so it opens in the browser
+ * and prints from there; `?format=html` returns the markup it is rendered from.
+ */
+transactionRoutes.get(
+  '/ledger/statement',
+  wrap(async (req, res) => {
+    // The same filters the list was given, so the sheet is the list on screen.
+    const { target, scope, from, to, status, q, mode } = readLedgerQuery(req);
+    const issuedBy = req.user.fullname ?? 'IIGL';
+    const filter = { status, q, mode };
+
+    if (req.query.format === 'html') {
+      res.type('html').send(await accountStatementHtml(target, scope, { from, to }, issuedBy, filter));
+      return;
+    }
+
+    const pdf = await accountStatementPdf(target, scope, { from, to }, issuedBy, filter);
+    const name = ['statement', scope === 'all' ? '' : scope, from ?? '', to ?? ''].filter(Boolean).join('-');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${name}.pdf"`);
+    res.setHeader('Content-Length', String(pdf.length));
+    res.end(pdf);
+  }),
+);
+
+/**
+ * Whose ledger, which wallet, and which days — read once, for the list and for
+ * the downloadable statement, so the two can never be asked the same question
+ * and answer different ones.
+ */
+function readLedgerQuery(req: Parameters<Parameters<typeof transactionRoutes.get>[1]>[0]) {
+  const target =
+    req.user.roleId === ROLE.SUPER && req.query.user_id ? Number(req.query.user_id) : req.user.id;
+
+  /*
+    Split into two wallets only for somebody who holds both kinds of money.
+
+    A laboratory and head office have one account. A transfer *received* by a
+    laboratory is an employee handing on collections, not a float — so reading
+    it through the staff split would file a laboratory's takings under
+    "expense" and empty its collection wallet. The scope is ignored for them.
+  */
+  const asked = String(req.query.scope ?? 'all');
+  const staff = req.user.roleId !== ROLE.SUPER && req.user.roleId !== ROLE.LAB;
+  const scope: LedgerScope =
+    staff && (asked === 'collection' || asked === 'expense') ? asked : 'all';
+
+  // A period, as two inclusive dates. Anything that is not a date is refused
+  // rather than ignored: a statement that silently covered all time when
+  // somebody asked for March would be believed.
+  const dateParam = (name: 'from' | 'to') => {
+    const v = String(req.query[name] ?? '').trim();
+    if (v === '') return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(v))) {
+      throw badRequest(`${name} must be a date, YYYY-MM-DD.`);
+    }
+    return v;
+  };
+  const from = dateParam('from');
+  const to = dateParam('to');
+  if (from && to && from > to) throw badRequest('The start date is after the end date.');
+
+  // Which rows to list. Refused when it is not a status this ledger has, for the
+  // same reason as a bad date: an unknown status matching nothing looks like an
+  // account with nothing in it.
+  const rawStatus = String(req.query.status ?? '').trim();
+  if (rawStatus !== '' && !['0', '1', '2'].includes(rawStatus)) {
+    throw badRequest('status must be 0 (pending), 1 (approved) or 2 (declined).');
+  }
+  const status = rawStatus === '' ? null : Number(rawStatus);
+  const q = String(req.query.q ?? '').trim().slice(0, 64) || null;
+  // How it was paid: cash, upi, card, bank, cheque. Free text rather than a
+  // fixed list, because the older rows carry whatever was typed at the time.
+  const mode = String(req.query.mode ?? '').trim().slice(0, 20) || null;
+
+  return { target, scope, from, to, status, q, mode };
+}

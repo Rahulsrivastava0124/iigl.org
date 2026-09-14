@@ -81,7 +81,7 @@ export default function Roles() {
     to an employee; they are simply not this screen's business.
   */
   const shown = list.filter((r) => {
-    if (isSuper(user) ? r.id === ROLE.SUPER || r.owner_id !== null : r.owner_id === null) {
+    if (isSuper(user) ? r.id === ROLE.SUPER || r.id === ROLE.ADMIN || r.owner_id !== null : r.owner_id === null) {
       return false;
     }
     return hits(search, r.id, r.role_name);
@@ -290,10 +290,9 @@ export default function Roles() {
           roleId={role.id}
           roleName={role.id === ROLE.ADMIN ? 'Laboratory' : role.role_name}
           readOnly={!mayRename(role)}
+          shared={role.owner_id === null}
           note={
-            role.id === ROLE.ADMIN
-              ? 'A laboratory account already has full access to its own laboratory data. These grants apply to what it may do beyond that.'
-              : !mayRename(role)
+            !mayRename(role)
                 ? "Head office's role, shared with every laboratory. You can see what it allows; to change it, make one of your own."
                 : undefined
           }

@@ -1,98 +1,63 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { MapPin, Search } from 'lucide-react';
 import markUrl from '../../../Assets/footer-mark.png';
+import { apiUrl, getPublic } from '../../lib/api.js';
 import { indiaPath, project, statesPath, viewBox } from './indiaOutline.js';
+import SectionLabel from '../SectionLabel.jsx';
 
 /**
  * Where IIGL is.
  *
+ * The branches are the laboratories head office ticks in the panel, under
+ * Website Setup › Branches, read from `GET /api/public/laboratories`. Nothing
+ * here is typed in: a laboratory ticked there appears here on the next visit.
+ *
  * The list on the left, the country on the right, and one selection shared
- * between them: picking a city lifts its pin, hovering a pin lifts its row.
- * Two views of six records rather than a list and a decoration.
+ * between them: picking a laboratory lifts its pin, picking a pin lifts its row.
  *
  * Two ways of showing a branch, each suited to where it sits. On the map it is
- * the house marker — a navy badge on a point, carrying the branch's own logo
- * where there is one and the IIGL mark where there is not. In the list it is a
- * disc of initials, because six identical marks down a column tell the reader
- * nothing while six sets of initials name the place.
+ * the house marker, carrying the laboratory's own logo where there is one and
+ * the IIGL mark where there is not. In the list it is the logo or a disc of
+ * initials, because identical marks down a column tell the reader nothing.
  *
- * Every branch in the database has a null `img` today, so both fallbacks are
- * what will actually print — which is why they are designed states and not
- * something drawn in a hurry.
+ * A pin goes on the laboratory's city, whose coordinates the API looks up from
+ * the record (geocode.service.ts) — any city, nothing listed here — or in the
+ * middle of its state when that city could not be found.
  *
- * The map is an inline path, not a tile layer: six fixed points on one country
- * need no panning, no zoom and no third-party script watching visitors. See
- * `indiaOutline.js` for where the boundary comes from and why that source.
+ * The map is an inline path, not a tile layer: a handful of fixed points on one
+ * country need no panning, no zoom and no third-party script watching visitors.
+ * See `indiaOutline.js` for where the boundary comes from and why that source.
  */
 
-/*
-  The six branches, mirroring the `branches` table — city, page and title as
-  they are stored, with the coordinates the table has no column for.
+const DEFAULT_BLURB = 'Gem testing laboratory';
 
-  Hardcoded because every section on this site is: the website reads no API at
-  all yet, and a seventh branch is a line here rather than a deployment. When
-  the site does start fetching, `GET /api/public/branches` returns the first
-  three fields and this stays as the coordinate lookup.
-*/
-const branches = [
-  {
-    city: 'Kolkata',
-    state: 'West Bengal',
-    page: 'kolkata',
-    blurb: 'Head office and grading laboratory',
-    lat: 22.5726,
-    lon: 88.3639,
-    logo: null,
-  },
-  {
-    city: 'Varanasi',
-    state: 'Uttar Pradesh',
-    page: 'varanasi',
-    blurb: 'Gem testing laboratory and institute',
-    lat: 25.3176,
-    lon: 82.9739,
-    logo: null,
-  },
-  {
-    city: 'Brahmapur',
-    state: 'Odisha',
-    page: 'brahampur',
-    blurb: 'Gem testing laboratory and institute',
-    lat: 19.315,
-    lon: 84.7941,
-    logo: null,
-  },
-  {
-    city: 'Bhubaneswar',
-    state: 'Odisha',
-    page: 'bhubaneswar',
-    blurb: 'Gem testing laboratory and institute',
-    lat: 20.2961,
-    lon: 85.8245,
-    logo: null,
-  },
-  {
-    city: 'Tata Nagar',
-    state: 'Jharkhand',
-    page: 'tata-nagar',
-    blurb: 'Gem testing laboratory and institute',
-    lat: 22.8046,
-    lon: 86.2029,
-    logo: null,
-  },
-  {
-    city: 'New Delhi',
-    state: 'Delhi NCR',
-    page: 'delhi',
-    blurb: 'Gem testing laboratory',
-    lat: 28.6139,
-    lon: 77.209,
-    logo: null,
-  },
-];
+/** A laboratory from the API, in the shape the list, map and card draw. */
+function toBranch(lab) {
+  const state = (lab.state ?? '').trim();
+  const city = (lab.city ?? '').trim();
+  // The city's point, which the API looked up from the laboratory's record; the
+  // middle of the state when the city could not be found.
+  const pin =
+    lab.latitude != null && lab.longitude != null
+      ? { lat: Number(lab.latitude), lon: Number(lab.longitude) }
+      : stateCentre(state);
+  return {
+    page: `lab-${lab.id}`,
+    name: (lab.fullname ?? '').trim(),
+    city,
+    state,
+    blurb: DEFAULT_BLURB,
+    lat: pin?.lat ?? null,
+    lon: pin?.lon ?? null,
+    logo: lab.logo ? apiUrl(lab.logo) : null,
+  };
+}
 
-const initials = (city) =>
-  city
+/** "Howrah, West Bengal", or whichever half is known. */
+const placeOf = (branch) => [branch.city, branch.state].filter(Boolean).join(', ');
+
+const initials = (name) =>
+  name
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
@@ -136,6 +101,27 @@ const stateLabels = [
   { name: 'Kerala', lat: 10.4, lon: 76.4 },
 ];
 
+/** Older and informal spellings a laboratory record may carry for a state. */
+const STATE_ALIASES = {
+  orissa: 'odisha',
+  'delhi ncr': 'delhi',
+  'nct of delhi': 'delhi',
+  'new delhi': 'delhi',
+  'jammu and kashmir': 'jammu & kashmir',
+  uttaranchal: 'uttarakhand',
+};
+
+/**
+ * The middle of a state, for a laboratory with no coordinates of its own: near
+ * enough that the pin sits in the right place on a country-sized map. Null for
+ * a state the map does not know, and that laboratory is listed without a pin.
+ */
+function stateCentre(state) {
+  const key = state.trim().toLowerCase();
+  const wanted = STATE_ALIASES[key] ?? key;
+  return stateLabels.find((s) => s.name.toLowerCase() === wanted) ?? null;
+}
+
 /**
  * The marker the map uses: the map-pin teardrop, with the branch inside it.
  *
@@ -150,8 +136,13 @@ const stateLabels = [
  * per pin — six markers on one page would otherwise share one clip path and
  * the browser would apply whichever it saw last.
  */
+/** Where the pin's point is in its own drawing: the path bottoms out at 30, plus 0.75 of stroke. */
+const TIP_Y = 30.75;
+
 function MapMarker({ branch, size, active }) {
-  const height = Math.round(size * 1.44);
+  // The viewBox ends at the tip (the path's point plus half its white stroke),
+  // so the bottom edge of this element is exactly where the pin points.
+  const height = (size * TIP_Y) / 24;
   const clipId = `pin-${branch.page}`;
   const body = active ? '#d58a2b' : '#061948';
 
@@ -159,9 +150,9 @@ function MapMarker({ branch, size, active }) {
     <svg
       width={size}
       height={height}
-      viewBox="0 0 24 34.5"
+      viewBox={`0 0 24 ${TIP_Y}`}
       aria-hidden
-      className="drop-shadow-[0_6px_10px_rgba(6,25,72,0.32)]"
+      className="block overflow-visible drop-shadow-[0_6px_10px_rgba(6,25,72,0.32)]"
     >
       <defs>
         <clipPath id={clipId}>
@@ -217,7 +208,7 @@ function BranchMark({ branch, size, active }) {
       className={`${common} bg-linear-to-b from-[#0b2a63] to-[#061948] font-medium text-white`}
       style={{ width: size, height: size, fontSize: Math.round(size * 0.36) }}
     >
-      {initials(branch.city)}
+      {initials(branch.name)}
     </span>
   );
 }
@@ -238,17 +229,19 @@ function BranchDetailCard({ branch }) {
         because 240px beside a phone-width map leaves neither readable.
       */
       className="absolute bottom-3 right-3 z-10 w-[240px] rounded-xl border border-[#e6e8ee] bg-white/95 p-4 text-left shadow-[0_18px_44px_rgba(6,25,72,0.16)] backdrop-blur-sm max-[640px]:left-3 max-[640px]:w-auto"
-      aria-label={`${branch.city} branch details`}
+      aria-label={`${branch.name} branch details`}
     >
       <div className="flex min-w-0 items-center gap-3">
         <BranchMark branch={branch} size={42} active />
         <div className="min-w-0">
           <h3 className="m-0 truncate font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[22px] font-medium leading-[1.12] tracking-normal text-[#061948]">
-            {branch.city}
+            {branch.name}
           </h3>
-          <p className="m-0 mt-1 text-[12px] font-medium uppercase tracking-[0.08em] text-[#bd7724]">
-            {branch.state}
-          </p>
+          {branch.state && (
+            <p className="m-0 mt-1 text-[12px] font-medium uppercase tracking-[0.08em] text-[#bd7724]">
+              {branch.state}
+            </p>
+          )}
         </div>
       </div>
 
@@ -261,13 +254,13 @@ function BranchDetailCard({ branch }) {
           <dt className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#8b93a7]">
             City
           </dt>
-          <dd className="m-0 mt-0.5 text-[13px] font-medium text-[#061948]">{branch.city}</dd>
+          <dd className="m-0 mt-0.5 text-[13px] font-medium text-[#061948]">{branch.city || '—'}</dd>
         </div>
         <div>
           <dt className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#8b93a7]">
             State
           </dt>
-          <dd className="m-0 mt-0.5 text-[13px] font-medium text-[#061948]">{branch.state}</dd>
+          <dd className="m-0 mt-0.5 text-[13px] font-medium text-[#061948]">{branch.state || '—'}</dd>
         </div>
       </dl>
 
@@ -281,27 +274,36 @@ function BranchDetailCard({ branch }) {
           </li>
         ))}
       </ul>
-
-      <a
-        href={`#${branch.page}`}
-        className="mt-3 inline-flex h-9 items-center justify-center rounded-lg bg-[#061948] px-4 text-[12px] font-semibold uppercase tracking-[0.05em] text-white transition-colors hover:bg-[#10285e] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d58a2b]"
-      >
-        Read more
-      </a>
     </aside>
   );
 }
 export default function OurBranchesSection() {
   const [term, setTerm] = useState('');
-  const [selected, setSelected] = useState(branches[0].page);
+  const [selected, setSelected] = useState(null);
+  const [branches, setBranches] = useState([]);
+  // 'loading' until the API answers, then 'ready' or 'error'.
+  const [status, setStatus] = useState('loading');
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getPublic('/public/laboratories', { signal: controller.signal })
+      .then((labs) => {
+        setBranches((labs ?? []).map(toBranch));
+        setStatus('ready');
+      })
+      .catch((error) => {
+        if (error.name !== 'AbortError') setStatus('error');
+      });
+    return () => controller.abort();
+  }, []);
 
   const found = useMemo(() => {
     const q = term.trim().toLowerCase();
     if (!q) return branches;
     return branches.filter((b) =>
-      `${b.city} ${b.state} ${b.blurb}`.toLowerCase().includes(q),
+      `${b.name} ${b.city} ${b.state} ${b.blurb}`.toLowerCase().includes(q),
     );
-  }, [term]);
+  }, [term, branches]);
 
   /*
     A search that empties the list should not leave a pin lit on a city the
@@ -315,12 +317,9 @@ export default function OurBranchesSection() {
     <section id="branches" className="bg-[#f8f9fb] px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[1390px]">
         <div className="mx-auto max-w-[820px] text-center">
-          <p className="m-0 text-[12px] font-medium uppercase tracking-[0.14em] text-[#bd7724]">
-            Our Branches
-          </p>
-          <span aria-hidden className="mx-auto mt-3 block h-px w-14 bg-[#d58a2b]/70" />
+          <SectionLabel>Our Branches</SectionLabel>
 
-          <h2 className="m-0 mt-5 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[28px]">
+          <h2 className="m-0 mt-4 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[28px]">
             Where You Can Find Us
           </h2>
 
@@ -365,10 +364,10 @@ export default function OurBranchesSection() {
                       <BranchMark branch={branch} size={40} active={active} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[15px] font-medium text-[#061948]">
-                          {branch.city}
+                          {branch.name}
                         </span>
                         <span className="block truncate text-[13px] font-normal text-[#4a5265]">
-                          {branch.state} · {branch.blurb}
+                          {[placeOf(branch), branch.blurb].filter(Boolean).join(' · ')}
                         </span>
                       </span>
                       <MapPin
@@ -380,7 +379,25 @@ export default function OurBranchesSection() {
                 );
               })}
 
-              {found.length === 0 && (
+              {status === 'loading' && (
+                <li className="rounded-lg border border-dashed border-[#e6e8ee] px-3 py-8 text-center text-[14px] font-normal text-[#4a5265]">
+                  Loading branches…
+                </li>
+              )}
+
+              {status === 'error' && (
+                <li className="rounded-lg border border-dashed border-[#e6e8ee] px-3 py-8 text-center text-[14px] font-normal text-[#4a5265]">
+                  The branch list could not be loaded just now. Please try again in a moment.
+                </li>
+              )}
+
+              {status === 'ready' && branches.length === 0 && (
+                <li className="rounded-lg border border-dashed border-[#e6e8ee] px-3 py-8 text-center text-[14px] font-normal text-[#4a5265]">
+                  Branch details are coming soon — write to us and we will tell you what is nearest.
+                </li>
+              )}
+
+              {status === 'ready' && branches.length > 0 && found.length === 0 && (
                 <li className="rounded-lg border border-dashed border-[#e6e8ee] px-3 py-8 text-center text-[14px] font-normal text-[#4a5265]">
                   No branch matches “{term.trim()}”. We open new centres often — write to us and we
                   will tell you what is nearest.
@@ -467,7 +484,7 @@ export default function OurBranchesSection() {
                 </g>
               </svg>
 
-              {branches.map((branch) => {
+              {branches.filter((branch) => branch.lat != null && branch.lon != null).map((branch) => {
                 const { x, y } = project(branch.lon, branch.lat);
                 const active = branch.page === shown;
                 const dimmed = shown !== null && !active;
@@ -476,19 +493,29 @@ export default function OurBranchesSection() {
                     key={branch.page}
                     type="button"
                     onClick={() => setSelected(branch.page)}
-                    aria-label={`${branch.city}, ${branch.state}`}
-                    className="absolute -translate-x-1/2 -translate-y-full transition-[transform,opacity] duration-200"
+                    aria-label={[branch.name, placeOf(branch)].filter(Boolean).join(', ')}
+                    /*
+                      The tip of the pin is the place. One shift puts it there —
+                      left half the pin's width, up its full height — and it is
+                      the inline transform alone: Tailwind's translate classes
+                      set the separate CSS `translate` property, which stacks
+                      with `transform`, and the pair lifted every pin a whole
+                      pin-height above its city. Scaled from the tip, so the
+                      selected pin grows without moving off it.
+                    */
+                    className="absolute transition-[transform,opacity] duration-200"
                     style={{
                       left: `${(x / MAP_WIDTH) * 100}%`,
                       top: `${(y / MAP_HEIGHT) * 100}%`,
                       opacity: dimmed ? 0.9 : 1,
                       transform: `translate(-50%, -100%) scale(${active ? 1.04 : 1})`,
+                      transformOrigin: '50% 100%',
                       zIndex: active ? 2 : 1,
                     }}
                   >
-                    <span className={`flex flex-col items-center ${active ? 'animate-bounce' : ''}`}>
-                      <MapMarker branch={branch} size={active ? 29 : 27} active={active} />
-                    </span>
+                    {/* No bounce: it lifted the tip off the city it marks. The
+                        selected pin is told apart by its colour and size. */}
+                    <MapMarker branch={branch} size={active ? 29 : 27} active={active} />
                   </button>
                 );
               })}

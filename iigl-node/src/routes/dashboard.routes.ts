@@ -742,10 +742,21 @@ dashboardRoutes.get(
           hands money to their employer — so every transfer they made left the
           tile unchanged and the figure only ever grew.
         */
-        // Approved expenses come off too: spent on the laboratory's behalf and
-        // signed off, that cash is no longer in their hand.
         expenses: round2(expensesSpent),
-        wallet: round2(paidAll + walletCredit - transferred - expensesSpent),
+        /*
+          Two wallets, not one.
+
+          This used to be a single pot: collections plus any float, less what
+          was handed on and what was spent. That let an expense come out of a
+          customer's money, and a float be handed back to the laboratory as if
+          it were takings. Split:
+
+            wallet          what customers paid, less what was handed on
+            expense_wallet  floats received, less expenses — may go negative,
+                            which is the laboratory owing the employee
+        */
+        wallet: round2(paidAll - transferred),
+        expense_wallet: round2(walletCredit - expensesSpent),
         today: {
           orders: todayOrders,
           cards_ordered: todayCards + todayClassicCards,
@@ -833,7 +844,10 @@ dashboardRoutes.get(
           dues_today: todayDues,
         },
         wallet: {
-          balance,
+          // An employee's balance is their collection wallet, the same figure
+          // their wallet page opens on. The generic balance is approved-in less
+          // approved-out, which for them still pools the float with takings.
+          balance: mine ? mine.wallet : balance,
           commission_accrued: accrued,
           commission_paid: round2(paidCommission),
           // What the rate says is owed, less what has been approved. Never

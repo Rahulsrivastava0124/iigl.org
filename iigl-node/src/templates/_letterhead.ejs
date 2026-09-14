@@ -1,0 +1,55 @@
+<%
+/*
+  The company letterhead, shared by every document the system prints: tax
+  invoices and receipts, fee statements, payslips, commission statements and
+  account statements. One partial, so the address on an invoice and the
+  address on a payslip cannot drift apart.
+
+  The round mark, IIGL large in a serif face with the two-line name beside it
+  and the ISO line under the pair, and the head office address set right —
+  the printed letterhead, which is why it is serif rather than the panel's
+  sans-serif. Its styles are scoped under .lh so no document's own `header`
+  rules reach into it.
+
+  Every line comes from Settings › Company; anything left blank there falls
+  back to the head office details, so a sheet never goes out with a hole where
+  the address should be.
+*/
+const t = (x) => (x == null || String(x).trim() === '' ? '' : String(x));
+const cityLine =
+  [t(company.city), t(company.pincode)].filter(Boolean).join(' - ') + (t(company.state) ? ' (' + t(company.state) + ')' : '');
+%>
+<style>
+  .lh { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+    padding-bottom: 12px; margin-bottom: 4px; border-bottom: 2px solid #0b1f4b; color: #111;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .lh .lh-brand { display: flex; gap: 9px; align-items: center; }
+  .lh .lh-brand img { height: 58px; }
+  .lh .lh-lockup { font-family: "Times New Roman", Georgia, serif; }
+  .lh .lh-row { display: flex; align-items: center; gap: 8px; }
+  .lh .lh-name { font-size: 30px; font-weight: 700; letter-spacing: .5px; line-height: 1; }
+  .lh .lh-sub { font-size: 11.5px; line-height: 1.25; }
+  .lh .lh-iso { font-size: 9.5px; font-weight: 700; letter-spacing: .2px; margin-top: 3px; }
+  .lh .lh-addr { text-align: right; font-family: "Helvetica Neue", Arial, sans-serif; font-size: 10.5px; line-height: 1.5; }
+  .lh .lh-addr b { font-weight: 700; }
+</style>
+<div class="lh">
+  <div class="lh-brand">
+    <% if (logo) { %><img src="<%= logo %>" alt=""><% } %>
+    <div class="lh-lockup">
+      <div class="lh-row">
+        <div class="lh-name">IIGL</div>
+        <div class="lh-sub">Institute of International<br>Gemological Laboratory</div>
+      </div>
+      <div class="lh-iso">AN ISO CERTIFIED 9001:2015 COMPANY</div>
+    </div>
+  </div>
+  <div class="lh-addr">
+    <%= t(company.address) || 'Door No. 201, 2nd Floor, 75 Topping Road' %><br>
+    <%= cityLine || 'Kolkata - 700 071 (WB)' %><br>
+    Customer Care No. : <%= t(company.phone) || '+91 9570702777' %><br>
+    Email : <%= t(company.email) || 'support@iigl.org' %><br>
+    <% if (t(company.gstin)) { %>GSTIN : <%= t(company.gstin) %><br><% } %>
+    <b><%= t(company.website) || 'https://www.iigl.org' %></b>
+  </div>
+</div>

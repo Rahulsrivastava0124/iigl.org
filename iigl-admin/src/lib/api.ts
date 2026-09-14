@@ -227,6 +227,8 @@ export interface Lab {
   fullname: string;
   /** The person behind the laboratory, where the account records one. */
   owner_name: string | null;
+  /** The uploaded logo's stored path, where one was uploaded. */
+  company_logo?: string | null;
   mobile: string;
   city: string | null;
   commision: number | null;

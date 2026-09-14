@@ -12,7 +12,9 @@ import { messageOf, useAuth } from '../lib/auth';
 import MonthCalendar, { monthRange, thisMonth } from '../components/MonthCalendar';
 import { ConfirmDialog, Panel, StateChip } from '../components/ui';
 import MessageCompose from '../components/MessageCompose';
-import StaffInbox, { type StaffMessage } from '../components/StaffInbox';
+import ChatInbox from '../components/ChatInbox';
+import RequestIcon from '@mui/icons-material/EventNoteOutlined';
+import type { StaffMessage } from '../components/StaffInbox';
 import MessageIcon from '@mui/icons-material/ForumOutlined';
 import { absentDay, absentFrom, attendanceDay, shiftOf, dayKey, holidayDay, hours, isOpen, minutesWorked, noteDay, noteOn, noteTip, time, weekOffDay, weekOffDays } from '../lib/attendance';
 import type { Day, Holiday } from '../lib/attendance';
@@ -370,18 +372,28 @@ export default function Attendance() {
             page, not here. */}
         {!canReadOthers && (
           <Grid size={{ xs: 12, lg: 5 }}>
-            {/* Their own: what they asked for, and whether it has been dealt
-                with. Marking one done is their employer's, so it is shown as a
-                state rather than offered as a control. */}
-            <StaffInbox
-              from={user?.id ?? 0}
-              conversation
-              own
+            {/*
+              Their chat with their employer, here beside the month rather than
+              on a page of its own: most of what an employee writes is about a
+              day on this calendar. Only their own employer — the API sends an
+              employee's message nowhere else.
+
+              Plain messages are typed in the box. A leave request or a punch
+              correction names a day and waits for an answer, so it keeps its
+              own form behind Request.
+            */}
+            <ChatInbox
+              party="employer"
+              multi={false}
               title="Messages"
-              onCompose={() => setWriting(true)}
-              /* The calendar marks the days these are about, from the same rows
-                 rather than a second read of the same list. */
+              emptyText="Nobody employs this account, so there is nobody to write to."
+              height={560}
               onRows={setMessages}
+              actions={
+                <Button size="small" startIcon={<RequestIcon />} onClick={() => setWriting(true)}>
+                  Request
+                </Button>
+              }
             />
           </Grid>
         )}

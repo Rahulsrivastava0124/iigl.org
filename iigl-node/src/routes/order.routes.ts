@@ -2,6 +2,7 @@ import { sql } from 'kysely';
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
+import { requirePermission } from '../services/permission.service.js';
 import { conflict, notFound } from '../lib/errors.js';
 import { paged, readPage, readSearch } from '../lib/paginate.js';
 import { assertLabOwnership, requireLabScope, ROLE } from '../middleware/auth.js';
@@ -245,6 +246,7 @@ orderRoutes.get(
 
 orderRoutes.post(
   '/',
+  requirePermission('product_collection', 'create'),
   wrap(async (req, res) => {
     const id = await createOrder(req.user, validateOrderInput(req.body));
     res.status(201).json({ data: { id } });
@@ -287,6 +289,7 @@ orderRoutes.post(
  */
 orderRoutes.delete(
   '/:id',
+  requirePermission('product_collection', 'delete'),
   numericId,
   wrap(async (req, res) => {
     const orderId = Number(req.params.id);
@@ -353,6 +356,7 @@ orderRoutes.delete(
 
 orderRoutes.delete(
   '/items/:id',
+  requirePermission('product_collection', 'delete'),
   numericId,
   wrap(async (req, res) => {
     const item = await liveJoined(
@@ -411,6 +415,7 @@ orderRoutes.get(
  */
 orderRoutes.post(
   '/:id/settle',
+  requirePermission('product_collection', 'update'),
   numericId,
   wrap(async (req, res) => {
     const order = await live(db.selectFrom('orders'))
@@ -436,6 +441,7 @@ orderRoutes.post(
 /** Hand the order over. The money is settled separately, and may be owing. */
 orderRoutes.post(
   '/:id/deliver',
+  requirePermission('product_collection', 'update'),
   numericId,
   wrap(async (req, res) => {
     const order = await live(db.selectFrom('orders'))
@@ -452,6 +458,7 @@ orderRoutes.post(
 /** Amend an order. Items already certified cannot be removed or shrunk below what was issued. */
 orderRoutes.patch(
   '/:id',
+  requirePermission('product_collection', 'update'),
   numericId,
   wrap(async (req, res) => {
     const order = await live(db.selectFrom('orders'))

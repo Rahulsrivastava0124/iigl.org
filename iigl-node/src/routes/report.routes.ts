@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
+import { requirePermission } from '../services/permission.service.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { paged, readPage, readSearch } from '../lib/paginate.js';
 import { assertLabOwnership, requireLabScope, ROLE } from '../middleware/auth.js';
@@ -18,6 +19,7 @@ reportRoutes.use(requireLabScope);
 
 reportRoutes.get(
   '/',
+  requirePermission('report', 'view'),
   wrap(async (req, res) => {
     const p = readPage(req);
     // Filters on reports.order_no, which holds the order id.
@@ -105,6 +107,7 @@ reportRoutes.get(
 
 reportRoutes.get(
   '/:id',
+  requirePermission('report', 'view'),
   numericId,
   wrap(async (req, res) => {
     const row = await db
@@ -122,6 +125,7 @@ reportRoutes.get(
 
 reportRoutes.post(
   '/',
+  requirePermission('report', 'create'),
   wrap(async (req, res) => {
     const id = await createReport(req.user, validateReportInput(req.body));
     const row = await db
@@ -152,6 +156,7 @@ reportRoutes.post(
  */
 reportRoutes.patch(
   '/visibility',
+  requirePermission('report', 'update'),
   wrap(async (req, res) => {
     const b = req.body ?? {};
     const ids = Array.isArray(b.report_ids) ? b.report_ids.map(Number) : [];
@@ -186,6 +191,7 @@ reportRoutes.patch(
 
 reportRoutes.patch(
   '/:id',
+  requirePermission('report', 'update'),
   numericId,
   wrap(async (req, res) => {
     const row = await db

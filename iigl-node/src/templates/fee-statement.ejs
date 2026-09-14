@@ -30,22 +30,13 @@
 
   header {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: flex-start;
+    margin-top: 5mm;
+    padding-bottom: 4mm;
     border-bottom: 1px solid #e6e8ee;
-    padding-bottom: 5mm;
   }
 
-  /* The mark and the name, as they sit on the site: no asset carries the two
-     together, so the wordmark is type beside the image. */
-  .brand { display: flex; align-items: center; gap: 4mm; }
-  .brand img { height: 16mm; }
-  .brand .wordmark {
-    font-family: "Playfair Display", Georgia, serif;
-    font-size: 22pt;
-    letter-spacing: 0.02em;
-    color: #061948;
-  }
 
   .title { text-align: right; }
   .title h1 {
@@ -126,11 +117,9 @@
 </style>
 </head>
 <body>
+  <%- letterhead %>
+
   <header>
-    <div class="brand">
-      <% if (logo) { %><img src="<%= logo %>" alt=""><% } %>
-      <div class="wordmark">IIGL</div>
-    </div>
 
     <div class="title">
       <h1>Course Fee Statement</h1>

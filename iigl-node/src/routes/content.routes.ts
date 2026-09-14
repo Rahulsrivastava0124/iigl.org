@@ -4,6 +4,8 @@ import { wrap } from '../lib/async.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { requireAdmin } from '../middleware/auth.js';
 import { numericId } from '../middleware/params.js';
+import { headOfficeOr } from '../services/permission.service.js';
+import { locateInBackground, needsLookup, storedPoint } from '../services/geocode.service.js';
 
 /**
  * Content management for the public site: articles, branch city pages,
@@ -17,7 +19,9 @@ import { numericId } from '../middleware/params.js';
  * related.
  */
 export const contentRoutes = Router();
-contentRoutes.use(requireAdmin);
+// Guarded route by route: each tab is a permission head office can give one
+// of its employees (see PERMISSION_SCOPE), and the roles below stay head
+// office's alone.
 
 const text = (v: unknown): string | null => (v == null || v === '' ? null : String(v));
 
@@ -55,6 +59,7 @@ const BLOG_FIELDS = [
 
 contentRoutes.post(
   '/blogs',
+  headOfficeOr('website_blog', 'create'),
   wrap(async (req, res) => {
     const name = required(req.body?.page_name, 'Title');
     const slug = slugify(String(req.body?.slug ?? name));
@@ -85,6 +90,7 @@ contentRoutes.post(
 
 contentRoutes.patch(
   '/blogs/:id',
+  headOfficeOr('website_blog', 'update'),
   numericId,
   wrap(async (req, res) => {
     const id = Number(req.params.id);
@@ -124,6 +130,7 @@ const BRANCH_FIELDS = [
 
 contentRoutes.post(
   '/branches',
+  headOfficeOr('website_home', 'create'),
   wrap(async (req, res) => {
     const city = required(req.body?.city, 'City');
     const pageURL = slugify(String(req.body?.pageURL ?? city));
@@ -150,6 +157,7 @@ contentRoutes.post(
 
 contentRoutes.patch(
   '/branches/:id',
+  headOfficeOr('website_home', 'update'),
   numericId,
   wrap(async (req, res) => {
     const id = Number(req.params.id);
@@ -175,6 +183,125 @@ contentRoutes.patch(
   }),
 );
 
+// ------------------------------------------------- laboratories as branches
+
+/**
+ * Every laboratory, with whether the website lists it as a branch.
+ *
+ * The website's Branches section is the laboratory network, so this is the
+ * list head office ticks on and off. Inactive laboratories are listed too: a
+ * closed one that is still ticked is exactly what somebody needs to see here.
+ */
+contentRoutes.get(
+  '/branch-laboratories',
+  headOfficeOr('website_home', 'view'),
+  wrap(async (_req, res) => {
+    const rows = await db
+      .selectFrom('users')
+      .select([
+        'id', 'empid', 'fullname', 'city', 'state', 'is_active', 'show_on_site', 'company_logo',
+        'geo_latitude', 'geo_longitude', 'geo_query', 'geo_at',
+      ])
+      .where('role_id', '=', 2)
+      .orderBy('fullname')
+      .execute();
+
+    // Any ticked laboratory not yet placed is looked up behind this answer; the
+    // panel shows it as pending and has the result on its next load.
+    locateInBackground(rows.filter((r) => r.show_on_site));
+
+    res.json({
+      data: rows.map((lab) => {
+        const { geo_latitude, geo_longitude, geo_query, geo_at, ...r } = lab;
+        void geo_latitude; void geo_longitude; void geo_query; void geo_at;
+        /*
+          How the website will place it:
+            city     found — the pin is on the city
+            state    the city was not found (often a spelling) — the middle of the state
+            pending  not looked up yet
+            none     no city on the record
+        */
+        const map_location = !(r.city ?? '').trim()
+          ? 'none'
+          : storedPoint(lab)
+            ? 'city'
+            : needsLookup(lab)
+              ? 'pending'
+              : 'state';
+        return { ...r, map_location };
+      }),
+    });
+  }),
+);
+
+/** Shows or hides one laboratory on the website. */
+contentRoutes.patch(
+  '/branch-laboratories/:id',
+  headOfficeOr('website_home', 'update'),
+  numericId,
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    if (typeof req.body?.show_on_site !== 'boolean') throw badRequest('show_on_site must be true or false.');
+    const row = await db
+      .selectFrom('users')
+      .select(['id', 'city', 'state', 'geo_latitude', 'geo_longitude', 'geo_query', 'geo_at'])
+      .where('id', '=', id)
+      .where('role_id', '=', 2)
+      .executeTakeFirst();
+    if (!row) throw notFound('Laboratory not found.');
+    await db
+      .updateTable('users')
+      .set({ show_on_site: req.body.show_on_site ? 1 : 0, updated_at: new Date() })
+      .where('id', '=', id)
+      .execute();
+    // Placed now, so the pin is ready before anybody opens the website.
+    if (req.body.show_on_site) locateInBackground([row]);
+    res.json({ ok: true });
+  }),
+);
+
+// ------------------------------------------- registered customers on the site
+
+/**
+ * Every registered customer, with whether the website's Our Registered
+ * Customers section lists it. Listed by default (migration 060); head office
+ * unticks the ones to keep off the site.
+ */
+contentRoutes.get(
+  '/website-customers',
+  headOfficeOr('website_home', 'view'),
+  wrap(async (_req, res) => {
+    const rows = await db
+      .selectFrom('registered_customers as c')
+      .leftJoin('users as l', 'l.id', 'c.lab_id')
+      .select([
+        'c.id', 'c.company_name', 'c.owner_name', 'c.mobile', 'c.area', 'c.city', 'c.state', 'c.logo',
+        'c.show_on_site', 'l.fullname as laboratory',
+      ])
+      .orderBy('c.company_name')
+      .execute();
+    res.json({ data: rows });
+  }),
+);
+
+contentRoutes.patch(
+  '/website-customers/:id',
+  headOfficeOr('website_home', 'update'),
+  numericId,
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    if (typeof req.body?.show_on_site !== 'boolean') throw badRequest('show_on_site must be true or false.');
+    const row = await db.selectFrom('registered_customers').select('id').where('id', '=', id).executeTakeFirst();
+    if (!row) throw notFound('Customer not found.');
+    await db
+      .updateTable('registered_customers')
+      .set({ show_on_site: req.body.show_on_site ? 1 : 0, updated_at: new Date() })
+      .where('id', '=', id)
+      .execute();
+    res.json({ ok: true });
+  }),
+);
+
 // ------------------------------------------------------------ report types
 
 const REPORT_TYPE_FIELDS = [
@@ -184,6 +311,7 @@ const REPORT_TYPE_FIELDS = [
 
 contentRoutes.post(
   '/report-types',
+  headOfficeOr('website_report', 'create'),
   wrap(async (req, res) => {
     const values: Record<string, unknown> = {
       name: required(req.body?.name, 'Name'),
@@ -201,6 +329,7 @@ contentRoutes.post(
 
 contentRoutes.patch(
   '/report-types/:id',
+  headOfficeOr('website_report', 'update'),
   numericId,
   wrap(async (req, res) => {
     const id = Number(req.params.id);
@@ -222,6 +351,7 @@ contentRoutes.patch(
 
 contentRoutes.get(
   '/banners',
+  headOfficeOr('website_home', 'view'),
   wrap(async (_req, res) => {
     res.json({ data: await db.selectFrom('banners').selectAll().orderBy('id').execute() });
   }),
@@ -229,6 +359,7 @@ contentRoutes.get(
 
 contentRoutes.post(
   '/banners',
+  headOfficeOr('website_home', 'create'),
   wrap(async (req, res) => {
     const result = await db
       .insertInto('banners')
@@ -249,6 +380,7 @@ contentRoutes.post(
 
 contentRoutes.patch(
   '/banners/:id',
+  headOfficeOr('website_home', 'update'),
   numericId,
   wrap(async (req, res) => {
     const id = Number(req.params.id);
@@ -269,6 +401,7 @@ contentRoutes.patch(
 
 contentRoutes.delete(
   '/banners/:id',
+  headOfficeOr('website_home', 'delete'),
   numericId,
   wrap(async (req, res) => {
     const id = Number(req.params.id);
@@ -287,6 +420,7 @@ const PAGE_FIELDS = [
 
 contentRoutes.get(
   '/pages',
+  headOfficeOr('website_home', 'view'),
   wrap(async (_req, res) => {
     const rows = await db
       .selectFrom('websites')
@@ -299,6 +433,7 @@ contentRoutes.get(
 
 contentRoutes.patch(
   '/pages/:id',
+  headOfficeOr('website_home', 'update'),
   numericId,
   wrap(async (req, res) => {
     const id = Number(req.params.id);
@@ -323,6 +458,7 @@ contentRoutes.patch(
 
 contentRoutes.post(
   '/roles',
+  requireAdmin,
   wrap(async (req, res) => {
     const name = required(req.body?.role_name, 'Role name');
     const clash = await db
@@ -346,6 +482,7 @@ contentRoutes.post(
 
 contentRoutes.patch(
   '/roles/:id',
+  requireAdmin,
   numericId,
   wrap(async (req, res) => {
     const id = Number(req.params.id);

@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Grid, TextField, Typography } from '@mui/material';
+import { Grid, Typography } from '@mui/material';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { Dialog } from './ui';
+import { Dialog, TimeField } from './ui';
 import { useToast } from './Toast';
 import { isOpen, stamp, time, type Day } from '../lib/attendance';
 
@@ -85,14 +85,7 @@ export default function AttendanceEdit({
 
   const field = (label: string, value: string, set: (v: string) => void, help?: string) => (
     <Grid size={{ xs: 6 }}>
-      <TextField
-        label={label}
-        type="time"
-        value={value}
-        onChange={(e) => set(e.target.value)}
-        helperText={help}
-        slotProps={{ inputLabel: { shrink: true } }}
-      />
+      <TimeField label={label} value={value} onChange={set} helperText={help} />
     </Grid>
   );
 

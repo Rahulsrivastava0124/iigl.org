@@ -1,4 +1,5 @@
 import { ArrowRight, Star } from 'lucide-react';
+import SectionLabel from '../SectionLabel.jsx';
 
 /**
  * What clients say.
@@ -54,13 +55,9 @@ export default function ReviewsSection() {
     <section id="reviews" className="bg-white px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[1390px]">
         <div className="mx-auto max-w-[820px] text-center">
-          <p className="m-0 text-[12px] font-medium uppercase tracking-[0.14em] text-[#bd7724]">
-            Our Reviews
-          </p>
-          {/* The one rule the design asks for, under the label rather than the heading. */}
-          <span aria-hidden className="mx-auto mt-3 block h-px w-14 bg-[#d58a2b]/70" />
+          <SectionLabel>Our Reviews</SectionLabel>
 
-          <h2 className="m-0 mt-5 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[28px]">
+          <h2 className="m-0 mt-4 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[28px]">
             What Our Clients Say
           </h2>
 

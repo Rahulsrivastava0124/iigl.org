@@ -1,5 +1,6 @@
 import { ArrowRight, BookOpen, Gem, Presentation, UsersRound } from 'lucide-react';
 import educationUrl from '../../../Assets/education.png';
+import SectionLabel from '../SectionLabel.jsx';
 
 const educationHighlights = [
   {
@@ -38,12 +39,9 @@ export default function EducationSection() {
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.98)_0%,rgba(255,255,255,0.96)_40%,rgba(255,255,255,0.18)_58%,rgba(255,255,255,0)_100%)] max-[1180px]:bg-[linear-gradient(90deg,rgba(255,255,255,0.98)_0%,rgba(255,255,255,0.92)_52%,rgba(255,255,255,0.34)_100%)] max-[760px]:hidden" />
 
           <div className="relative z-10 w-[min(51%,640px)] px-8 py-11 sm:px-10 lg:px-12 max-[1180px]:w-[min(60%,660px)] max-[760px]:w-full max-[760px]:px-6 max-[760px]:py-7">
-            <div className="flex items-center gap-4 text-[#bd7724]">
-              <p className="m-0 text-[12px] font-medium uppercase leading-none tracking-[0.08em]">IIGL Education</p>
-              <Gem className="h-[24px] w-[24px]" strokeWidth={1.5} />
-            </div>
+            <SectionLabel align="start">IIGL Education</SectionLabel>
 
-            <h2 className="mt-7 max-w-[560px] font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[760px]:mt-6 max-[760px]:text-[28px]">
+            <h2 className="mt-4 max-w-[560px] font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[760px]:text-[28px]">
               Your Journey to Excellence Starts Here
             </h2>
 

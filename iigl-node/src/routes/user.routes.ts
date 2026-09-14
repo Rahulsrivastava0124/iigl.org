@@ -18,7 +18,7 @@ import type { SessionUser } from '../lib/session.js';
 type Exec = Kysely<DB>;
 import { wrap } from '../lib/async.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
-import { accruedByLab, TRANSACTION_TYPE } from '../services/commission.service.js';
+import { accruedByLab, expenseWallets, TRANSACTION_TYPE } from '../services/commission.service.js';
 import {
   franchiseAgreementHtml,
   franchiseAgreementPdf,
@@ -40,9 +40,17 @@ import {
 } from '../middleware/auth.js';
 import { empidTaken, nextEmpid, prefixFor } from '../lib/empid.js';
 import {
+  ABILITIES,
+  PERMISSION_SCOPE,
+  appliesTo,
+  can,
   effectivePermissionsFor,
+  headOfficeOr,
   invalidatePermissions,
   isActionType,
+  isHeadOffice,
+  staffKindOf,
+  staffKindOfUser,
   userPermissionsFor,
 } from '../services/permission.service.js';
 import { numericId, numericParams } from '../middleware/params.js';
@@ -222,7 +230,12 @@ userRoutes.get(
   requireLabScope,
   wrap(async (req, res) => {
     let q = db.selectFrom('users').select(PUBLIC_COLUMNS).where('role_id', '=', ROLE.LAB);
-    if (req.user.roleId !== ROLE.SUPER) q = q.where('id', '=', req.user.labId);
+    // Head office sees every laboratory, and so does one of its employees who
+    // holds Laboratories → View. A laboratory, and its staff, see their own.
+    const network =
+      req.user.roleId === ROLE.SUPER ||
+      ((await isHeadOffice(req.user)) && (await can(req.user, 'laboratory', 'view')));
+    if (!network) q = q.where('id', '=', req.user.labId);
     const rows = await q.orderBy('fullname').execute();
 
     // How many people work under each. `employements.parent_id` is the answer
@@ -300,7 +313,7 @@ userRoutes.get(
 userRoutes.get(
   '/laboratories/:id/detail',
   numericId,
-  requireAdmin,
+  headOfficeOr('laboratory', 'view'),
   wrap(async (req, res) => {
     const labId = Number(req.params.id);
     const RECENT = 50;
@@ -471,7 +484,7 @@ userRoutes.get(
 userRoutes.get(
   '/laboratories/:id/agreement',
   numericId,
-  requireAdmin,
+  headOfficeOr('laboratory', 'view'),
   wrap(async (req, res) => {
     const labId = Number(req.params.id);
 
@@ -503,7 +516,7 @@ userRoutes.get(
 userRoutes.get(
   '/laboratories/:id/registration',
   numericId,
-  requireAdmin,
+  headOfficeOr('laboratory', 'view'),
   wrap(async (req, res) => {
     const labId = Number(req.params.id);
 
@@ -1018,10 +1031,18 @@ userRoutes.get(
     const present = new Set(punched.map((a) => Number(a.empId)));
     const leave = new Set(onLeave.map((m) => Number(m.from_user)));
 
+    /*
+      Each employee's expense float, so their employer can see at a glance who
+      is running low and who is owed money out of their own pocket. One grouped
+      read over the page, for the same reason attendance is.
+    */
+    const floats = await expenseWallets(ids);
+
     res.json(
       paged(
         rows.map((r) => ({
           ...r,
+          expense_wallet: floats.get(Number(r.id)) ?? null,
           today: present.has(Number(r.id))
             ? 'present'
             : leave.has(Number(r.id))
@@ -1238,7 +1259,7 @@ function documentsPatch(given: unknown): string | null | undefined {
   if (given === undefined) return undefined;
   if (given === null || given === '') return null;
   if (!Array.isArray(given)) throw badRequest('Documents must be a list.');
-  if (given.length > 25) throw badRequest('A laboratory can hold at most 25 documents.');
+  if (given.length > 25) throw badRequest('An account can hold at most 25 documents.');
 
   const cleaned = given.map((entry, i) => {
     const at = `Document ${i + 1}`;
@@ -1959,70 +1980,83 @@ userRoutes.post(
 );
 
 /**
- * Who may grant permissions to whom.
+ * Who may set an employee's permissions, and which permissions that employee
+ * can have.
  *
- * Head office may grant to anybody. A laboratory may grant only to its own
- * staff — and to nobody senior to itself, because a laboratory handing out
- * head-office rights is the one shape this feature must not take.
+ *   head office     any employee — its own staff, and any laboratory's.
+ *   a laboratory    its own staff only.
+ *   anybody else    nobody. The routes take `requireEmployer`; this refuses
+ *                   again for the one case that guard cannot see, a person
+ *                   acting on themselves.
+ *
+ * An employee could once reach these routes, and their "laboratory" is their
+ * employer — so they passed the "works for your laboratory" test for every
+ * colleague and for themselves, and could grant themselves anything.
+ *
+ * Only employees have permissions: head office and laboratory accounts are
+ * unconditional, and somebody employed by nobody has no side for a permission
+ * to belong to. The kind returned is the side the employee is on, which
+ * decides the rows their permission screen lists.
  */
 async function assertMayGrant(user: Express.Request['user'], targetId: number) {
-  const target = await db
-    .selectFrom('users')
-    .select(['id', 'role_id'])
-    .where('id', '=', targetId)
-    .executeTakeFirst();
-  if (!target) throw notFound('User not found.');
-
-  if (user.roleId === ROLE.SUPER) return target;
-
-  if (isSenior(target.role_id) && Number(target.id) !== user.id) {
-    throw forbidden('You cannot change the permissions of a laboratory or of head office.');
+  if (Number(targetId) === Number(user.id)) {
+    throw forbidden('Nobody can change their own permissions.');
+  }
+  if (user.roleId !== ROLE.SUPER && user.roleId !== ROLE.LAB) {
+    throw forbidden('Only head office or the laboratory that employs someone can change their permissions.');
   }
 
-  // The employment names its employer by empid; `user.labId` is a user id. The
-  // join is what makes the two comparable, and an unresolvable parent fails the
-  // check rather than passing it.
-  const employment = await db
-    .selectFrom('employements')
-    .innerJoin('users as employer', 'employer.empid', 'employements.parent_id')
-    .select('employer.id as employer_id')
-    .where('employements.user_id', '=', targetId)
-    .where('employements.is_working', '=', '1')
-    .executeTakeFirst();
+  const target = await staffKindOfUser(targetId);
+  const exists = await db.selectFrom('users').select('id').where('id', '=', targetId).executeTakeFirst();
+  if (!exists) throw notFound('User not found.');
 
-  const mine = Number(user.labId ?? user.id);
-  if (!employment || Number(employment.employer_id) !== mine) {
+  if (isSenior(target.roleId)) {
+    throw forbidden('Head office and laboratory accounts are not limited by permissions.');
+  }
+  if (!target.kind || target.employerId === null) {
+    throw badRequest('This person works for nobody, so there is no side for a permission to belong to. Employ them first.');
+  }
+  if (user.roleId === ROLE.LAB && target.employerId !== Number(user.id)) {
     throw forbidden('That person does not work for your laboratory.');
   }
 
-  return target;
+  return { id: targetId, role_id: target.roleId, kind: target.kind };
 }
 
 // ------------------------------------------------------------ permissions
 
 /**
- * What one person may actually do: their own grants, then their role.
+ * What one person may actually do: their own grants, then their role, limited
+ * to the permissions their side can have.
  *
- * This is the same resolution `can()` uses on every request, so a screen that
- * hides a control on this answer hides exactly what the API would refuse.
+ * The same resolution `can()` uses on every request, so a screen that hides a
+ * control on this answer hides exactly what the API would refuse.
+ * `staff_of` says whose employee they are — `head_office`, `laboratory`, or
+ * null for head office and laboratory accounts — which is what the panel
+ * decides their menu from.
  */
 userRoutes.get(
   '/me/permissions',
   requireLabScope,
   wrap(async (req, res) => {
-    res.json({ data: await effectivePermissionsFor(req.user) });
+    res.json({ data: await effectivePermissionsFor(req.user), staff_of: await staffKindOf(req.user) });
   }),
 );
 
-/** What one person has been granted individually, one row per action. */
+/**
+ * One employee's own permissions: every permission their side can have, each
+ * with what it opens (`description`), which boxes mean anything
+ * (`abilities`), and `own` — whether they hold a row of their own for it.
+ * `staff_of` is their side.
+ */
 userRoutes.get(
   '/:id/permissions',
   numericParams('id'),
-  requireLabScope,
+  requireEmployer,
   wrap(async (req, res) => {
     const userId = Number(req.params.id);
-    await assertMayGrant(req.user, userId);
-    res.json({ data: await userPermissionsFor(userId) });
+    const target = await assertMayGrant(req.user, userId);
+    res.json({ data: await userPermissionsFor(userId, target.kind), staff_of: target.kind });
   }),
 );
 
@@ -2038,13 +2072,20 @@ userRoutes.get(
 userRoutes.put(
   '/:id/permissions',
   numericParams('id'),
-  requireLabScope,
+  requireEmployer,
   wrap(async (req, res) => {
     const userId = Number(req.params.id);
-    await assertMayGrant(req.user, userId);
+    const target = await assertMayGrant(req.user, userId);
 
     const action = String(req.body?.action_type ?? '');
     if (!(await isActionType(action))) throw badRequest(`${action} is not a permission.`);
+    if (!appliesTo(action, target.kind)) {
+      throw badRequest(
+        target.kind === 'laboratory'
+          ? `${action} is not a permission a laboratory’s employee can have.`
+          : `${action} is not a permission a head office employee can have.`,
+      );
+    }
 
     const set = {
       view: req.body?.view ? 1 : 0,
@@ -2052,6 +2093,8 @@ userRoutes.put(
       update: req.body?.update ? 1 : 0,
       delete: req.body?.delete ? 1 : 0,
     };
+    // A flag the permission does not use is stored off.
+    for (const a of ABILITIES) if (!PERMISSION_SCOPE[action].abilities.includes(a)) set[a] = 0;
 
     const existing = await db
       .selectFrom('user_permissions')
@@ -2089,7 +2132,7 @@ userRoutes.put(
 userRoutes.delete(
   '/:id/permissions/:action',
   numericParams('id'),
-  requireLabScope,
+  requireEmployer,
   wrap(async (req, res) => {
     const userId = Number(req.params.id);
     await assertMayGrant(req.user, userId);

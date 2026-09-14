@@ -22,15 +22,14 @@
     print-color-adjust: exact;
   }
 
+  /* Under the letterhead now, which carries the company and its rule: this
+     row is only what the document is, its number and its date. */
   header {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: flex-start;
-    border-bottom: 2px solid #061948;
-    padding-bottom: 6mm;
+    margin-top: 5mm;
   }
-
-  header img { height: 18mm; }
 
   .title { text-align: right; }
   .title h1 {
@@ -109,8 +108,9 @@
 </head>
 <body>
 
+<%- letterhead %>
+
 <header>
-  <% if (logo) { %><img src="<%= logo %>" alt="IIGL"><% } %>
   <div class="title">
     <h1><%= kind === 'invoice' ? 'Tax Invoice' : 'Receipt' %></h1>
     <div class="no"><%= order.order_no %></div>

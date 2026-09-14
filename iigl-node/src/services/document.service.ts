@@ -9,6 +9,8 @@ import { env } from '../lib/env.js';
 import { asDataUri } from './card.service.js';
 import { setting } from './settings.service.js';
 import { quoteOrder } from './pricing.service.js';
+import { ledgerFor, type LedgerScope } from './commission.service.js';
+import { letterheadHtml } from './letterhead.service.js';
 
 /**
  * Order paperwork: the receipt handed over when items are taken in, and the
@@ -104,9 +106,9 @@ export async function orderDocumentHtml(orderId: number, kind: DocumentKind): Pr
     };
   }
 
-  const [logo, signature] = await Promise.all([
-    asDataUri('public/card-logo.png'),
+  const [signature, letterhead] = await Promise.all([
     asDataUri(lab?.signature ?? null),
+    letterheadHtml(),
   ]);
 
   return ejs.renderFile(
@@ -116,7 +118,7 @@ export async function orderDocumentHtml(orderId: number, kind: DocumentKind): Pr
       order,
       lab,
       signature,
-      logo,
+      letterhead,
       totals,
       money,
       verifyBase: env.publicSiteUrl,
@@ -230,7 +232,7 @@ export async function franchiseeFormHtml(
       company,
       photo,
       signature,
-      // The round mark, not `brandLogo()`.
+      // The round mark.
       //
       // That helper prefers the legacy `card-logo.png`, which is the wide
       // banner lockup used on certificates — printed in this letterhead it
@@ -394,19 +396,8 @@ const rupees = (v: number | string | null | undefined) =>
   `₹ ${Number(v ?? 0).toLocaleString('en-IN')}`;
 
 /**
- * The IIGL mark, as a data URI.
- *
- * The cards read their logo out of the Laravel public/ directory, which is
- * fine on a server that has one and leaves a hole in the sheet anywhere that
- * does not — a checkout without the legacy tree, or a host where
- * LEGACY_PUBLIC_ROOT is not set. So the statement prefers that asset and falls
- * back to a copy that ships beside the templates: paperwork that goes to a
- * student should not depend on a directory outside this repository.
- */
-/**
  * The round IIGL mark on its own, for a letterhead that sets the company name
- * in type beside it. `brandLogo` below is the certificate's banner lockup and
- * is a different image for a different job.
+ * in type beside it.
  */
 async function brandMark(): Promise<string> {
   const file = path.resolve(
@@ -416,16 +407,6 @@ async function brandMark(): Promise<string> {
   return `data:image/png;base64,${(await readFile(file)).toString('base64')}`;
 }
 
-async function brandLogo(): Promise<string> {
-  const legacy = await asDataUri('public/card-logo.png');
-  if (legacy) return legacy;
-
-  const file = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    '../templates/iigl-logo.png',
-  );
-  return `data:image/png;base64,${(await readFile(file)).toString('base64')}`;
-}
 
 /**
  * One enrolment's fee, as a sheet that can be handed over.
@@ -473,7 +454,7 @@ export async function feeStatementHtml(enrolmentId: number, issuedBy: string): P
         Number(enrolment.fee_paid ?? 0),
       issuedBy,
       issuedAt: new Date().toLocaleString('en-IN'),
-      logo: await brandLogo(),
+      letterhead: await letterheadHtml(),
       money: rupees,
     },
     { async: true },
@@ -639,12 +620,101 @@ export async function payslipHtml(empId: number, month: string): Promise<string>
     // nothing has been paid against yet.
     daysPresent: payments[0]?.days_present ?? 0,
     salary: payments[0]?.salary_month ?? posting?.salary ?? 0,
-    logo: await asDataUri('public/card-logo.png'),
+    letterhead: await letterheadHtml(),
   });
 }
 
 export async function payslipPdf(empId: number, month: string): Promise<Buffer> {
   const html = await payslipHtml(empId, month);
+  const { renderHtmlToPdf } = await import('./pdf.service.js');
+  return renderHtmlToPdf(html, { format: 'A4' });
+}
+
+/* ----------------------------------------------------- account statement */
+
+const ACCOUNT_STATEMENT_TEMPLATE = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../templates/account-statement.ejs',
+);
+
+/**
+ * One wallet over a period, as a sheet to keep.
+ *
+ * The same ledger the Wallet screen reads — the same scope, the same opening
+ * balance folded from everything before the period — with every row in the
+ * period rather than a page of them. A statement that stopped at fifty rows
+ * would total to a figure the rows on it do not add up to.
+ */
+export type StatementFilter = { status: number | null; q: string | null; mode: string | null };
+
+export async function accountStatementHtml(
+  userId: number,
+  scope: LedgerScope,
+  period: { from: string | null; to: string | null },
+  issuedBy: string,
+  filter: StatementFilter = { status: null, q: null, mode: null },
+): Promise<string> {
+  const holder = await db
+    .selectFrom('users')
+    .select(['id', 'fullname', 'empid'])
+    .where('id', '=', userId)
+    .executeTakeFirst();
+  if (!holder) throw notFound('Account not found.');
+
+  /*
+    The statement is the list as it is filtered on screen — status, reference and
+    way of paying as well as wallet and dates.
+
+    Filtered, it cannot also claim that opening plus credit less debit is the
+    closing balance: the rows left out moved the balance too. So a filtered
+    sheet totals what it prints — the approved credit and debit among the listed
+    rows — keeps opening and closing as the account's real balances for the
+    period, and drops the line promising
+    that the figures reconcile.
+  */
+  const page = await ledgerFor(userId, Number.MAX_SAFE_INTEGER, 0, scope, period, filter);
+  const filtered = filter.status !== null || !!filter.q || !!filter.mode;
+
+  const listed = { credit: 0, debit: 0 };
+  for (const e of page.entries) {
+    if (e.status !== 1) continue;
+    if (e.direction === 'credit') listed.credit += e.amount;
+    else listed.debit += e.amount;
+  }
+
+
+  const letterhead = await letterheadHtml();
+
+  return ejs.renderFile(
+    ACCOUNT_STATEMENT_TEMPLATE,
+    {
+      holder,
+      page,
+      // Oldest first on paper: read down the page the way the balance was built.
+      lines: [...page.entries].reverse(),
+      from: period.from,
+      to: period.to,
+      filtered,
+      listedCredit: Math.round(listed.credit * 100) / 100,
+      listedDebit: Math.round(listed.debit * 100) / 100,
+      walletLabel:
+        scope === 'expense' ? 'Expense wallet statement' : scope === 'collection' ? 'Wallet statement' : 'Account statement',
+      issuedBy,
+      issuedOn: new Date().toISOString().slice(0, 10),
+      letterhead,
+    },
+    { async: true },
+  );
+}
+
+export async function accountStatementPdf(
+  userId: number,
+  scope: LedgerScope,
+  period: { from: string | null; to: string | null },
+  issuedBy: string,
+  filter: StatementFilter = { status: null, q: null, mode: null },
+): Promise<Buffer> {
+  const html = await accountStatementHtml(userId, scope, period, issuedBy, filter);
   const { renderHtmlToPdf } = await import('./pdf.service.js');
   return renderHtmlToPdf(html, { format: 'A4' });
 }

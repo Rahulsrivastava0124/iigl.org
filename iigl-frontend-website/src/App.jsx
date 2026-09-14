@@ -7,6 +7,7 @@ import IiglReportsSection from './components/sections/IiglReportsSection.jsx';
 import OurBranchesSection from './components/sections/OurBranchesSection.jsx';
 import Navbar from './components/sections/Navbar.jsx';
 import ReportCategoriesSection from './components/sections/ReportCategoriesSection.jsx';
+import RegisteredCustomersSection from './components/sections/RegisteredCustomersSection.jsx';
 import ReviewsSection from './components/sections/ReviewsSection.jsx';
 import WhyChooseSection from './components/sections/WhyChooseSection.jsx';
 
@@ -36,6 +37,7 @@ export default function App() {
       <EducationSection />
       <AvailableCoursesSection />
       <ReviewsSection />
+      <RegisteredCustomersSection />
       <OurBranchesSection />
       <FaqSection />
       <Footer />

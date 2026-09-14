@@ -16,6 +16,7 @@ import {
   TableRow,
   TextField,
   Tooltip,
+  Typography,
 } from '@mui/material';
 import MessageCompose from '../components/MessageCompose';
 import MessageIcon from '@mui/icons-material/ForumOutlined';
@@ -25,8 +26,9 @@ import { useFetch, useDebounced } from '../lib/useFetch';
 import { usePermissions } from '../lib/permissions';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import { hint, ConfirmDialog, DateField, IconAction, DEFAULT_PER_PAGE, Pager, Panel, PasswordField, RowActions, SearchField, StateChip, TableFrame, todayState } from '../components/ui';
+import { hint, money, ConfirmDialog, Dialog, DateField, TimeField, IconAction, DEFAULT_PER_PAGE, Pager, Panel, PasswordField, RowActions, SearchField, StateChip, TableFrame, todayState } from '../components/ui';
 import FileField from '../components/FileField';
+import DocumentAssets, { type LabDocument } from '../components/DocumentAssets';
 import type { Paged } from '../lib/api';
 import { hoursBetween } from '../lib/attendance';
 import { isLab, isSuper, ROLE } from '../lib/portal';
@@ -36,6 +38,7 @@ import ViewIcon from '@mui/icons-material/VisibilityOutlined';
 
 import PermissionsIcon from '@mui/icons-material/KeyOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
+import FloatIcon from '@mui/icons-material/LocalAtmOutlined';
 import ActiveIcon from '@mui/icons-material/ToggleOnOutlined';
 import InactiveIcon from '@mui/icons-material/ToggleOffOutlined';
 import UserPermissions from '../components/UserPermissions';
@@ -68,6 +71,17 @@ interface StaffRow {
    * punched in. Read off attendance and the leave requests naming today.
    */
   today: string | null;
+  /**
+   * Their expense float: what this employer sent them to spend, less what they
+   * have spent. Negative when they paid for something out of their own pocket
+   * and are owed it.
+   */
+  expense_wallet: {
+    transfers_in: number;
+    expenses: number;
+    pending_expenses: number;
+    balance: number;
+  } | null;
 }
 
 /** Get initials from name (first letter of first and last name) */
@@ -108,6 +122,12 @@ interface Account {
   account_no: string | null;
   profile_photo: string | null;
   adhar_photo: string | null;
+  /**
+   * Any other papers kept on file for this person — a PAN card, a
+   * certificate, an offer letter — each with a title. The same attachment
+   * list a laboratory has, in the same `users.documents` column.
+   */
+  documents: LabDocument[] | null;
   role_id: number | null;
   employment: {
     joining_date: string;
@@ -152,6 +172,7 @@ const BLANK_ACCOUNT = {
   password: '',
   profile_photo: '',
   adhar_photo: '',
+  documents: [] as LabDocument[],
   // These two are the employment's, not the account's. They are on this form
   // because somebody hiring a person settles the pay and the start date in the
   // same breath as the name, and the API takes them on the create.
@@ -273,6 +294,7 @@ export default function Staff() {
         account_no: a.account_no ?? '',
         profile_photo: a.profile_photo ?? '',
         adhar_photo: a.adhar_photo ?? '',
+        documents: Array.isArray(a.documents) ? a.documents : [],
         role_id: a.role_id === null ? '' : String(a.role_id),
         salary:
           a.employment && Number(a.employment.salary) > 0
@@ -299,6 +321,39 @@ export default function Staff() {
   /** Whose individual permissions are open. */
   const [granting, setGranting] = useState<StaffRow | null>(null);
 
+  /*
+    Sending somebody a float.
+
+    The only transfer that goes down, from the employer to its employee, and so
+    the only way anything reaches an expense wallet. Recorded as approved: the
+    employer is the one who would approve it, so there is nobody to wait for.
+  */
+  const [floating, setFloating] = useState<StaffRow | null>(null);
+  const [floatAmount, setFloatAmount] = useState('');
+  const [floatMode, setFloatMode] = useState('cash');
+  const [floatNote, setFloatNote] = useState('');
+  const [floatBusy, setFloatBusy] = useState(false);
+
+  const sendFloat = async () => {
+    if (!floating) return;
+    setFloatBusy(true);
+    try {
+      await api.post('/transactions/float', {
+        user_id: floating.id,
+        amount: Number(floatAmount),
+        pay_mode: floatMode,
+        remark: floatNote.trim() || null,
+      });
+      toast.ok(`${money(Number(floatAmount))} sent to ${floating.fullname}.`);
+      setFloating(null);
+      reload();
+    } catch (e) {
+      toast.error(messageOf(e));
+    } finally {
+      setFloatBusy(false);
+    }
+  };
+
   const [busy, setBusy] = useState(false);
 
   const saveAccount = async () => {
@@ -321,6 +376,7 @@ export default function Staff() {
           adhar_no: form.adhar_no || null,
           adhar_photo: form.adhar_photo || null,
           pan_no: form.pan_no || null,
+          documents: form.documents,
           role_id: form.role_id === '' ? null : Number(form.role_id),
         });
         // The salary and the joining date are on the employment, which is a
@@ -371,6 +427,7 @@ export default function Staff() {
           adhar_no: form.adhar_no || null,
           adhar_photo: form.adhar_photo || null,
           pan_no: form.pan_no || null,
+          documents: form.documents,
         });
         toast.ok(`${form.fullname} added.`);
       }
@@ -650,19 +707,15 @@ export default function Staff() {
                   >
                     <Stack spacing={2} sx={{ p: 2, width: 320 }}>
                       <Stack direction="row" spacing={1.5}>
-                        <TextField
+                        <TimeField
                           label="Start time"
-                          type="time"
                           value={form.shift_start}
-                          onChange={(e) => setForm({ ...form, shift_start: e.target.value })}
-                          slotProps={{ inputLabel: { shrink: true }, htmlInput: { step: 60 } }}
+                          onChange={(v) => setForm({ ...form, shift_start: v })}
                         />
-                        <TextField
+                        <TimeField
                           label="End time"
-                          type="time"
                           value={form.shift_end}
-                          onChange={(e) => setForm({ ...form, shift_end: e.target.value })}
-                          slotProps={{ inputLabel: { shrink: true }, htmlInput: { step: 60 } }}
+                          onChange={(v) => setForm({ ...form, shift_end: v })}
                         />
                       </Stack>
                       <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
@@ -683,12 +736,10 @@ export default function Staff() {
                   </Popover>
                 </Grid>
                 <Grid size={{ xs: 12, md: 4 }}>
-                  <TextField
+                  <TimeField
                     label="Late Marking Time"
-                    type="time"
                     value={form.late_after}
-                    onChange={(e) => setForm({ ...form, late_after: e.target.value })}
-                    slotProps={{ inputLabel: { shrink: true }, htmlInput: { step: 60 } }}
+                    onChange={(v) => setForm({ ...form, late_after: v })}
                     helperText="A punch-in after this is marked late."
                   />
                 </Grid>
@@ -727,7 +778,10 @@ export default function Staff() {
                     <Grid size={{ xs: 6, sm: 4, md: 2 }}>
                       <FileField
                         label="Aadhar Photo"
-                        bucket="documentation"
+                        /* Not `documentation`, which only head office may write:
+                           a laboratory filing its own employee's card was
+                           refused. The staff bucket is the employer's. */
+                        bucket="staff_document"
                         value={form.adhar_photo}
                         onChange={(url) => setForm({ ...form, adhar_photo: url ?? '' })}
                         /* Portrait, like every other document scan in the panel:
@@ -736,6 +790,19 @@ export default function Staff() {
                            square photo field beside it. */
                         ratio="3 / 4"
                         fill
+                      />
+                    </Grid>
+                    {/*
+                      Everything else on file for this person, as many as are
+                      needed, each with a title: a PAN card, a certificate, an
+                      offer letter. The same editor a laboratory's form uses, so
+                      the two behave alike.
+                    */}
+                    <Grid size={12}>
+                      <DocumentAssets
+                        bucket="staff_document"
+                        value={form.documents}
+                        onChange={(documents) => setForm({ ...form, documents })}
                       />
                     </Grid>
                   </Grid>
@@ -820,6 +887,7 @@ export default function Staff() {
                 <TableCell>Role</TableCell>
                 <TableCell>Joined</TableCell>
                 <TableCell>Today</TableCell>
+                <TableCell align="right">Expense wallet</TableCell>
                 <TableCell>Active</TableCell>
                 <TableCell />
               </TableRow>
@@ -856,6 +924,28 @@ export default function Staff() {
                   <TableCell>{s.joining_date}</TableCell>
                   <TableCell>
                     <StateChip {...todayState(s.today)} />
+                  </TableCell>
+                  {/*
+                    Red below zero: that employee paid for something themselves
+                    and is owed it, which is the one case here that needs the
+                    employer to do something. Pending expenses are named beside
+                    it rather than taken off, because nobody has approved them.
+                  */}
+                  <TableCell align="right" className="tabular" sx={{ whiteSpace: 'nowrap' }}>
+                    <Box
+                      component="span"
+                      sx={{
+                        fontWeight: 600,
+                        color: (s.expense_wallet?.balance ?? 0) < 0 ? 'error.main' : 'text.primary',
+                      }}
+                    >
+                      {money(s.expense_wallet?.balance ?? 0)}
+                    </Box>
+                    {(s.expense_wallet?.pending_expenses ?? 0) > 0 && (
+                      <Typography variant="caption" color="warning.main" sx={{ display: 'block' }}>
+                        {money(s.expense_wallet?.pending_expenses)} pending
+                      </Typography>
+                    )}
                   </TableCell>
                   <TableCell>
                     {/*
@@ -900,6 +990,18 @@ export default function Staff() {
                         overflow
                         onClick={() => setWriting([s.id])}
                       />
+                      {employer && (
+                        <IconAction
+                          label="Send expense float"
+                          icon={FloatIcon}
+                          onClick={() => {
+                            setFloating(s);
+                            setFloatAmount('');
+                            setFloatMode('cash');
+                            setFloatNote('');
+                          }}
+                        />
+                      )}
                       {mayEdit && (
                         <>
                           <IconAction
@@ -907,9 +1009,13 @@ export default function Staff() {
                             icon={EditIcon}
                             onClick={() => edit(s)}
                           />
+                          {/* Behind the three dots with Delete: permissions
+                              are set once when somebody joins, not reached for
+                              the way View, the float and Edit are. */}
                           <IconAction
                             label="Permissions"
                             icon={PermissionsIcon}
+                            overflow
                             onClick={() => setGranting(s)}
                           />
                           {/* In the overflow, not the row: deleting an account
@@ -948,6 +1054,54 @@ export default function Staff() {
         onConfirm={confirmDelete}
         busy={deletingBusy}
       />
+
+      {floating && (
+        <Dialog
+          title={`Send float to ${floating.fullname}`}
+          onClose={() => setFloating(null)}
+          onSubmit={sendFloat}
+          submitLabel="Send"
+          busy={floatBusy}
+          disabled={!(Number(floatAmount) > 0)}
+        >
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            Their expense wallet is <strong>{money(floating.expense_wallet?.balance ?? 0)}</strong>.
+            This is money for them to spend on the laboratory&apos;s behalf, and it is recorded as
+            received straight away.
+          </Typography>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ alignItems: 'flex-start' }}>
+            <TextField
+              label="Amount"
+              type="number"
+              value={floatAmount}
+              onChange={(e) => setFloatAmount(e.target.value)}
+              slotProps={{ htmlInput: { min: 0 } }}
+              required
+              autoFocus
+              sx={{ flex: 1 }}
+            />
+            <TextField
+              select
+              label="Payment mode"
+              value={floatMode}
+              onChange={(e) => setFloatMode(e.target.value)}
+              sx={{ flex: 1 }}
+            >
+              <MenuItem value="cash">Cash</MenuItem>
+              <MenuItem value="upi">UPI</MenuItem>
+              <MenuItem value="bank">Bank transfer</MenuItem>
+            </TextField>
+          </Stack>
+          <TextField
+            label="Note"
+            placeholder="Optional"
+            value={floatNote}
+            onChange={(e) => setFloatNote(e.target.value)}
+            fullWidth
+            sx={{ mt: 2 }}
+          />
+        </Dialog>
+      )}
 
       {granting && <UserPermissions user={granting} onClose={() => setGranting(null)} />}
       {writing && (

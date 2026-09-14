@@ -2,15 +2,20 @@ import { useState } from 'react';
 import { Box, Button, Grid, MenuItem, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
 import ExpenseIcon from '@mui/icons-material/ReceiptOutlined';
 import SendIcon from '@mui/icons-material/SendOutlined';
-import { useFetch } from '../lib/useFetch';
+import DownloadIcon from '@mui/icons-material/FileDownloadOutlined';
+import { useDebounced, useFetch } from '../lib/useFetch';
+import dayjs from 'dayjs';
 import { api } from '../lib/api';
+import { apiUrl } from '../lib/config';
 import { messageOf, useAuth } from '../lib/auth';
 import { isLab, isSuper } from '../lib/portal';
-import { Dialog, Notice, DEFAULT_PER_PAGE, Pager, Panel, hint, money } from '../components/ui';
+import { DateField, Dialog, DEFAULT_PER_PAGE, Pager, Panel, SearchField, hint, money } from '../components/ui';
+import DateRangeField from '../components/DateRangeField';
 import { StatementsTable } from '../components/Statements';
 import { useToast } from '../components/Toast';
 import FileField from '../components/FileField';
 import { LedgerTable, LedgerTotals, type LedgerPage } from '../components/Ledger';
+import { PAY_MODE_LABEL } from '../lib/payModes';
 
 /**
  * The wallet: this account's money, and every movement that made it.
@@ -45,8 +50,168 @@ export default function Wallet() {
    */
   const [tab, setTab] = useState<'account' | 'statements'>('account');
 
+  /** The row an accept or decline is in flight for, on any list on this page. */
+  const [deciding, setDeciding] = useState<number | null>(null);
+
+  /*
+    An employee holds two kinds of money, and they are kept apart.
+
+    Collection is what customers paid them, which belongs to the laboratory and
+    is handed on. Expense is the float the laboratory sent them to spend on its
+    behalf. An expense comes out of the float, never out of a customer's money,
+    and the float is never handed back as if it were takings.
+
+    Read before the ledger fetch because the ledger is scoped by it.
+  */
+  const staff = Boolean(user) && !isSuper(user) && !isLab(user);
+  const [wallet, setWallet] = useState<'collection' | 'expense'>('collection');
+
+  /*
+    The statement's period: a month, or any two dates.
+
+    One pair of dates underneath, and the month is a quick way to fill both —
+    choosing Sep 2026 sets the 1st to the 30th. Typing a date by hand clears the
+    month, because a month showing over a range it no longer describes is the
+    control lying about the list below it.
+
+    The running balance does not restart at the top of the period. The API
+    folds everything earlier into an opening balance, so each row still shows
+    where the account really stood that day.
+  */
+  const [month, setMonth] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const period = from !== '' || to !== '';
+
+  const pickMonth = (m: string) => {
+    setMonth(m);
+    if (m === '') {
+      setFrom('');
+      setTo('');
+    } else {
+      const first = dayjs(`${m}-01`);
+      setFrom(first.format('YYYY-MM-DD'));
+      setTo(first.endOf('month').format('YYYY-MM-DD'));
+    }
+    setPage(1);
+  };
+  const pickRange = (nextFrom: string, nextTo: string) => {
+    setMonth('');
+    setFrom(nextFrom);
+    setTo(nextTo);
+    setPage(1);
+  };
+
+  /*
+    Which rows to list: one status, and a reference to look for.
+
+    They narrow the list and nothing else. The running balance on each row and
+    the totals above are still the whole period's, so a row found by its
+    reference still says where the account really stood after it.
+  */
+  const [status, setStatus] = useState('');
+  const [mode, setMode] = useState('');
+  const [refFilter, setRefFilter] = useState('');
+  const refTerm = useDebounced(refFilter);
+
+  const filters = (
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+      <DateField month label="Month" value={month} onChange={pickMonth} sx={{ width: 150 }} />
+      <DateRangeField label="From – To" from={from} to={to} onChange={pickRange} width={250} />
+      <TextField
+        select
+        label="Status"
+        value={status}
+        onChange={(e) => {
+          setStatus(e.target.value);
+          setPage(1);
+        }}
+        sx={{ width: 130 }}
+        slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+      >
+        <MenuItem value="">All</MenuItem>
+        <MenuItem value="0">Pending</MenuItem>
+        <MenuItem value="1">Approved</MenuItem>
+        <MenuItem value="2">Declined</MenuItem>
+      </TextField>
+      <TextField
+        select
+        label="Payment type"
+        value={mode}
+        onChange={(e) => {
+          setMode(e.target.value);
+          setPage(1);
+        }}
+        sx={{ width: 150 }}
+        slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+      >
+        <MenuItem value="">All</MenuItem>
+        {Object.entries(PAY_MODE_LABEL).map(([value, label]) => (
+          <MenuItem key={value} value={value}>
+            {label}
+          </MenuItem>
+        ))}
+      </TextField>
+      <SearchField
+        placeholder="Reference"
+        value={refFilter}
+        onChange={(v) => {
+          setRefFilter(v);
+          setPage(1);
+        }}
+        width={150}
+      />
+      {(period || status !== '' || mode !== '' || refFilter !== '') && (
+        <Button
+          size="small"
+          onClick={() => {
+            pickMonth('');
+            setStatus('');
+            setMode('');
+            setRefFilter('');
+          }}
+        >
+          Clear
+        </Button>
+      )}
+      {/*
+        The statement for exactly what is on screen: this wallet, these dates,
+        and the status, payment type and reference filters as they stand. Every
+        matching row, not the page being looked at. A filtered sheet says which
+        filters made it and totals only what it prints.
+
+        Opened rather than fetched, so the browser's own viewer shows it and
+        prints or saves it from there.
+      */}
+      <Button
+        variant="contained"
+        startIcon={<DownloadIcon />}
+        onClick={() => {
+          const q = new URLSearchParams();
+          if (staff) q.set('scope', wallet);
+          if (from) q.set('from', from);
+          if (to) q.set('to', to);
+          if (status !== '') q.set('status', status);
+          if (mode !== '') q.set('mode', mode);
+          if (refTerm.trim()) q.set('q', refTerm.trim());
+          const qs = q.toString();
+          window.open(apiUrl(`/transactions/ledger/statement${qs ? `?${qs}` : ''}`), '_blank', 'noopener');
+        }}
+        // The same 40px as the small fields beside it, so the row reads as one
+        // strip of controls rather than a button sitting short of them.
+        sx={{ whiteSpace: 'nowrap', height: 40, flexShrink: 0 }}
+      >
+        Statement
+      </Button>
+    </Stack>
+  );
+
   const ledger = useFetch<{ data: LedgerPage }>(
-    `/transactions/ledger?page=${page}&per_page=${perPage}`,
+    `/transactions/ledger?page=${page}&per_page=${perPage}${staff ? `&scope=${wallet}` : ''}` +
+      `${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}` +
+      `${status !== '' ? `&status=${status}` : ''}` +
+      `${mode !== '' ? `&mode=${mode}` : ''}` +
+      `${refTerm.trim() ? `&q=${encodeURIComponent(refTerm.trim())}` : ''}`,
   );
   const account = ledger.data?.data;
   const entries = account?.entries ?? [];
@@ -54,14 +219,29 @@ export default function Wallet() {
 
   /*
     What an employee does with the money they hold: spend some of it on the
-    laboratory's behalf, or hand it in. Both wait for the employer's approval,
-    and neither moves the balance until they have it.
+    laboratory's behalf, or hand it in. A transfer waits for the employer's
+    approval; an expense does not, because it is spent from the float the
+    employer already handed over.
 
     Staff only. Head office and a laboratory have no employer to hand money to
     or to approve an expense — a laboratory pays head office through Commission.
   */
   const toast = useToast();
-  const isStaff = Boolean(user) && !isSuper(user) && !isLab(user);
+
+  const decide = async (id: number, next: 1 | 2) => {
+    setDeciding(id);
+    try {
+      await api.post(`/transactions/${id}/status`, { status: next });
+      toast.ok(next === 1 ? 'Accepted.' : 'Declined.');
+      // A decision moves the balance, so the account is read again.
+      ledger.reload();
+    } catch (err) {
+      toast.error(messageOf(err));
+    } finally {
+      setDeciding(null);
+    }
+  };
+  const isStaff = staff;
 
   type Kind = 'expense' | 'transfer';
   const [kind, setKind] = useState<Kind | null>(null);
@@ -99,7 +279,7 @@ export default function Wallet() {
       };
       if (kind === 'expense') {
         await api.post('/transactions/expense', body);
-        toast.ok('Expense sent for approval.');
+        toast.ok('Expense recorded.');
       } else {
         await api.post('/transactions', body);
         toast.ok('Sent to your laboratory for approval.');
@@ -126,19 +306,9 @@ export default function Wallet() {
         </Stack>
       )}
 
-      <LedgerTotals account={account} />
-
-      {/*
-        Pending money is money nobody has agreed to yet: it is on the statement,
-        marked, but it has not moved the balance. Said once, here, rather than
-        left for somebody to work out from a chip in a row.
-      */}
-      {(account?.pending_out ?? 0) > 0 && (
-        <Notice kind="warn" sx={{ mb: 2 }}>
-          {(account?.pending_out ?? 0).toLocaleString('en-IN')} is awaiting approval and has not
-          been taken off the balance.
-        </Notice>
-      )}
+      {/* The statements tab has periods of its own; the totals describe the
+          account, so they follow its filter only while the account is shown. */}
+      <LedgerTotals account={account} period={period} />
 
       {/*
         The laboratory's two halves, behind tabs and with no panel heading over
@@ -147,7 +317,71 @@ export default function Wallet() {
         header row when nothing is passed for it, so the strip lands flush at
         the top edge and carries its own padding.
       */}
-      {isLab(user) ? (
+      {staff ? (
+        <Panel
+          count={ledger.loading ? 'Loading…' : `${total.toLocaleString()} movements`}
+          footer={
+            <Pager
+              meta={{
+                page,
+                per_page: perPage,
+                total,
+                total_pages: Math.max(1, Math.ceil(total / perPage)),
+              }}
+              onPage={setPage}
+              onPerPage={(n) => {
+                setPerPage(n);
+                setPage(1);
+              }}
+            />
+          }
+        >
+          {/*
+            One row: the tabs on the left, the period on the right. They were a
+            header row of filters over a row of tabs, which spent two bands of
+            the screen on what is one question — which wallet, over which days.
+            The rule moves from the tabs to the row, so it still runs the full
+            width under both.
+          */}
+          <Stack
+            direction="row"
+            spacing={2}
+            sx={{
+              px: 2,
+              py: 0.75,
+              mb: 1,
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              rowGap: 1,
+              borderBottom: 1,
+              borderColor: 'divider',
+            }}
+          >
+            <Tabs
+              value={wallet}
+              onChange={(_, v) => {
+                setWallet(v);
+                setPage(1);
+              }}
+            >
+              <Tab value="collection" label="Wallet" />
+              {/* Only floats received and expenses recorded: the admin's
+                  transfers to this person, and what was spent from them. */}
+              <Tab value="expense" label="Expense wallet" />
+            </Tabs>
+            {filters}
+          </Stack>
+          <LedgerTable
+            entries={entries}
+            loading={ledger.loading}
+            error={ledger.error}
+            bare
+            onDecide={decide}
+            deciding={deciding}
+          />
+        </Panel>
+      ) : isLab(user) ? (
         <Panel
           count={
             tab === 'account'
@@ -176,31 +410,52 @@ export default function Wallet() {
             ) : undefined
           }
         >
-          <Tabs
-            value={tab}
-            onChange={(_, v) => setTab(v)}
-            sx={{ px: 2, mb: 1, borderBottom: 1, borderColor: 'divider' }}
+          {/* One row, as the employee's: tabs left, period right. */}
+          <Stack
+            direction="row"
+            spacing={2}
+            sx={{
+              px: 2,
+              py: 0.75,
+              mb: 1,
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              rowGap: 1,
+              borderBottom: 1,
+              borderColor: 'divider',
+            }}
           >
-            <Tab value="account" label="Your account" />
-            <Tab value="statements" label="Commission statements" />
-          </Tabs>
+            <Tabs value={tab} onChange={(_, v) => setTab(v)}>
+              <Tab value="account" label="Your account" />
+              <Tab value="statements" label="Commission statements" />
+            </Tabs>
+            {/* Only over the account: the commission statements are periods
+                already, billed one at a time, and a date range over them would
+                be a second way to choose the same thing. */}
+            {tab === 'account' && filters}
+          </Stack>
 
-          {tab === 'account' ? (
+          {tab === 'account' && (
             <LedgerTable
               entries={entries}
               loading={ledger.loading}
               error={ledger.error}
               bare
+              onDecide={decide}
+              deciding={deciding}
             />
-          ) : (
-            <StatementsTable />
           )}
+          {tab === 'statements' && <StatementsTable />}
         </Panel>
       ) : (
         <LedgerTable
           entries={entries}
           loading={ledger.loading}
           error={ledger.error}
+          onDecide={decide}
+          deciding={deciding}
+          actions={filters}
           title={isSuper(user) ? 'Head office account' : 'Your account'}
           count={ledger.loading ? 'Loading…' : `${total.toLocaleString()} movements`}
           footer={
@@ -234,7 +489,7 @@ export default function Wallet() {
           title={kind === 'expense' ? 'Add Expense' : 'Send to Laboratory'}
           onClose={() => setKind(null)}
           onSubmit={submit}
-          submitLabel={kind === 'expense' ? 'Send for approval' : 'Send'}
+          submitLabel={kind === 'expense' ? 'Add expense' : 'Send'}
           busy={busy}
           disabled={!ready}
         >

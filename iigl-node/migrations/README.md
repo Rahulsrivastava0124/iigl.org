@@ -70,6 +70,13 @@ Every file also carries its own rollback in a comment at the bottom.
 | `049-lab-statements.sql` | **applied** | `users.statement_period` (months per commission statement, default 1), `statement_grace_days` (default 15) and `statement_from` (first month billed; NULL reads as September 2026 or the month the laboratory was added). A statement unpaid past its grace days locks certificate generation until head office approves a payment. Additive; nothing before September 2026 is billed. |
 | `052-remove-certificate-settings.sql` | **applied** | Deletes the `certificate.prefix` (was `iigl`) and `certificate.counter_width` (was `2`) rows from `settings`. Settings › Certificate is removed and new certificates are numbered in the ported twelve-digit form again. Issued certificates keep their numbers. The rollback re-inserts the two values. |
 | `053-registered-customer-lab-optional.sql` | **applied** | `registered_customers.lab_id` may be NULL: head office's own registered customer, filed under no laboratory. Laboratories still see only their own. The (lab_id, mobile) unique key stays; the API checks NULL-lab mobiles for repeats itself. Loosens a constraint only. |
+| `054-message-attachment.sql` | **applied** | A message may carry one attached image or PDF. |
+| `055-laboratory-show-on-site.sql` | **applied** | `users.show_on_site`: which laboratories the website lists as branches. Default 0 — nothing is published until head office ticks it. |
+| `056-laboratory-site-details.sql` | **applied, then reversed by 057** | Hand-entered description and map coordinates per laboratory. Not wanted. |
+| `057-drop-laboratory-site-details.sql` | **applied** | Drops 056's three columns; every row was NULL. |
+| `058-laboratory-geocode.sql` | **applied** | `users.geo_*`: the laboratory's city, looked up by `geocode.service.ts` and kept, with the city/state it was found for so an edit triggers a new lookup. |
+| `059-registered-customer-website.sql` | **applied** | `registered_customers.area`, `state`, `logo` and `show_on_site` for the website's Our Registered Customers section. Default 0 — no customer is published until head office ticks it. |
+| `060-registered-customers-shown-by-default.sql` | **applied** | Reverses 059's default: registered customers are listed on the website unless unticked in Website Setup › Customers. Default 1, and every existing customer (one row) switched on. |
 
 ---
 

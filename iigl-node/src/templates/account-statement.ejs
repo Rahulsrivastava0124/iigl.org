@@ -1,0 +1,138 @@
+<%
+/*
+  An account statement: every movement through one wallet over a period, with
+  where the account stood before it and after it.
+
+  Every figure is the ledger's own — the same walk, the same opening balance
+  folded from everything earlier — read through ledgerFor rather than worked
+  out again here, so the sheet and the Wallet screen cannot disagree about a
+  rupee.
+
+  Printed oldest first. The screen reads newest first because the latest
+  movement is the one somebody is checking; a statement is read down the page
+  the way the balance was built.
+*/
+const money = (v) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const v = (x) => (x == null || x === '' ? '' : String(x));
+const day = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '');
+const statusLabel = (s) => ({ 0: 'Pending', 1: 'Approved', 2: 'Declined' }[Number(s)] ?? '');
+const modeLabel = (m) => ({ cash: 'Cash', upi: 'UPI', card: 'Card', bank: 'Bank transfer', cheque: 'Cheque' }[String(m ?? '').trim().toLowerCase()] ?? v(m));
+const periodText = from && to ? `${from} to ${to}` : from ? `From ${from}` : to ? `Up to ${to}` : 'All movements';
+%>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Account statement — <%= v(holder.fullname) %> — <%= periodText %></title>
+  <style>
+    /* Half the margin at the top: the title band opens the page, and a full
+       margin above it left a blank strip before anything was said. */
+    @page { size: A4; margin: 7mm 14mm 14mm; }
+    * { box-sizing: border-box; }
+    body { font: 11.5px/1.5 "Helvetica Neue", Arial, sans-serif; color: #101828; margin: 0; }
+    /* The document title band and who it is for, under the letterhead. */
+    .doctitle { margin: 0 0 12px; text-align: center; }
+    .lh { margin-bottom: 14px !important; }
+    .doctitle span { display: inline-block; padding: 4px 22px; background: #0b1f4b; color: #fff;
+      font-size: 13px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; margin-bottom: 14px;
+      padding: 9px 12px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 11px; }
+    .meta div { display: flex; gap: 6px; }
+    .meta .k { color: #667085; min-width: 92px; }
+    .meta .v { font-weight: 600; }
+    .meta .right { justify-content: flex-end; }
+    .sign { margin-top: 36px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 10.5px; color: #667085; }
+    .sign .line { border-top: 1px solid #98a2b3; padding-top: 4px; min-width: 180px; text-align: center; color: #101828; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+    .box { border: 1px solid #d0d5dd; border-radius: 6px; padding: 8px 10px; }
+    .box .k { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: #667085; }
+    .box .v { font-size: 14px; font-weight: 600; margin-top: 2px; }
+    .neg { color: #97293f; }
+    table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    th, td { border: 1px solid #d0d5dd; padding: 5px 7px; text-align: left; vertical-align: top; }
+    th { background: #f2f4f7; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    /* A date, a reference and a way of paying are each one token: broken over two
+       lines they read as two values. */
+    tbody td:nth-child(1), tbody td:nth-child(2), tbody td:nth-child(6) { white-space: nowrap; }
+    td.credit { color: #1f6b4b; font-weight: 600; }
+    td.debit { color: #97293f; font-weight: 600; }
+    td.bal { font-weight: 700; }
+    tr.muted td { color: #98a2b3; }
+    tr.edge td { background: #f9fafb; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <%/* The title first, above the letterhead: it is what the sheet is, and the
+       first words anybody reads off a statement pulled from a pile. */%>
+  <div class="doctitle"><span><%= walletLabel %></span></div>
+
+  <%- letterhead %>
+
+  <div class="meta">
+    <div><span class="k">Account holder</span><span class="v"><%= v(holder.fullname) %></span></div>
+    <div class="right"><span class="k">Statement date</span><span class="v"><%= issuedOn %></span></div>
+    <div><span class="k">Account ID</span><span class="v"><%= v(holder.empid) || '#' + holder.id %></span></div>
+    <div class="right"><span class="k">Period</span><span class="v"><%= periodText %></span></div>
+  </div>
+
+  <div class="grid">
+    <div class="box"><div class="k">Opening balance</div><div class="v <%= page.opening_balance < 0 ? 'neg' : '' %>">&#8377; <%= money(page.opening_balance) %></div></div>
+    <div class="box"><div class="k"><%= filtered ? 'Credit listed' : 'Total credit' %></div><div class="v">&#8377; <%= money(filtered ? listedCredit : page.credit_total) %></div></div>
+    <div class="box"><div class="k"><%= filtered ? 'Debit listed' : 'Total debit' %></div><div class="v">&#8377; <%= money(filtered ? listedDebit : page.debit_total) %></div></div>
+    <div class="box"><div class="k">Closing balance</div><div class="v <%= page.balance < 0 ? 'neg' : '' %>">&#8377; <%= money(page.balance) %></div></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Reference</th>
+        <th>Party</th>
+        <th>Remark</th>
+        <th>Status</th>
+        <th>Payment</th>
+        <th class="num">Credit</th>
+        <th class="num">Debit</th>
+        <th class="num">Balance</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="edge">
+        <td colspan="8">Opening balance</td>
+        <td class="num">&#8377; <%= money(page.opening_balance) %></td>
+      </tr>
+      <% if (lines.length === 0) { %>
+        <tr><td colspan="9" style="text-align:center; color:#667085; padding: 14px;"><%= filtered ? 'No movement in the period matches these filters.' : 'Nothing moved through this account in the period.' %></td></tr>
+      <% } %>
+      <% lines.forEach((e) => { %>
+        <%/* A pending or declined row is on the statement so the history is
+             complete, but it did not move the balance, and is greyed to say so. */%>
+        <tr class="<%= Number(e.status) === 1 ? '' : 'muted' %>">
+          <td><%= day(e.date) %></td>
+          <td><%= v(e.transaction_no) || '#' + e.id %></td>
+          <td><%= e.type === 'expense' ? 'Expense' : v(e.counterparty_name) || (e.counterparty > 0 ? '#' + e.counterparty : 'Customer') %></td>
+          <td><%= v(e.remark) || v(e.type) %></td>
+          <td><%= statusLabel(e.status) %></td>
+          <td><%= modeLabel(e.pay_mode) %></td>
+          <td class="num <%= e.direction === 'credit' ? 'credit' : '' %>"><%= e.direction === 'credit' ? money(e.amount) : '' %></td>
+          <td class="num <%= e.direction === 'debit' ? 'debit' : '' %>"><%= e.direction === 'debit' ? money(e.amount) : '' %></td>
+          <td class="num bal"><%= money(e.balance) %></td>
+        </tr>
+      <% }) %>
+      <tr class="edge">
+        <td colspan="6"><%= filtered ? 'Totals of the rows listed, and closing balance' : 'Totals and closing balance' %></td>
+        <td class="num">&#8377; <%= money(filtered ? listedCredit : page.credit_total) %></td>
+        <td class="num">&#8377; <%= money(filtered ? listedDebit : page.debit_total) %></td>
+        <td class="num">&#8377; <%= money(page.balance) %></td>
+      </tr>
+    </tbody>
+  </table>
+
+
+  <div class="sign">
+    <div>Generated by <%= v(issuedBy) %> on <%= issuedOn %>. This is a computer-generated statement.</div>
+    <div class="line">Authorised signatory</div>
+  </div>
+</body>
+</html>

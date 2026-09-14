@@ -462,8 +462,13 @@ export interface LedgerEntry {
  */
 export interface LedgerPage {
   entries: LedgerEntry[];
+  /** Approved money in, within the period asked for (the whole history when none). */
   credit_total: number;
+  /** Approved money out, within the period. */
   debit_total: number;
+  /** Where the account stood before the period began. Zero with no period. */
+  opening_balance: number;
+  /** Where it stood at the end of the period: opening, plus credit, less debit. */
   balance: number;
   pending_out: number;
   pending_in: number;
@@ -472,10 +477,103 @@ export interface LedgerPage {
   limit: number;
 }
 
+export interface ExpenseWallet {
+  /** Approved floats received from the employer. */
+  transfers_in: number;
+  /** Approved expenses recorded against it. */
+  expenses: number;
+  /** Expenses recorded and not yet approved. Not taken off the balance. */
+  pending_expenses: number;
+  /**
+   * transfers_in less expenses. **May be negative**: an employee who paid a
+   * courier out of their own pocket is owed it, and a negative float says so
+   * rather than the expense being refused and pushed off the books.
+   */
+  balance: number;
+}
+
+/**
+ * Each employee's expense float, in one query however many are asked for.
+ *
+ * Grouped over the rows rather than read per person, because the staff list
+ * shows a column of these and a query per row is the shape that made the
+ * Laravel order list slow.
+ */
+export async function expenseWallets(userIds: number[]): Promise<Map<number, ExpenseWallet>> {
+  const out = new Map<number, ExpenseWallet>();
+  for (const id of userIds) out.set(id, { transfers_in: 0, expenses: 0, pending_expenses: 0, balance: 0 });
+  if (userIds.length === 0) return out;
+
+  const [floats, spent] = await Promise.all([
+    db
+      .selectFrom('transactions')
+      .select(['received_by as uid', db.fn.sum<number>('amount').as('total')])
+      .where('transaction_type', '=', TRANSACTION_TYPE.WALLET_TRANSFER)
+      .where('received_by', 'in', userIds)
+      .where('status', '=', STATUS.APPROVED)
+      .groupBy('received_by')
+      .execute(),
+    db
+      .selectFrom('transactions')
+      .select(['send_by as uid', 'status', db.fn.sum<number>('amount').as('total')])
+      .where('transaction_type', '=', TRANSACTION_TYPE.EXPENSE)
+      .where('send_by', 'in', userIds)
+      .where('status', 'in', [STATUS.APPROVED, STATUS.PENDING])
+      .groupBy(['send_by', 'status'])
+      .execute(),
+  ]);
+
+  for (const r of floats) {
+    const w = out.get(Number(r.uid));
+    if (w) w.transfers_in = round2(Number(r.total ?? 0));
+  }
+  for (const r of spent) {
+    const w = out.get(Number(r.uid));
+    if (!w) continue;
+    if (Number(r.status) === STATUS.APPROVED) w.expenses = round2(Number(r.total ?? 0));
+    else w.pending_expenses = round2(Number(r.total ?? 0));
+  }
+  for (const w of out.values()) w.balance = round2(w.transfers_in - w.expenses);
+  return out;
+}
+
+/**
+ * Which of an employee's two wallets a ledger is read over.
+ *
+ * An employee holds two kinds of money that must not mix. **Collection** is
+ * what customers paid them at the counter: it belongs to the laboratory and is
+ * handed on. **Expense** is a float the laboratory sent them to spend on its
+ * behalf — fuel, a courier — and what they spend comes out of that, not out of
+ * a customer's money.
+ *
+ * `all` is the account as one statement, which is what a laboratory and head
+ * office have: they hold no float, so there is nothing to separate.
+ */
+export type LedgerScope = 'all' | 'collection' | 'expense';
+
+/** A float sent to this user: a transfer they received. */
+const isFloatIn = (row: { transaction_type: string | null; received_by: number | string }, userId: number) =>
+  row.transaction_type === TRANSACTION_TYPE.WALLET_TRANSFER && Number(row.received_by) === userId;
+
+/** An expense this user recorded against their float. */
+const isExpenseOut = (row: { transaction_type: string | null; send_by: number | string }, userId: number) =>
+  row.transaction_type === TRANSACTION_TYPE.EXPENSE && Number(row.send_by) === userId;
+
 export async function ledgerFor(
   userId: number,
   limit = 100,
   offset = 0,
+  scope: LedgerScope = 'all',
+  /** Inclusive `YYYY-MM-DD` bounds. Either may be left off. */
+  period: { from?: string | null; to?: string | null } = {},
+  /**
+   * Narrow the rows listed: one status, and/or a reference to look for.
+   *
+   * These choose which rows are shown, not which rows count. Every running
+   * balance and every total is still the account's over the whole period, so a
+   * row found by its reference shows where the account really stood after it.
+   */
+  filter: { status?: number | null; q?: string | null; mode?: string | null } = {},
 ): Promise<LedgerPage> {
   // What I sent, and what I received — but not an expense I was only asked to
   // approve, which is not money that reached me and must not credit my balance.
@@ -486,12 +584,68 @@ export async function ledgerFor(
   // on every entry before it, and the totals describe the account rather than
   // the page. Only the returned slice is built into objects, so a long history
   // costs one scan rather than one response the size of the account.
-  const rows = await db
+  const every = await db
     .selectFrom('transactions')
     .select(['id', 'amount', 'send_by', 'received_by', 'status', 'transaction_type', 'order_id', 'pay_mode', 'transaction_no', 'remark', 'created_at'])
     .where(mine)
     .orderBy('id')
     .execute();
+
+  /*
+    Scoped here, in the walk, rather than in the query.
+
+    The collection wallet is "everything except the float and what was spent
+    from it", and in SQL that is a NOT over a comparison with a nullable column.
+    The oldest rows carry no transaction_type, `NULL = 'wallet_transfer'` is
+    NULL rather than false, and NOT NULL is NULL too — so every untyped row would
+    quietly vanish from the collection wallet. In JavaScript a missing type is
+    simply not equal.
+
+    The running balance is then worked over the scoped rows alone, which is what
+    makes each wallet's balance its own.
+  */
+  const inExpense = (r: (typeof every)[number]) => isFloatIn(r, userId) || isExpenseOut(r, userId);
+  const scoped =
+    scope === 'expense'
+      ? every.filter(inExpense)
+      : scope === 'collection'
+        ? every.filter((r) => !inExpense(r))
+        : every;
+
+  /*
+    A month, or any two dates — a statement for a period.
+
+    Filtered after the whole history is read, not in the query, because a
+    period's first row does not start from zero: it starts from wherever the
+    account stood that morning. Everything approved before the period is
+    folded into an opening balance and left off the list, so each running
+    balance on the page is still the account's real balance on that day and not
+    a count restarted at the top of the month.
+
+    Anything after the period is simply not included. The closing balance is
+    where the account stood at the end of the last day asked for.
+
+    Days are compared the way the statement prints them — the first ten
+    characters of the ISO timestamp — so a row filed under the 1st on screen is
+    the row a filter from the 1st returns.
+  */
+  const dayOf = (d: Date | string | null) => (d ? new Date(d).toISOString().slice(0, 10) : '');
+  const start = period.from || null;
+  const end = period.to || null;
+  let opening = 0;
+  const rows: typeof scoped = [];
+  for (const r of scoped) {
+    const day = dayOf(r.created_at);
+    if (start && day < start) {
+      if (Number(r.status) === STATUS.APPROVED) {
+        const amount = Number(r.amount) || 0;
+        opening += Number(r.received_by) === userId ? amount : -amount;
+      }
+      continue;
+    }
+    if (end && day > end) continue;
+    rows.push(r);
+  }
 
   /*
     Newest first, but counted oldest first.
@@ -505,21 +659,27 @@ export async function ledgerFor(
     Getting this wrong is quiet — the balances stay right and the wrong rows
     come back — so the window is worked out from the end explicitly.
   */
-  const asked = Math.max(0, offset);
-  const size = Math.max(1, limit);
-  const from = Math.max(0, rows.length - (asked + size));
-  const to = rows.length - asked;
+  /*
+    Two passes.
 
-  const entries: LedgerEntry[] = [];
-  let balance = 0;
+    The first walks every row of the period forward and settles what each one
+    left the balance at, with the period's totals. The second picks the rows
+    that match the status and reference asked for, and pages over those.
+
+    In one pass the page window was counted over every row, so filtering would
+    have paged over rows that were then thrown away — page one of "Pending" coming
+    back with two rows and a claim of nine pages. Filtering after the walk also
+    keeps each listed row's balance the real one rather than a total of only
+    the rows that happened to match.
+  */
+  let balance = opening;
   let creditTotal = 0;
   let debitTotal = 0;
   let pendingOut = 0;
   let pendingIn = 0;
-  let index = -1;
+  const after: number[] = [];
 
   for (const row of rows) {
-    index++;
     const amount = Number(row.amount) || 0;
     const isCredit = Number(row.received_by) === userId;
     const status = Number(row.status);
@@ -536,8 +696,45 @@ export async function ledgerFor(
       if (isCredit) pendingIn += amount;
       else pendingOut += amount;
     }
+    after.push(balance);
+  }
 
-    if (index < from || index >= to) continue;
+  // A reference is what is printed on the row: the transaction number, or the
+  // `#id` shown when there is none. Matched loosely, because it is typed from a
+  // slip of paper.
+  const wantStatus = filter.status ?? null;
+  // Compared without case: the Laravel rows were typed by hand as well as
+  // chosen from a list, so `Cash` and `cash` are the same way of paying.
+  const wantMode = (filter.mode ?? '').trim().toLowerCase() || null;
+  const term = (filter.q ?? '').trim().toLowerCase().replace(/^#/, '');
+  const listed: number[] = [];
+  rows.forEach((row, i) => {
+    if (wantStatus !== null && Number(row.status) !== wantStatus) return;
+    if (wantMode && String(row.pay_mode ?? '').trim().toLowerCase() !== wantMode) return;
+    if (term) {
+      const ref = String(row.transaction_no ?? '').toLowerCase();
+      if (!ref.includes(term) && String(row.id) !== term) return;
+    }
+    listed.push(i);
+  });
+
+  /*
+    Newest first, but counted oldest first.
+
+    The page window is worked out from the end of the listed rows: page one of a
+    newest-first list is the **last** rows, not the first, and the page is
+    reversed once it is built.
+  */
+  const asked = Math.max(0, offset);
+  const size = Math.max(1, limit);
+  const from = Math.max(0, listed.length - (asked + size));
+  const to = listed.length - asked;
+
+  const entries: LedgerEntry[] = [];
+  for (const i of listed.slice(from, to)) {
+    const row = rows[i];
+    const amount = Number(row.amount) || 0;
+    const isCredit = Number(row.received_by) === userId;
 
     entries.push({
       id: Number(row.id),
@@ -545,7 +742,7 @@ export async function ledgerFor(
       type: row.transaction_type,
       direction: isCredit ? 'credit' : 'debit',
       amount,
-      status,
+      status: Number(row.status),
       counterparty: isCredit ? Number(row.send_by) : Number(row.received_by),
       // Filled in below, once the page is known: one query for the names on it
       // rather than one per row.
@@ -554,7 +751,7 @@ export async function ledgerFor(
       pay_mode: row.pay_mode,
       transaction_no: row.transaction_no,
       remark: row.remark,
-      balance: round2(balance),
+      balance: round2(after[i]),
     });
   }
 
@@ -620,10 +817,11 @@ export async function ledgerFor(
     entries,
     credit_total: round2(creditTotal),
     debit_total: round2(debitTotal),
+    opening_balance: round2(opening),
     balance: round2(balance),
     pending_out: round2(pendingOut),
     pending_in: round2(pendingIn),
-    total: rows.length,
+    total: listed.length,
     offset: from,
     limit: to - from,
   };

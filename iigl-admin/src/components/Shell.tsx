@@ -3,6 +3,7 @@ import { Link as RouterLink, NavLink, Outlet, useLocation, useNavigate } from 'r
 import {
   AppBar,
   Avatar,
+  Badge,
   Box,
   Breadcrumbs,
   Button,
@@ -54,12 +55,13 @@ import { useAuth } from '../lib/auth';
 import { CrumbSlotContext } from '../lib/crumbActions';
 import { ROLE, ROLE_NAMES } from '../lib/portal';
 import { api } from '../lib/api';
+import { useFetch, useLiveRefresh } from '../lib/useFetch';
 import { fileUrl } from '../lib/config';
 import { useBreadcrumbs } from '../lib/breadcrumbs';
 import { StatementReminder } from './Statements';
 import NotificationBell from './NotificationBell';
 import PunchClock from './PunchClock';
-import { usePermissions } from '../lib/permissions';
+import { usePermissions, type ActionType } from '../lib/permissions';
 
 const WIDTH = 276;
 const RAIL = 76;
@@ -88,6 +90,15 @@ interface Item {
   staffOnly?: boolean;
   /** A permission the matrix has to grant before the entry is shown. */
   needs?: 'order-create' | 'report-create';
+  /**
+   * The permission whose View opens this screen. An employee sees the entry
+   * only when granted it; head office and laboratories always pass. On head
+   * office's menu it is also what lets head office's own staff see an entry at
+   * all — an entry without one stays Super Admin's.
+   */
+  perm?: ActionType;
+  /** Carries the count of unread messages beside it. */
+  badge?: 'messages';
 }
 
 /**
@@ -146,7 +157,7 @@ const ADMIN_GROUPS: Group[] = [
   {
     label: 'Laboratory',
     icon: LabsIcon,
-    items: [{ to: '/laboratories', label: 'View Franchise' }],
+    items: [{ to: '/laboratories', label: 'View Franchise', perm: 'laboratory' }],
   },
   {
     label: 'Report Master',
@@ -185,7 +196,7 @@ const ADMIN_GROUPS: Group[] = [
     // page of their own rather than beside an attendance calendar.
     label: 'Messages',
     icon: MessagesIcon,
-    items: [{ to: '/messages', label: 'Messages', end: true }],
+    items: [{ to: '/messages', label: 'Messages', end: true, badge: 'messages' }],
   },
   {
     label: 'Account',
@@ -205,21 +216,25 @@ const ADMIN_GROUPS: Group[] = [
     label: 'Customer',
     icon: CustomerIcon,
     items: [
-      { to: '/customers?tab=all', label: 'All Customers', adminOnly: true },
-      { to: '/customers', label: 'Registered' },
-      { to: '/customers?tab=unregistered', label: 'Not Registered' },
+      { to: '/customers?tab=all', label: 'All Customers', adminOnly: true, perm: 'customer' },
+      { to: '/customers', label: 'Registered', perm: 'customer' },
+      { to: '/customers?tab=unregistered', label: 'Not Registered', perm: 'customer' },
     ],
   },
   {
     label: 'Website Setup',
     icon: ContentIcon,
     adminOnly: true,
+    // In the order the website shows them, top of the home page down: the
+    // banner, the report categories, the branches, then the blog and the
+    // standalone pages linked from the footer.
     items: [
-      { to: '/content?tab=pages', label: 'Pages' },
-      { to: '/content?tab=types', label: 'Report Types' },
-      { to: '/content?tab=articles', label: 'Blog' },
-      { to: '/content?tab=branches', label: 'Branches' },
-      { to: '/content?tab=banners', label: 'Banners' },
+      { to: '/content?tab=banners', label: 'Banners', perm: 'website_home' },
+      { to: '/content?tab=types', label: 'Report Types', perm: 'website_report' },
+      { to: '/content?tab=customers', label: 'Customers', perm: 'website_home' },
+      { to: '/content?tab=branches', label: 'Branches', perm: 'website_home' },
+      { to: '/content?tab=articles', label: 'Blog', perm: 'website_blog' },
+      { to: '/content?tab=pages', label: 'Pages', perm: 'website_home' },
     ],
   },
   {
@@ -234,7 +249,7 @@ const ADMIN_GROUPS: Group[] = [
     // follow. The list is read top to bottom by people learning the panel, so
     // it should be the sequence rather than the order the screens were built.
     items: [
-      { to: '/student-enquiries', label: 'Enquiry' },
+      { to: '/student-enquiries', label: 'Enquiry', perm: 'website_enquiry' },
       { to: '/students', label: 'Registration' },
       { to: '/courses?tab=enrolments', label: 'Enrolments' },
       { to: '/courses', label: 'Course' },
@@ -250,10 +265,10 @@ const ADMIN_GROUPS: Group[] = [
     icon: EnquiryIcon,
     adminOnly: true,
     items: [
-      { to: '/enquiries?kind=ask', label: 'Ask Me' },
-      { to: '/enquiries?kind=visit', label: "Visitor's Diary" },
-      { to: '/enquiries?kind=lead', label: 'Contact Us' },
-      { to: '/enquiries?kind=complaint', label: 'Complaints' },
+      { to: '/enquiries?kind=ask', label: 'Ask Me', perm: 'visitor_book' },
+      { to: '/enquiries?kind=visit', label: "Visitor's Diary", perm: 'visitor_book' },
+      { to: '/enquiries?kind=lead', label: 'Contact Us', perm: 'visitor_book' },
+      { to: '/enquiries?kind=complaint', label: 'Complaints', perm: 'visitor_book' },
     ],
   },
   {
@@ -334,22 +349,25 @@ const FIELD_GROUPS: Group[] = [
     // the wizard's first two steps are choosing them — so it is written from
     // the order that is waiting for it, where the arrow on the row goes. A menu
     // entry started the same job with nothing chosen.
-    items: [{ to: '/reports', label: 'All Reports List' }],
+    items: [{ to: '/reports', label: 'All Reports List', perm: 'report' }],
   },
   {
     label: 'Customer',
     icon: CustomerIcon,
     items: [
-      { to: '/customers', label: 'Registered' },
-      { to: '/customers?tab=unregistered', label: 'Non-Registered' },
+      { to: '/customers', label: 'Registered', perm: 'customer' },
+      { to: '/customers?tab=unregistered', label: 'Non-Registered', perm: 'customer' },
     ],
   },
   {
     label: 'Account',
     icon: TransactionsIcon,
     items: [
+      // No Transfer History. What it was opened for was the Approve and
+      // Decline on money sent to this account, and that is a tab on Wallet
+      // now, beside the account it moves. The screen itself still exists for
+      // the links that open it filtered, such as Commission History below.
       { to: '/wallet', label: 'Wallet' },
-      { to: '/transactions', label: 'Transfer History' },
       // What this laboratory has remitted to head office, and where each
       // remittance stands. It is the same screen as the transfer history with
       // the commission rows kept, because "have they taken my payment yet" is
@@ -377,16 +395,17 @@ const FIELD_GROUPS: Group[] = [
     label: 'Attendance',
     icon: AttendanceIcon,
     items: [
-      { to: '/attendance', label: 'Attendance', end: true, staffOnly: true },
+      // Staff chat with their employer on this page, so the unread count sits here.
+      { to: '/attendance', label: 'Attendance', end: true, staffOnly: true, badge: 'messages' },
     ],
   },
   {
-    // The laboratory's messages — its staff's requests and head office's
-    // notices — on their own page rather than beside a calendar it never punches.
+    // The laboratory's messages, with head office and with its staff. Its staff
+    // have no page of their own: their chat is on Attendance, beside the month.
     label: 'Messages',
     icon: MessagesIcon,
     labOnly: true,
-    items: [{ to: '/messages', label: 'Messages', end: true }],
+    items: [{ to: '/messages', label: 'Messages', end: true, badge: 'messages' }],
   },
   {
     label: 'Employee',
@@ -424,7 +443,7 @@ const initials = (name: string) =>
 
 export default function Shell() {
   const { user, signOut, portal } = useAuth();
-  const { can } = usePermissions();
+  const { can, staffOf } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -461,7 +480,35 @@ export default function Shell() {
    * counter. They are different jobs, so they get different menus rather than
    * one menu with most of it hidden.
    */
-  const groups = isSuper ? ADMIN_GROUPS : FIELD_GROUPS;
+  /*
+    Head office's own employees work head office's screens, not a counter: they
+    get head office's menu, cut down to the entries they have been granted, and
+    their own Attendance page, where they punch and write to head office.
+  */
+  const headOfficeStaff = staffOf === 'head_office';
+  const groups = isSuper
+    ? ADMIN_GROUPS
+    : headOfficeStaff
+      ? [...ADMIN_GROUPS, ...FIELD_GROUPS.filter((g) => g.label === 'Attendance')]
+      : FIELD_GROUPS;
+
+  /**
+   * Whether an entry is on this person's menu.
+   *
+   * Head office's staff: only entries a permission opens, when granted — plus
+   * the dashboard and their own attendance. Everybody else: the role rules,
+   * then the permission where the entry names one (head office and laboratories
+   * always hold it).
+   */
+  const shows = (item: Item) =>
+    headOfficeStaff
+      ? item.to === '/' || Boolean(item.staffOnly) || Boolean(item.perm && can(item.perm, 'view'))
+      : (!item.adminOnly || isSuper) &&
+        (!item.labOnly || isLab) &&
+        (!item.staffOnly || !isLab) &&
+        (item.needs !== 'order-create' || canCollect) &&
+        (item.needs !== 'report-create' || canIssue) &&
+        (!item.perm || can(item.perm, 'view'));
 
   /**
    * Issuing a certificate belongs to a laboratory and its staff, not to an
@@ -487,6 +534,17 @@ export default function Shell() {
   const crumbs = useBreadcrumbs(portal);
 
   const here = `${location.pathname}${location.search}`;
+
+  /*
+    Unread messages: written to this account and not yet read or answered. The
+    count lives on the Messages entry in the sidebar, where the conversation is,
+    rather than behind the bell. Refreshed by the same live refresh as the lists
+    — every 30 seconds, on coming back to the tab, and after any save, which is
+    what clears it the moment a conversation is opened.
+  */
+  const unread = useFetch<{ meta: { total: number } }>('/messages?open=1&per_page=1');
+  useLiveRefresh(unread.reload);
+  const unreadCount = unread.data?.meta.total ?? 0;
 
   // The node at the right-hand end of the trail, handed to the page below so it
   // can put its own control on that line. State rather than a ref because the
@@ -610,20 +668,14 @@ export default function Shell() {
           {groups
             .filter(
               (g) =>
-                (!g.adminOnly || isSuper) &&
-                (!g.labOnly || isLab),
+                // Head office's staff: a group shows when any entry in it does.
+                headOfficeStaff ||
+                ((!g.adminOnly || isSuper) && (!g.labOnly || isLab)),
             )
             .map((group) => {
               const Icon = group.icon;
 
-              const items = group.items.filter(
-                (item) =>
-                  (!item.adminOnly || isSuper) &&
-                  (!item.labOnly || isLab) &&
-                  (!item.staffOnly || !isLab) &&
-                  (item.needs !== 'order-create' || canCollect) &&
-                  (item.needs !== 'report-create' || canIssue),
-              );
+              const items = group.items.filter(shows);
               if (items.length === 0) return null;
 
               /** Whether this entry could be the page you are on. */
@@ -688,12 +740,22 @@ export default function Shell() {
                 },
               } as const;
 
+              const count = items.some((i) => i.badge === 'messages') ? unreadCount : 0;
+
               const rowInside = (
                 <>
                   <ListItemIcon
                     sx={{ minWidth: open ? 38 : 0, color: 'inherit', justifyContent: 'center' }}
                   >
-                    <Icon sx={{ fontSize: 21 }} />
+                    {/* Collapsed, the count has nowhere to go but the icon. */}
+                    <Badge
+                      badgeContent={count}
+                      color="success"
+                      invisible={open || count === 0}
+                      max={99}
+                    >
+                      <Icon sx={{ fontSize: 21 }} />
+                    </Badge>
                   </ListItemIcon>
                   {open && (
                     <>
@@ -701,6 +763,26 @@ export default function Shell() {
                         primary={group.label}
                         slotProps={{ primary: { sx: { fontSize: 13.5, fontWeight: 500 } } }}
                       />
+                      {count > 0 && (
+                        <Box
+                          component="span"
+                          sx={{
+                            minWidth: 20,
+                            height: 20,
+                            px: 0.75,
+                            borderRadius: 10,
+                            bgcolor: '#25d366',
+                            color: '#fff',
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            display: 'grid',
+                            placeItems: 'center',
+                            ml: 1,
+                          }}
+                        >
+                          {count > 99 ? '99+' : count}
+                        </Box>
+                      )}
                       {!single && (
                         <ExpandIcon
                           sx={{

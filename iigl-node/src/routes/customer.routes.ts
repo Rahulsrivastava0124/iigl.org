@@ -9,6 +9,7 @@ import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import { numericId } from '../middleware/params.js';
 import { round2 } from '../lib/money.js';
 import { orderVisibility } from '../services/permission.service.js';
+import { isHeadOffice, requirePermission } from '../services/permission.service.js';
 
 /**
  * Customers.
@@ -25,7 +26,8 @@ customerRoutes.use(requireLabScope);
 
 /** The scope a person may see, matching the order list. */
 async function scope(user: Express.Request['user']) {
-  if (user.roleId === ROLE.SUPER) return { kind: 'all' as const };
+  // Head office, and its staff with Customers → View, read the whole network.
+  if (await isHeadOffice(user)) return { kind: 'all' as const };
   if ((await orderVisibility(user)) === 'own') return { kind: 'own' as const, id: user.id };
   return { kind: 'lab' as const, id: user.labId };
 }
@@ -123,6 +125,7 @@ async function customerList(
 
 customerRoutes.get(
   '/registered',
+  requirePermission('customer', 'view'),
   wrap(async (req, res) => {
     const p = readPage(req);
     const search = readSearch(req, ['customer_name', 'mobile', 'email', 'gst']);
@@ -141,6 +144,7 @@ customerRoutes.get(
  */
 customerRoutes.get(
   '/all',
+  requirePermission('customer', 'view'),
   wrap(async (req, res) => {
     const p = readPage(req);
     const search = readSearch(req, ['customer_name', 'mobile', 'email', 'gst']);
@@ -151,6 +155,7 @@ customerRoutes.get(
 
 customerRoutes.get(
   '/unregistered',
+  requirePermission('customer', 'view'),
   wrap(async (req, res) => {
     const p = readPage(req);
     const search = readSearch(req, ['customer_name', 'mobile', 'email', 'gst']);
@@ -180,6 +185,7 @@ customerRoutes.get(
  */
 customerRoutes.get(
   '/:mobile/orders',
+  requirePermission('customer', 'view'),
   wrap(async (req, res) => {
     const mobile = String(req.params.mobile).trim();
     if (!mobile) throw badRequest('A mobile number is required.');
@@ -352,12 +358,12 @@ function cardDisplay(body: Record<string, unknown> | undefined) {
  * Which laboratory a new account belongs to.
  *
  * A laboratory registers its own customers and its staff register them for it,
- * so for both the session already says. Head office may name one, or none: a
- * customer with no laboratory is head office's own (migration 053), and only
- * head office sees it.
+ * so for both the session already says. Head office — and its staff with
+ * Customers → Add — may name one, or none: a customer with no laboratory is
+ * head office's own (migration 053), and only head office sees it.
  */
-function owningLab(user: Express.Request['user'], given: unknown): number | null {
-  if (user.roleId === ROLE.SUPER) {
+async function owningLab(user: Express.Request['user'], given: unknown): Promise<number | null> {
+  if (await isHeadOffice(user)) {
     if (given === undefined || given === null || given === '') return null;
     const id = Number(given);
     if (!Number.isInteger(id) || id <= 0) throw badRequest('That is not a laboratory.');
@@ -371,7 +377,7 @@ function owningLab(user: Express.Request['user'], given: unknown): number | null
 async function accountFor(user: Express.Request['user'], id: number) {
   const row = await db.selectFrom('registered_customers').selectAll().where('id', '=', id).executeTakeFirst();
   if (!row) throw notFound('Customer not found.');
-  if (user.roleId !== ROLE.SUPER && Number(row.lab_id) !== Number(user.labId)) {
+  if (!(await isHeadOffice(user)) && Number(row.lab_id) !== Number(user.labId)) {
     throw forbidden('That customer belongs to another laboratory.');
   }
   return row;
@@ -403,12 +409,13 @@ async function writeDiscounts(customerId: number, discounts: DiscountInput[], tr
  */
 customerRoutes.get(
   '/accounts',
+  requirePermission('customer', 'view'),
   wrap(async (req, res) => {
     const p = readPage(req);
     const term = String(req.query.q ?? '').trim().toLowerCase();
 
     let stored = db.selectFrom('registered_customers').selectAll();
-    if (req.user.roleId !== ROLE.SUPER) stored = stored.where('lab_id', '=', Number(req.user.labId));
+    if (!(await isHeadOffice(req.user))) stored = stored.where('lab_id', '=', Number(req.user.labId));
     const accounts = await stored.orderBy('company_name').execute();
 
     const [discounts, derived] = await Promise.all([
@@ -451,6 +458,7 @@ customerRoutes.get(
           due: s?.due ?? 0,
           last_order: s?.last_order ?? null,
           discounts: discountsOf.get(Number(a.id)) ?? [],
+          show_on_site: Number(a.show_on_site) === 1,
         };
       }),
       // Order-derived GST customers not yet given a record. No terms, because
@@ -474,6 +482,8 @@ customerRoutes.get(
           due: r.due,
           last_order: r.last_order,
           discounts: [],
+          // No record yet, so nothing for the website to show.
+          show_on_site: null,
         })),
     ];
 
@@ -490,6 +500,7 @@ customerRoutes.get(
 
 customerRoutes.get(
   '/accounts/:id',
+  requirePermission('customer', 'view'),
   numericId,
   wrap(async (req, res) => {
     const account = await accountFor(req.user, Number(req.params.id));
@@ -509,8 +520,9 @@ customerRoutes.get(
 
 customerRoutes.post(
   '/accounts',
+  requirePermission('customer', 'create'),
   wrap(async (req, res) => {
-    const labId = owningLab(req.user, req.body?.lab_id);
+    const labId = await owningLab(req.user, req.body?.lab_id);
     const mobile = required(req.body?.mobile, 'Contact No.');
     if (!/^\d{10}$/.test(mobile)) throw badRequest('Contact No. must be ten digits.');
 
@@ -520,7 +532,10 @@ customerRoutes.post(
       owner_name: required(req.body?.owner_name, 'Owner Name'),
       mobile,
       email: optional(req.body?.email),
+      area: optional(req.body?.area),
       city: optional(req.body?.city),
+      state: optional(req.body?.state),
+      logo: optional(req.body?.logo),
       // Registered has always meant a GST number here; a registered customer
       // without one is the first row that would break that.
       gst_no: required(req.body?.gst_no, 'GST No.').toUpperCase(),
@@ -561,6 +576,7 @@ customerRoutes.post(
 
 customerRoutes.patch(
   '/accounts/:id',
+  requirePermission('customer', 'update'),
   numericId,
   wrap(async (req, res) => {
     const account = await accountFor(req.user, Number(req.params.id));
@@ -570,6 +586,14 @@ customerRoutes.patch(
     if (req.body?.owner_name !== undefined) patch.owner_name = required(req.body.owner_name, 'Owner Name');
     if (req.body?.email !== undefined) patch.email = optional(req.body.email);
     if (req.body?.city !== undefined) patch.city = optional(req.body.city);
+    if (req.body?.area !== undefined) patch.area = optional(req.body.area);
+    if (req.body?.state !== undefined) patch.state = optional(req.body.state);
+    if (req.body?.logo !== undefined) patch.logo = optional(req.body.logo);
+    // Whether the website's Our Registered Customers section lists them.
+    if (req.body?.show_on_site !== undefined) {
+      if (typeof req.body.show_on_site !== 'boolean') throw badRequest('show_on_site must be true or false.');
+      patch.show_on_site = req.body.show_on_site ? 1 : 0;
+    }
     if (req.body?.gst_no !== undefined) patch.gst_no = required(req.body.gst_no, 'GST No.').toUpperCase();
     // Each switch travels with the value it governs, so a pair is only ever
     // written together and never half-updated.
@@ -611,6 +635,7 @@ customerRoutes.patch(
 
 customerRoutes.delete(
   '/accounts/:id',
+  requirePermission('customer', 'delete'),
   numericId,
   wrap(async (req, res) => {
     const account = await accountFor(req.user, Number(req.params.id));

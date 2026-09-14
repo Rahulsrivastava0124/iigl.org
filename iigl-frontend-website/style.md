@@ -67,6 +67,24 @@ Standard centered section header:
 </div>
 ```
 
+### Section label
+
+Every section's small gold label above the heading — "Trusted By Many",
+"Our Reviews", "FAQ" — is `SectionLabel` from `src/components/SectionLabel.jsx`:
+12px Montserrat medium, uppercase, `tracking-[0.14em]`, `text-[#bd7724]`, with a
+gold rule on **both sides** that fades out towards its far end. Never write a
+label by hand, and never put a rule under it.
+
+```jsx
+import SectionLabel from '../SectionLabel.jsx';
+
+<SectionLabel>Our Reviews</SectionLabel>
+<h2 className="m-0 mt-4 ...">What Our Clients Say</h2>
+```
+
+The heading follows at `mt-4`. In a left-aligned block (the Education section)
+pass `align="start"`.
+
 For sections that introduce a card grid, keep the grid close to the header:
 
 ```jsx
@@ -253,9 +271,7 @@ Do not add decorative text divider lines, faint watermark icons, or a separate r
 heading, then four house cards in the same 1 / 2 / 4 column grid the report
 categories use.
 
-- The label is `text-[12px] font-medium uppercase tracking-[0.14em] text-[#bd7724]`
-  with a short gold rule under **it** — not under the heading, where the rest of
-  the site has none.
+- The label is `SectionLabel` (see Section label above), like every section's.
 - Stars are lucide `Star` with `fill="currentColor"` and `strokeWidth={0}`. An
   outlined star reads as an empty one, which says the opposite of five out of
   five.

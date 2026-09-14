@@ -45,6 +45,11 @@ export const env = {
    */
   legacyPublicRoot: process.env.LEGACY_PUBLIC_ROOT ?? '../iigl.org/public',
   /**
+   * The Nominatim server that places laboratories on the website's map by
+   * their city. OpenStreetMap's own by default; see geocode.service.ts.
+   */
+  geocoderUrl: process.env.GEOCODER_URL ?? 'https://nominatim.openstreetmap.org',
+  /**
    * Where the admin panel is served from. A password reset link points here,
    * so it has to be the address the person actually uses, not the API's.
    */

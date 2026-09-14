@@ -13,6 +13,7 @@ import ac1Url from '../../../Assets/AC1.png';
 import ac2Url from '../../../Assets/AC2.png';
 import ac3Url from '../../../Assets/AC3.png';
 import ac4Url from '../../../Assets/AC4.png';
+import SectionLabel from '../SectionLabel.jsx';
 
 /**
  * The filter row. `all` is the resting state, so it is first and starts active;
@@ -81,15 +82,7 @@ export default function AvailableCoursesSection() {
     <section id="courses" className="bg-white px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[1390px]">
         <div className="mx-auto max-w-[820px] text-center">
-          {/* The eyebrow is ruled on both sides in the design, so the rules are
-              part of the label rather than a divider under the heading. */}
-          <div className="flex items-center justify-center gap-4">
-            <span className="h-px w-[60px] bg-[#d58a2b]/45 max-[520px]:w-[34px]" />
-            <p className="m-0 text-[12px] font-medium uppercase leading-none tracking-[0.14em] text-[#bd7724]">
-              IIGL Education
-            </p>
-            <span className="h-px w-[60px] bg-[#d58a2b]/45 max-[520px]:w-[34px]" />
-          </div>
+          <SectionLabel>IIGL Education</SectionLabel>
 
           <h2 className="relative m-0 mt-4 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[46px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[34px]">
             Available Courses

@@ -112,12 +112,19 @@ messageRoutes.get(
           'users.fullname as fullname',
           'users.empid as empid',
           'users.role_id as role_id',
+          'users.profile_photo as profile_photo',
           'employer.fullname as employer_name',
         ])
         .where('users.id', '!=', req.user.id)
         .where('users.is_active', '=', 1)
+        /*
+          Laboratories, and head office's **own** employees. Not every employee
+          of every laboratory: a laboratory's staff answer to that laboratory,
+          and head office writing to them past it is exactly the sideways line
+          this system does not draw.
+        */
         .where((eb) =>
-          eb.or([eb('users.role_id', '=', ROLE.LAB), eb('employements.id', 'is not', null)]),
+          eb.or([eb('users.role_id', '=', ROLE.LAB), eb('employer.id', '=', req.user.id)]),
         )
         .orderBy('users.role_id')
         .orderBy('users.fullname')
@@ -164,6 +171,7 @@ messageRoutes.get(
         'users.fullname as fullname',
         'users.empid as empid',
         'users.role_id as role_id',
+        'users.profile_photo as profile_photo',
       ])
       .where('employements.parent_id', '=', mine as string)
       .where('employements.is_working', '=', '1')
@@ -192,8 +200,26 @@ messageRoutes.post(
   '/',
   wrap(async (req, res) => {
     const body = String(req.body?.body ?? '').trim();
-    if (!body) throw badRequest('Write something first.');
     if (body.length > 2000) throw badRequest('That is too long for a note. Keep it under 2000 characters.');
+
+    /*
+      A photograph or PDF, uploaded first to uploads/message and named here by
+      its path. Only a path inside the uploads area is accepted, so a message
+      cannot be made to point at a file somewhere else and have the chat render
+      it as though it had been sent.
+
+      A file on its own is a message: a scan needs no sentence to go with it.
+    */
+    const attachment = String(req.body?.attachment ?? '').trim() || null;
+    if (
+      attachment &&
+      (attachment.length > 255 ||
+        attachment.includes('..') ||
+        !/^(public\/)?uploads\/message\/[A-Za-z0-9._-]+$/.test(attachment))
+    ) {
+      throw badRequest('That attachment is not a file sent in a message.');
+    }
+    if (!body && !attachment) throw badRequest('Write something or attach a file first.');
 
     const kind = String(req.body?.kind ?? 'message');
     if (!KINDS.has(kind)) throw badRequest('Kind is "message" or "request".');
@@ -262,6 +288,31 @@ messageRoutes.post(
       if (req.user.roleId !== ROLE.SUPER) {
         // A laboratory writes to the people it employs, and to nobody else.
         for (const id of asked) await assertEmploys(req.user, id);
+      } else {
+        /*
+          Head office writes to laboratories and to its own employees — checked
+          here, not only by what the panel lists, so a crafted request cannot
+          reach a laboratory's staff past the laboratory.
+        */
+        const mine = await empidOf(req.user.id);
+        const allowed = await db
+          .selectFrom('users')
+          .leftJoin('employements', (join) =>
+            join.onRef('employements.user_id', '=', 'users.id').on('employements.is_working', '=', '1'),
+          )
+          .select('users.id')
+          .where('users.id', 'in', asked)
+          .where((eb) =>
+            eb.or([
+              eb('users.role_id', '=', ROLE.LAB),
+              ...(mine ? [eb('employements.parent_id', '=', mine)] : []),
+            ]),
+          )
+          .execute();
+        const ok = new Set(allowed.map((r) => Number(r.id)));
+        if (asked.some((id) => !ok.has(id))) {
+          throw forbidden('Head office writes to laboratories and to its own employees only.');
+        }
       }
       recipients = [...new Set(asked)].filter((id) => id !== req.user.id);
       if (recipients.length === 0) throw badRequest('Choose somebody to write to.');
@@ -281,6 +332,7 @@ messageRoutes.post(
       kind,
       topic,
       body,
+      attachment,
       about_date: about ? new Date(`${about}T00:00:00`) : null,
       // Folds the answer under the message it answers, in both inboxes.
       reply_to: replyTo,
@@ -321,6 +373,7 @@ messageRoutes.get(
         'staff_messages.topic as topic',
         'staff_messages.decision as decision',
         'staff_messages.body as body',
+        'staff_messages.attachment as attachment',
         'staff_messages.about_date as about_date',
         'staff_messages.reply_to as reply_to',
         'staff_messages.resolved_at as resolved_at',
@@ -328,6 +381,12 @@ messageRoutes.get(
         'staff_messages.from_user as from_user',
         'staff_messages.to_user as to_user',
         'author.fullname as from_name',
+        // Whom it was written to, by name: a conversation list groups what you
+        // sent under the person you sent it to, and needs to call them something.
+        'recipient.fullname as to_name',
+        // Both faces, for the chat's list and header.
+        'author.profile_photo as from_photo',
+        'recipient.profile_photo as to_photo',
         // Whose words these are, by role. The bell opens a message on the
         // sender's employee page only when the sender is somebody the reader
         // employs; a laboratory's reply to its staff, or head office writing
@@ -469,7 +528,7 @@ messageRoutes.get(
   wrap(async (req, res) => {
     const id = await employerOf(req.user.id);
     const employer = id
-      ? await db.selectFrom('users').select(['id', 'fullname']).where('id', '=', id).executeTakeFirst()
+      ? await db.selectFrom('users').select(['id', 'fullname', 'profile_photo']).where('id', '=', id).executeTakeFirst()
       : null;
     res.json({ data: employer ?? null, empid: await empidOf(req.user.id) });
   }),

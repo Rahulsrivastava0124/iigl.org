@@ -1,6 +1,10 @@
-import { Router } from 'express';
+import path from 'node:path';
+import { Router, type NextFunction, type Request, type Response } from 'express';
 import { db } from '../db/index.js';
+import { env } from '../lib/env.js';
 import { wrap } from '../lib/async.js';
+import { fileRoutes } from './file.routes.js';
+import { locateLaboratory, needsLookup, storedPoint, type Point } from '../services/geocode.service.js';
 import { notFound } from '../lib/errors.js';
 import { expandAttributes } from '../services/report.service.js';
 import { numericId, numericParams } from '../middleware/params.js';
@@ -50,6 +54,192 @@ publicRoutes.get(
   wrap(async (_req, res) => {
     const rows = await db.selectFrom('branches').select(['id', 'city', 'pageURL', 'img', 'title']).execute();
     res.json({ data: rows });
+  }),
+);
+
+/**
+ * The laboratories head office has ticked for the website's Branches section.
+ * Active ones only, and only what a visitor needs to find them — never the
+ * account's contact, bank or identity fields.
+ */
+publicRoutes.get(
+  '/laboratories',
+  wrap(async (_req, res) => {
+    /*
+      Readable from any site. The public website is its own origin, and this
+      list carries nothing a session guards; the request sends no cookie. Set
+      only when CORS has not already answered for a listed origin, so the panel's
+      credentialed answer is left as it is.
+    */
+    if (!res.get('Access-Control-Allow-Origin')) res.set('Access-Control-Allow-Origin', '*');
+    const rows = await db
+      .selectFrom('users')
+      .select([
+        'id', 'fullname', 'city', 'state', 'company_logo',
+        'geo_latitude', 'geo_longitude', 'geo_query', 'geo_at',
+      ])
+      .where('role_id', '=', 2)
+      .where('show_on_site', '=', 1)
+      .where('is_active', '=', 1)
+      .orderBy('fullname')
+      .execute();
+
+    /*
+      A laboratory whose city has not been looked up yet — just ticked, or its
+      city just edited — is looked up now, so the first visitor after the change
+      already sees the pin in the right place. Bounded: whatever the geocoder
+      has not answered in a few seconds carries on in the background and the
+      page gets the state's middle this once.
+    */
+    const fresh = new Map<number, Point | null>();
+    const pending = rows.filter(needsLookup).map((lab) =>
+      locateLaboratory(lab).then((point) => {
+        if (point) fresh.set(lab.id, point);
+      }),
+    );
+    if (pending.length > 0) {
+      await Promise.race([Promise.all(pending), new Promise((r) => setTimeout(r, 4000))]);
+    }
+
+    // The logo as a public address rather than its stored path: /api/files
+    // needs a session, and the website has none.
+    res.json({
+      data: rows.map((r) => {
+        const point = fresh.get(r.id) ?? storedPoint(r);
+        return {
+          id: r.id,
+          fullname: r.fullname,
+          city: r.city,
+          state: r.state,
+          logo: r.company_logo ? `/public/laboratories/${r.id}/logo` : null,
+          latitude: point?.lat ?? null,
+          longitude: point?.lon ?? null,
+        };
+      }),
+    });
+  }),
+);
+
+/**
+ * A listed laboratory's logo, for the website.
+ *
+ * Only for a laboratory the list above would return — ticked and active — so
+ * this cannot be used to read any other upload. The file is then served the
+ * way `/api/files` serves it (legacy disk first, then storage), by handing the
+ * request on with its path rewritten.
+ */
+publicRoutes.get(
+  '/laboratories/:id/logo',
+  numericId,
+  wrap(async (req, res, next) => {
+    const lab = await db
+      .selectFrom('users')
+      .select('company_logo')
+      .where('id', '=', Number(req.params.id))
+      .where('role_id', '=', 2)
+      .where('show_on_site', '=', 1)
+      .where('is_active', '=', 1)
+      .executeTakeFirst();
+    sendUpload(lab?.company_logo, req, res, next);
+  }),
+);
+
+/**
+ * Serves one stored upload path to the public, the way `/api/files` serves it
+ * (legacy disk first, then storage), by handing the request on with its path
+ * rewritten. Callers decide first that the path belongs to something public.
+ */
+function sendUpload(stored: string | null | undefined, req: Request, res: Response, next: NextFunction) {
+  const path_ = stored?.trim();
+  if (!path_ || /^https?:\/\//i.test(path_)) throw notFound('Logo not found.');
+
+  const relative = path_.replace(/^\/*(public\/)?uploads\//, '');
+  if (relative.split('/').some((part) => part === '..' || part === '')) throw notFound('Logo not found.');
+
+  // Cached briefly: a logo changes rarely, but one taken off the site should
+  // not linger for long.
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  const onDisk = path.resolve(env.legacyPublicRoot, 'uploads', relative);
+  res.sendFile(onDisk, (err) => {
+    if (!err) return;
+    if (res.headersSent) return;
+    req.url = `/${relative}`;
+    fileRoutes(req, res, next);
+  });
+}
+
+/**
+ * The registered customers head office has ticked for the website's Our
+ * Registered Customers section, with what the card shows — company, logo,
+ * area, city, state and the number to call. Nothing else of the account: not
+ * the owner, the email, the GST number or the terms.
+ *
+ * `state` and `city` narrow the list (case-insensitive). `locations` is always
+ * every state and its cities across the whole published list, not the narrowed
+ * one, so the website's two dropdowns offer everything there is to pick.
+ */
+publicRoutes.get(
+  '/customers',
+  wrap(async (req, res) => {
+    if (!res.get('Access-Control-Allow-Origin')) res.set('Access-Control-Allow-Origin', '*');
+    const rows = await db
+      .selectFrom('registered_customers')
+      .select(['id', 'company_name', 'area', 'city', 'state', 'mobile', 'logo'])
+      .where('show_on_site', '=', 1)
+      .orderBy('company_name')
+      .execute();
+
+    const clean = (v: string | null) => (v ?? '').trim().replace(/\s+/g, ' ');
+    const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+    // States and their cities, each spelled as first seen, sorted.
+    const byState = new Map<string, { state: string; cities: Map<string, string> }>();
+    for (const r of rows) {
+      const state = clean(r.state);
+      const city = clean(r.city);
+      if (!state && !city) continue;
+      const key = state.toLowerCase();
+      const entry = byState.get(key) ?? { state, cities: new Map<string, string>() };
+      if (city && !entry.cities.has(city.toLowerCase())) entry.cities.set(city.toLowerCase(), city);
+      byState.set(key, entry);
+    }
+    const locations = [...byState.values()]
+      .map((e) => ({ state: e.state, cities: [...e.cities.values()].sort((a, b) => a.localeCompare(b)) }))
+      .sort((a, b) => a.state.localeCompare(b.state));
+
+    const wantState = clean(String(req.query.state ?? ''));
+    const wantCity = clean(String(req.query.city ?? ''));
+    const matched = rows.filter(
+      (r) => (!wantState || same(clean(r.state), wantState)) && (!wantCity || same(clean(r.city), wantCity)),
+    );
+
+    res.json({
+      data: matched.map((r) => ({
+        id: Number(r.id),
+        company_name: r.company_name,
+        area: r.area,
+        city: r.city,
+        state: r.state,
+        mobile: r.mobile,
+        logo: r.logo ? `/public/customers/${r.id}/logo` : null,
+      })),
+      locations,
+    });
+  }),
+);
+
+/** A listed customer's logo. Only for a customer the list above returns. */
+publicRoutes.get(
+  '/customers/:id/logo',
+  numericId,
+  wrap(async (req, res, next) => {
+    const customer = await db
+      .selectFrom('registered_customers')
+      .select('logo')
+      .where('id', '=', Number(req.params.id))
+      .where('show_on_site', '=', 1)
+      .executeTakeFirst();
+    sendUpload(customer?.logo, req, res, next);
   }),
 );
 

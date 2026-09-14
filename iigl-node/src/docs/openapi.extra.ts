@@ -633,7 +633,7 @@ export const extraPaths: Record<string, unknown> = {
       tags: ['Permissions'],
       summary: 'Create a role',
       description:
-        'Head office creates a shared role; a laboratory creates one of its own, which only its staff can be given. The name must be unique among the roles the creator can see — two laboratories may both have a "Front desk".',
+        'Head office or a laboratory only — an employee is refused. Head office creates a shared role; a laboratory creates one of its own, which only its staff can be given. The name must be unique among the roles the creator can see — two laboratories may both have a "Front desk".',
       requestBody: body({ name: { type: 'string' }, description: str }, ['name']),
       responses: {
         201: ok('Role created.'),
@@ -648,6 +648,7 @@ export const extraPaths: Record<string, unknown> = {
     patch: {
       tags: ['Permissions'],
       summary: 'Rename a role',
+      description: 'Head office or a laboratory only (its own roles).',
       parameters: [idParam],
       requestBody: body({ name: { type: 'string' }, description: str }),
       responses: {
@@ -660,7 +661,7 @@ export const extraPaths: Record<string, unknown> = {
     delete: {
       tags: ['Permissions'],
       summary: 'Delete a role',
-      description: 'Refused while anybody holds it, and never for the five that shipped.',
+      description: 'Head office or a laboratory only. Refused while anybody holds it, and never for super admin, admin and team.',
       parameters: [idParam],
       responses: {
         200: ok('Deleted.'),
@@ -676,7 +677,7 @@ export const extraPaths: Record<string, unknown> = {
       tags: ['Permissions'],
       summary: 'Every permission that can be granted',
       description:
-        'From `permission_actions`. `enforced` is false for a name the API does not yet check — it appears on the permission screens but grants nothing until a check is written against it.',
+        'From `permission_actions`, each with `applies_to` (`laboratory`, `head_office`: whose employees can be given it), `abilities` (which of view/create/update/delete it uses) and `description` (what each opens). `enforced` is true exactly for the permissions an employee can be given; the rest (account, employees, attendance, messages…) are not employee permissions and appear on no permission screen.',
       responses: { 200: ok('The permission list.'), ...guarded },
     },
     post: {
@@ -709,12 +710,16 @@ export const extraPaths: Record<string, unknown> = {
     get: {
       tags: ['Permissions'],
       summary: 'The matrix for one role',
+      description:
+        'Employee permissions only, each row with `label`, `description`, `abilities` and `applies_to`. A laboratory’s own role lists the laboratory side (orders, certificates, customers); a shared role may be held by either kind of employee and lists both sides. Super admin and laboratory return an empty list: they are not limited by permissions.',
       parameters: [idParam],
-      responses: { 200: ok('One row per permission.'), 404: err('Role not found.'), ...guarded },
+      responses: { 200: ok('One row per permission the role can carry.'), 404: err('Role not found.'), ...guarded },
     },
     put: {
       tags: ['Permissions'],
       summary: 'Set one permission on one role',
+      description:
+        'Head office or a laboratory only — and a laboratory only on a role it owns. Refused for a permission the role cannot carry (a head-office screen on a laboratory’s role). Flags the permission does not use are stored off.',
       parameters: [idParam],
       requestBody: body(
         { action_type: { type: 'string' }, view: bool, create: bool, update: bool, delete: bool },
@@ -722,7 +727,7 @@ export const extraPaths: Record<string, unknown> = {
       ),
       responses: {
         200: ok('Saved.'),
-        400: err('Not a permission.'),
+        400: err('Not a permission, or not one this role can carry.'),
         404: err('Role not found.'),
         ...guarded,
       },
@@ -734,7 +739,7 @@ export const extraPaths: Record<string, unknown> = {
       tags: ['Permissions'],
       summary: 'What one person has been granted individually',
       description:
-        'Separate from their role. Head office may read anybody; a laboratory only its own staff.\n\nEvery action comes back, so a screen can list them all, with `own` saying which of them this person actually has a row for. A filled gap and a stored row of four zeros are not the same thing — the first is “whatever the role says”, the second is “not this, whatever the role says” — and both look like four unticked boxes, so `own` is what tells them apart.',
+        'Separate from their role. Head office or a laboratory only: head office for any employee, a laboratory for its own staff. Nobody reads or changes their own, and head office and laboratory accounts have none (403).\n\n`staff_of` is whose employee they are, and the rows are the permissions that side can have — a laboratory’s staff: orders, certificates, customers; head office’s staff: laboratories, customers, enquiry book, student enquiries, website setup. Each carries `label`, `description` and `abilities`, with `own` saying which of them this person actually has a row for. A filled gap and a stored row of four zeros are not the same thing — the first is “whatever the role says”, the second is “not this, whatever the role says” — and both look like four unticked boxes, so `own` is what tells them apart.',
       parameters: [idParam],
       responses: {
         200: ok('One row per permission, each with an `own` flag.'),
@@ -746,7 +751,7 @@ export const extraPaths: Record<string, unknown> = {
       tags: ['Permissions'],
       summary: 'Grant or withdraw one permission for one person',
       description:
-        'An individual grant **replaces** the role\'s answer for that action rather than adding to it, so it can take away as well as give — all four flags off means "not this, whatever the role says". It is also how a user with no role gets anything at all.',
+        'Head office or the laboratory that employs them. An individual grant **replaces** the role\'s answer for that action rather than adding to it, so it can take away as well as give — all four flags off means "not this, whatever the role says". Refused for a permission their side cannot have; flags the permission does not use are stored off.',
       parameters: [idParam],
       requestBody: body(
         { action_type: { type: 'string' }, view: bool, create: bool, update: bool, delete: bool },
@@ -754,7 +759,7 @@ export const extraPaths: Record<string, unknown> = {
       ),
       responses: {
         200: ok('Saved.'),
-        400: err('Not a permission.'),
+        400: err('Not a permission, or not one this employee can have.'),
         404: err('User not found.'),
         ...guarded,
       },
@@ -1536,7 +1541,7 @@ export const extraPaths: Record<string, unknown> = {
       tags: ['Customers'],
       summary: 'Registered customers',
       description:
-        'Every stored registered customer, and every GST customer known only from an order who has not been registered yet — both are real, and dropping either would make the list wrong in a different direction. Matched on mobile. A stored row carries `account_id`, company, owner, city and `discounts`; an order-derived row has `account_id: null` and no terms. Order totals are joined by mobile. A laboratory sees its own; head office sees all.',
+        'Every stored registered customer, and every GST customer known only from an order who has not been registered yet — both are real, and dropping either would make the list wrong in a different direction. Matched on mobile. A stored row carries `account_id`, company, owner, city, `discounts` and `show_on_site` (listed on the website); an order-derived row has `account_id: null`, no terms and `show_on_site: null`. Order totals are joined by mobile. A laboratory sees its own; head office sees all.',
       parameters: [
         { name: 'page', in: 'query', schema: { type: 'integer' } },
         { name: 'per_page', in: 'query', schema: { type: 'integer', maximum: 200 } },
@@ -1556,7 +1561,10 @@ export const extraPaths: Record<string, unknown> = {
           owner_name: { type: 'string' },
           mobile: { type: 'string', pattern: '^\\d{10}$' },
           email: str,
+          area: { type: ['string', 'null'], description: 'Locality shown before the city on the website, e.g. Salkia.' },
           city: str,
+          state: str,
+          logo: { type: ['string', 'null'], description: 'An uploaded path, shown on the website.' },
           gst_no: { type: 'string' },
           show_name_in_card: { type: 'boolean', description: 'Print the customer’s name on their certificates. The same field an order carries, so an order can copy it.' },
           show_name_input: { type: ['string', 'null'], description: 'The name to print. Cleared when show_name_in_card is off.' },
@@ -1592,7 +1600,11 @@ export const extraPaths: Record<string, unknown> = {
         owner_name: { type: 'string' },
         mobile: { type: 'string' },
         email: str,
+        area: { type: ['string', 'null'] },
         city: str,
+        state: str,
+        logo: { type: ['string', 'null'] },
+        show_on_site: { type: 'boolean', description: 'List this customer in the website’s Our Registered Customers section.' },
         gst_no: { type: 'string' },
         show_name_in_card: { type: 'boolean', description: 'Print the customer’s name on their certificates. The same field an order carries, so an order can copy it.' },
         show_name_input: { type: ['string', 'null'], description: 'The name to print. Cleared when show_name_in_card is off.' },
@@ -1868,7 +1880,11 @@ export const extraPaths: Record<string, unknown> = {
         'The Laravel sidebars drew a Message menu and never built it — both entries are `href="#"`. This is the whole of it, in both directions.\n\n**Upward**, from staff: no recipient in the body. They have exactly one employer, and a field for it would be a field to get wrong; an account nobody employs is told there is nobody to write to rather than having the message go nowhere.\n\n**Downward**, from an employer: `to` names them. Head office may write to any laboratory or employee, a laboratory to its own staff, and nobody sideways — checked here rather than trusted from the body. `GET /api/messages/recipients` is the same rule, asked in advance.\n\nOne row is written per recipient, so each is dealt with — or not — on its own: a single row addressed to nine people is one that eight of them cannot answer. At most 100 at a time.\n\nA `request` expects something to happen — a correction, a day off — and a `message` does not. The reader’s list is coloured by the difference, so it is asked rather than guessed from the words.',
       requestBody: body(
         {
-          body: { type: 'string', maxLength: 2000 },
+          body: { type: 'string', maxLength: 2000, description: 'May be empty when a file is attached.' },
+          attachment: {
+            type: ['string', 'null'],
+            description: 'A photograph or PDF, uploaded first to POST /api/uploads/message and named here by the path it returned. Only a path in uploads/message is accepted.',
+          },
           kind: { type: 'string', enum: ['message', 'request'], default: 'message' },
           topic: {
             type: ['string', 'null'],
@@ -2022,6 +2038,44 @@ export const extraPaths: Record<string, unknown> = {
     },
   ),
 
+  '/api/content/branch-laboratories': {
+    get: {
+      tags: ['Content'],
+      summary: 'List laboratories with their website visibility',
+      description: 'Every laboratory, active or not, with show_on_site and map_location: city (placed on its city), state (city not found — check its spelling), pending (not looked up yet) or none (no city). Head office only.',
+      responses: { 200: ok('Laboratories.'), ...guarded },
+    },
+  },
+
+  '/api/content/branch-laboratories/{id}': {
+    patch: {
+      tags: ['Content'],
+      summary: 'Show or hide a laboratory on the website',
+      parameters: [idParam],
+      requestBody: body({ show_on_site: { type: 'boolean' } }, ['show_on_site']),
+      responses: { 200: ok('Saved.'), 400: err('show_on_site must be true or false.'), 404: err('Laboratory not found.'), ...guarded },
+    },
+  },
+
+  '/api/content/website-customers': {
+    get: {
+      tags: ['Content'],
+      summary: 'List registered customers with their website visibility',
+      description: 'Every registered customer with company, owner, mobile, area, city, state, logo, laboratory and show_on_site. Head office only.',
+      responses: { 200: ok('Customers.'), ...guarded },
+    },
+  },
+
+  '/api/content/website-customers/{id}': {
+    patch: {
+      tags: ['Content'],
+      summary: 'Show or hide a registered customer on the website',
+      parameters: [idParam],
+      requestBody: body({ show_on_site: { type: 'boolean' } }, ['show_on_site']),
+      responses: { 200: ok('Saved.'), 400: err('show_on_site must be true or false.'), 404: err('Customer not found.'), ...guarded },
+    },
+  },
+
   '/api/content/pages': {
     get: {
       tags: ['Content'],
@@ -2072,8 +2126,9 @@ export const extraPaths: Record<string, unknown> = {
     get: {
       tags: ['Permissions'],
       summary: 'What you may do',
-      description: 'Administrators are granted everything unconditionally; the matrix describes staff and laboratories.',
-      responses: { 200: ok('One entry per action type.'), ...guarded },
+      description:
+        'Head office and laboratories are granted everything. An employee gets their own grant, else their role’s, limited to the permissions their side can have and the flags each uses — the same answer the API checks on every request. `staff_of` is `laboratory`, `head_office`, or null for head office and laboratory accounts.',
+      responses: { 200: ok('One entry per action type, and staff_of.'), ...guarded },
     },
   },
 

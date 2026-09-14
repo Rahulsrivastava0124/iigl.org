@@ -119,6 +119,7 @@ export interface Branches {
   acdnitm2: string | null;
   acdnitm3: string | null;
   alt: string | null;
+  blurb: string | null;
   canonical: string | null;
   city: string | null;
   content: string | null;
@@ -129,8 +130,11 @@ export interface Branches {
   img: string | null;
   intro: string | null;
   keywords: string | null;
+  lat: Decimal | null;
+  lon: Decimal | null;
   pageURL: string | null;
   schm: string | null;
+  state: string | null;
   title: string | null;
   updated_at: Generated<Date>;
 }
@@ -175,6 +179,7 @@ export interface CouponRedemptions {
 
 export interface Courses {
   added_by: number | null;
+  categories: Json | null;
   certificate_template: string | null;
   code: string | null;
   created_at: Date | null;
@@ -184,8 +189,13 @@ export interface Courses {
   gst_id: number | null;
   gst_percent: Decimal | null;
   id: Generated<number>;
+  image: string | null;
   is_active: Generated<number>;
+  lessons: string | null;
+  level: string | null;
   name: string;
+  subtitle: string | null;
+  title: string | null;
   updated_at: Date | null;
 }
 
@@ -419,6 +429,7 @@ export interface Prices {
 }
 
 export interface RegisteredCustomers {
+  area: string | null;
   city: string | null;
   company_name: string;
   created_at: Date | null;
@@ -427,12 +438,15 @@ export interface RegisteredCustomers {
   gst_no: string | null;
   id: Generated<number>;
   lab_id: number | null;
+  logo: string | null;
   mobile: string;
   owner_name: string;
   show_image_in_card: Generated<number>;
   show_image_in_card_file: string | null;
   show_name_in_card: Generated<number>;
   show_name_input: string | null;
+  show_on_site: Generated<number>;
+  state: string | null;
   updated_at: Date | null;
 }
 
@@ -543,6 +557,7 @@ export interface Settings {
 
 export interface StaffMessages {
   about_date: Date | null;
+  attachment: string | null;
   body: string;
   created_at: Date | null;
   decision: string | null;
@@ -734,6 +749,10 @@ export interface Users {
   empid: string | null;
   fax: string | null;
   fullname: string;
+  geo_at: Date | null;
+  geo_latitude: Decimal | null;
+  geo_longitude: Decimal | null;
+  geo_query: string | null;
   gst_no: string | null;
   id: Generated<number>;
   id_proof_type: string | null;
@@ -754,6 +773,7 @@ export interface Users {
   registration_fee: Decimal | null;
   remember_token: string | null;
   role_id: number | null;
+  show_on_site: Generated<number>;
   signature: string | null;
   state: string | null;
   statement_from: Date | null;

@@ -1,9 +1,10 @@
-import { Children, isValidElement, useEffect, useState, createContext, useContext } from 'react';
+import { Children, Fragment, isValidElement, useEffect, useState, createContext, useContext } from 'react';
 import type { ComponentType, ReactElement, ReactNode } from 'react';
 import { alpha } from '@mui/material/styles';
 import type { SxProps, Theme } from '@mui/material/styles';
 import { Link as RouterLink } from 'react-router-dom';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { TimePicker } from '@mui/x-date-pickers/TimePicker';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 
@@ -895,6 +896,61 @@ export function DateField({
 }
 
 /**
+ * A time of day, with the Material UI clock behind it.
+ *
+ * The companion to `DateField`, and for the same reason: the browser's own
+ * `type="time"` input draws its picker differently in every browser — in
+ * Chrome it is three blue boxes hanging off the field — and matches nothing
+ * else in the panel.
+ *
+ * Keeps the contract those inputs had, so swapping one is a change of tag:
+ * the value is `HH:mm` on the 24-hour clock, or empty, exactly what the API
+ * stores. It is shown on the 12-hour clock with AM and PM, which is how
+ * everybody here reads a shift.
+ */
+export function TimeField({
+  label,
+  value,
+  onChange,
+  required,
+  disabled,
+  helperText,
+  sx,
+}: {
+  label: string;
+  /** `HH:mm`, or empty. */
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+  disabled?: boolean;
+  helperText?: string;
+  sx?: object;
+}) {
+  const parsed = value ? dayjs(value, 'HH:mm', true) : null;
+
+  return (
+    <TimePicker
+      label={label}
+      format="hh:mm A"
+      ampm
+      value={parsed?.isValid() ? parsed : null}
+      onChange={(next) => onChange(next?.isValid() ? next.format('HH:mm') : '')}
+      disabled={disabled}
+      slotProps={{
+        textField: {
+          required,
+          helperText,
+          sx,
+          fullWidth: true,
+          size: 'small',
+        },
+        field: { clearable: !required },
+      }}
+    />
+  );
+}
+
+/**
  * The search box that sits in a list's header.
  *
  * One component so that every list searches the same way and looks the same
@@ -1107,8 +1163,27 @@ export function hint(text: string, forSelect = false) {
  * The split is done here rather than at each of the thirteen call sites, so a
  * screen cannot opt out of it by accident.
  */
+/**
+ * The actions in a row, with any fragments opened up.
+ *
+ * `Children.toArray` does not look inside a fragment, so a group written as
+ * `{mayEdit && (<>...</>)}` arrived here as a single child with no props — and
+ * every `danger` or `overflow` action inside it was drawn on the row instead of
+ * in the menu, whatever it was marked. Delete sat a mis-click from Edit on the
+ * staff list for exactly that reason.
+ */
+function actionsOf(children: ReactNode): ReactElement<IconActionProps>[] {
+  return Children.toArray(children).flatMap((child) => {
+    if (!isValidElement(child)) return [];
+    if (child.type === Fragment) {
+      return actionsOf((child.props as { children?: ReactNode }).children);
+    }
+    return [child as ReactElement<IconActionProps>];
+  });
+}
+
 export function RowActions({ children }: { children: ReactNode }) {
-  const all = Children.toArray(children).filter(isValidElement) as ReactElement<IconActionProps>[];
+  const all = actionsOf(children);
   const hidden = all.filter((c) => c.props?.danger || c.props?.overflow);
   const split = all.length >= 2 && hidden.length > 0;
 

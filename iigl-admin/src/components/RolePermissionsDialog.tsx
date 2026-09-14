@@ -22,12 +22,18 @@ export default function RolePermissionsDialog({
   roleId,
   roleName,
   readOnly = false,
+  shared = false,
   note,
   onClose,
   onSaved,
 }: {
   roleId: number;
   roleName: string;
+  /**
+   * Head office's role, which either kind of employee may hold: its rows cover
+   * both sides and each is marked with the side it applies to.
+   */
+  shared?: boolean;
   /**
    * Somebody else's role: head office's, seen from a laboratory. Shown in full
    * — knowing what a shared role allows is the reason to open it — but nothing
@@ -123,6 +129,11 @@ export default function RolePermissionsDialog({
             {note}
           </Typography>
         )}
+        <Typography color="text.secondary" variant="body2" sx={{ mb: 2 }}>
+          {shared
+            ? 'A shared role can be held by a laboratory’s staff and by head office’s. Each person only gets the permissions for their side — a laboratory’s front desk never gets the website, and head office’s staff never take orders.'
+            : 'What anybody in this role may do at your laboratory. A person’s own permissions, set from the employee list, override these for them.'}
+        </Typography>
 
         <TextField
           label="Role name"
@@ -170,6 +181,7 @@ export default function RolePermissionsDialog({
             open={open}
             onToggleGroup={(title) => setOpen({ ...open, [title]: !open[title] })}
             disabled={busy || readOnly}
+            showSide={shared}
           />
         )}
       </DialogContent>

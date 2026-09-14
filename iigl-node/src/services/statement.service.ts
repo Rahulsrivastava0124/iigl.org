@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ejs from 'ejs';
@@ -8,6 +7,7 @@ import { ApiError, notFound } from '../lib/errors.js';
 import { ROLE } from '../middleware/auth.js';
 import { COMMISSION_TYPE, TRANSACTION_TYPE } from './commission.service.js';
 import { live } from './order.service.js';
+import { letterheadHtml } from './letterhead.service.js';
 
 /**
  * Commission statements: head office billing a laboratory on a period.
@@ -362,9 +362,6 @@ export async function statementHtml(labId: number, key: string, issuedBy: string
   const period = book.periods.find((p) => p.key === key);
   if (!period) throw notFound('That period has not been billed yet.');
 
-  const logo = `data:image/png;base64,${(
-    await readFile(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../templates/iigl-logo.png'))
-  ).toString('base64')}`;
 
   return ejs.renderFile(TEMPLATE, {
     lab,
@@ -374,7 +371,7 @@ export async function statementHtml(labId: number, key: string, issuedBy: string
     perPiece: lab.commission_type === COMMISSION_TYPE.PER_PIECE,
     rate: Number(lab.commision) || 0,
     issuedBy,
-    logo,
+    letterhead: await letterheadHtml(),
   });
 }
 

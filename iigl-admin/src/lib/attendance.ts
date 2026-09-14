@@ -127,8 +127,11 @@ export function attendanceDay(d: Day, holiday?: Holiday, shift?: Shift): Calenda
   const shortBy = !open && shift?.workingHours ? Math.round(shift.workingHours * 60) - worked : 0;
   return {
     tone: open ? 'waiting' : 'settled',
+    // The red mark at the foot of the day says it; the word beside the time
+    // would say it twice.
+    late: lateBy > 0,
     lines: [
-      `${time(d.clockIn)}${lateBy > 0 ? ' late' : ''}`,
+      time(d.clockIn),
       open ? 'open' : `${time(d.clockOut)}${shortBy > 0 ? ' short' : ''}`,
     ],
     tooltip:

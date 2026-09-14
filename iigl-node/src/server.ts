@@ -46,10 +46,45 @@ async function reportStatus(): Promise<void> {
   }
 }
 
+/*
+  An error nothing else caught must not take the server down.
+
+  A route's errors already reach the error middleware and become a response.
+  These are the ones that happen outside a request, or after one has been
+  answered: a promise nobody awaited, a timer, a dropped database connection.
+  Node's default for both is to print and exit, which turns one bad background
+  task into every user being signed out of a dead API.
+
+  So they are logged, with the time and a line saying the server is still up,
+  and it stays up. The honest caveat: after an uncaught exception the process
+  may be in a state nobody planned for. It is kept running because an outage is
+  worse here than a request that fails oddly, and the log line is how that gets
+  found and fixed rather than hidden.
+*/
+const stamp = () => new Date().toISOString();
+process.on('unhandledRejection', (reason) => {
+  console.error(`[${stamp()}] unhandled promise rejection — logged, server still running:`);
+  console.error(reason);
+});
+process.on('uncaughtException', (err, origin) => {
+  console.error(`[${stamp()}] uncaught exception (${origin}) — logged, server still running:`);
+  console.error(err);
+});
+
 const app = createApp();
 const server = app.listen(env.port, () => {
   console.log(`iigl-api listening on http://localhost:${env.port}`);
   void reportStatus();
+});
+
+/*
+  The exception to staying up: the server could not start at all. A port
+  already in use is not an error to survive — running on with nothing
+  listening would look alive and answer nobody.
+*/
+server.on('error', (err) => {
+  console.error(`[${stamp()}] the server could not start: ${err.message}`);
+  process.exit(1);
 });
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

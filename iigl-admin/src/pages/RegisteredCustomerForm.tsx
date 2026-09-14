@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
+  Autocomplete,
   Box,
   Button,
   Grid,
@@ -55,9 +56,21 @@ const BLANK = {
   owner_name: '',
   mobile: '',
   email: '',
+  area: '',
   city: '',
+  state: '',
   gst_no: '',
 };
+
+/** A row of Master › State or Master › District. */
+interface PlaceRow {
+  id: number;
+  name: string;
+  state_id?: number;
+}
+
+/** Names compared loosely: "West Bengal" is the Master row called "West bengal". */
+const samePlace = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 const TYPE_LABEL: Record<DiscountType, string> = {
   percent: 'Percentage (%)',
@@ -84,8 +97,18 @@ export default function RegisteredCustomerForm() {
       show_name_input: string | null;
       show_image_in_card: number;
       show_image_in_card_file: string | null;
+      logo: string | null;
     };
   }>(editing ? `/customers/accounts/${id}` : null);
+
+  /*
+    State and city from the Master lists, so the website's state and city
+    filters see one spelling of each place rather than every way it was typed.
+    Free text is still accepted: a town missing from Master is common, and a
+    customer should not wait on somebody adding it there.
+  */
+  const states = useFetch<{ data: PlaceRow[] }>('/master/states?active=1');
+  const districts = useFetch<{ data: PlaceRow[] }>('/master/districts?active=1');
 
   /* Opened by Edit on a customer known only from their orders: the form starts
      from what those orders say about them, and saving registers them. */
@@ -103,6 +126,8 @@ export default function RegisteredCustomerForm() {
   const [nameOnCard, setNameOnCard] = useState('');
   const [showImage, setShowImage] = useState(false);
   const [imageOnCard, setImageOnCard] = useState<string | null>(null);
+  /** The logo the website shows on this customer's card. */
+  const [logo, setLogo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const cats = categories.data?.data ?? [];
@@ -116,9 +141,12 @@ export default function RegisteredCustomerForm() {
       owner_name: d.owner_name ?? '',
       mobile: d.mobile ?? '',
       email: d.email ?? '',
+      area: d.area ?? '',
       city: d.city ?? '',
+      state: d.state ?? '',
       gst_no: d.gst_no ?? '',
     });
+    setLogo(d.logo ?? null);
     setShowName(Boolean(d.show_name_in_card));
     setNameOnCard(d.show_name_input ?? '');
     setShowImage(Boolean(d.show_image_in_card));
@@ -181,7 +209,10 @@ export default function RegisteredCustomerForm() {
         owner_name: form.owner_name,
         mobile: form.mobile,
         email: form.email,
+        area: form.area,
         city: form.city,
+        state: form.state,
+        logo,
         gst_no: form.gst_no,
         show_name_in_card: showName ? 1 : 0,
         show_name_input: showName ? nameOnCard.trim() || null : null,
@@ -210,6 +241,12 @@ export default function RegisteredCustomerForm() {
   };
 
   const cell = { xs: 12, md: 4 } as const;
+
+  const stateNames = (states.data?.data ?? []).map((r) => r.name);
+  const stateRow = (states.data?.data ?? []).find((r) => samePlace(r.name, form.state));
+  const cityNames = (districts.data?.data ?? [])
+    .filter((d) => !stateRow || d.state_id === stateRow.id)
+    .map((d) => d.name);
 
   return (
     /*
@@ -297,11 +334,30 @@ export default function RegisteredCustomerForm() {
               />
             </Grid>
             <Grid size={cell}>
-              <TextField
-                label="City"
-                placeholder="Eg. Howrah"
+              <Autocomplete
+                freeSolo
+                options={stateNames}
+                value={form.state}
+                onInputChange={(_, v) => set('state', v)}
+                renderInput={(params) => <TextField {...params} label="State" placeholder="Eg. West Bengal" />}
+              />
+            </Grid>
+            <Grid size={cell}>
+              <Autocomplete
+                freeSolo
+                options={cityNames}
                 value={form.city}
-                onChange={(e) => set('city', e.target.value)}
+                onInputChange={(_, v) => set('city', v)}
+                renderInput={(params) => <TextField {...params} label="City" placeholder="Eg. Howrah" />}
+              />
+            </Grid>
+            <Grid size={cell}>
+              <TextField
+                label="Area"
+                placeholder="Eg. Salkia"
+                value={form.area}
+                onChange={(e) => set('area', e.target.value)}
+                slotProps={hint('The locality, shown before the city on the website: “Salkia, Howrah”.')}
               />
             </Grid>
             <Grid size={cell}>
@@ -351,6 +407,18 @@ export default function RegisteredCustomerForm() {
                   />
                 ) : null}
               </YesNoField>
+            </Grid>
+            <Grid size={cell}>
+              {/* The website's customer card shows this. Square works best:
+                  the card draws it in a square frame. */}
+              <FileField
+                label="Logo"
+                bucket="employee"
+                value={logo}
+                onChange={setLogo}
+                accept="image/png,image/jpeg,image/webp"
+                ratio="1 / 1"
+              />
             </Grid>
           </Grid>
         </Box>

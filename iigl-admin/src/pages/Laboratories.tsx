@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  Avatar,
   Button,
   Chip,
   Grid,
@@ -13,10 +14,12 @@ import {
   TableBody,
   TableCell,
   TableHead,
+  Stack,
   TableRow,
   Tooltip,
   Typography,
 } from '@mui/material';
+import { fileUrl } from '../lib/config';
 import MessageCompose from '../components/MessageCompose';
 import MessageIcon from '@mui/icons-material/ForumOutlined';
 import { useToast } from '../components/Toast';
@@ -214,7 +217,21 @@ export default function Laboratories() {
               {rows.map((l) => (
                 <TableRow key={l.id} hover>
                   <TableCell className="mono">{l.empid ?? `#${l.id}`}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'normal', minWidth: 140 }}>{l.fullname}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'normal', minWidth: 180 }}>
+                    <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
+                      {/* The laboratory's logo, or its initial where none was uploaded. */}
+                      <Avatar
+                        variant="rounded"
+                        src={fileUrl(l.company_logo) ?? undefined}
+                        alt=""
+                        slotProps={{ img: { sx: { objectFit: 'contain' } } }}
+                        sx={{ width: 34, height: 34, bgcolor: 'action.hover', color: 'text.secondary', fontSize: 14 }}
+                      >
+                        {l.fullname.trim().charAt(0).toUpperCase()}
+                      </Avatar>
+                      <span>{l.fullname}</span>
+                    </Stack>
+                  </TableCell>
                   <TableCell sx={{ whiteSpace: 'normal', minWidth: 140 }}>
                     {l.owner_name ?? '—'}
                   </TableCell>

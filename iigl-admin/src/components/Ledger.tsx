@@ -1,9 +1,12 @@
-import { Grid, Table, TableBody, TableCell, TableHead, TableRow } from '@mui/material';
+import { Grid, Stack, Table, TableBody, TableCell, TableHead, TableRow } from '@mui/material';
+import ApproveIcon from '@mui/icons-material/CheckCircleOutlined';
+import DeclineIcon from '@mui/icons-material/CancelOutlined';
 import BalanceIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
 import ReceivedIcon from '@mui/icons-material/SouthWestOutlined';
 import SentIcon from '@mui/icons-material/NorthEastOutlined';
 import AwaitingIcon from '@mui/icons-material/HourglassEmptyOutlined';
-import { Panel, StatusChip, TableFrame, Tile, TILE_CELL, money } from './ui';
+import { Panel, StatusChip, TableFrame, Tile, TILE_CELL, ToneAction, money } from './ui';
+import { payModeLabel } from '../lib/payModes';
 
 /**
  * The running account: what came in, what went out, and the balance after each.
@@ -26,6 +29,8 @@ export interface LedgerEntry {
   counterparty: number;
   counterparty_name: string | null;
   order_id: number | null;
+  /** How it was paid: `cash`, `upi`, `card`, `bank`, `cheque`, or older free text. */
+  pay_mode: string | null;
   transaction_no: string | null;
   remark: string | null;
   balance: number;
@@ -33,8 +38,13 @@ export interface LedgerEntry {
 
 export interface LedgerPage {
   entries: LedgerEntry[];
+  /** Approved money in, within the period asked for. */
   credit_total: number;
+  /** Approved money out, within the period. */
   debit_total: number;
+  /** Where the account stood before the period began. Zero with no period. */
+  opening_balance: number;
+  /** Where it stood at the end of the period. */
   balance: number;
   pending_out: number;
   pending_in: number;
@@ -51,7 +61,18 @@ const CELL = TILE_CELL;
  * its own longest word, so "Sent" came out half the width of "Awaiting
  * approval" and the four read as an accident rather than as one set of figures.
  */
-export function LedgerTotals({ account }: { account: LedgerPage | undefined }) {
+export function LedgerTotals({
+  account,
+  period = false,
+}: {
+  account: LedgerPage | undefined;
+  /**
+   * A month or a date range is chosen. The balance is then the closing balance
+   * for it, and says what it opened at, so the two totals beside it can be
+   * checked against it: opening, plus credit, less debit.
+   */
+  period?: boolean;
+}) {
   /*
     Money that has not moved yet, and whose move it is.
 
@@ -70,18 +91,29 @@ export function LedgerTotals({ account }: { account: LedgerPage | undefined }) {
   return (
     <Grid container spacing={2} sx={{ mb: 2 }}>
       <Grid size={CELL}>
-        <Tile label="Balance" value={money(account?.balance ?? 0)} fill="brand" icon={BalanceIcon} />
+        {/*
+          Green while there is money in it, red once it goes below zero. Below
+          zero is somebody being owed — an expense float spent past what was
+          handed over — and that is the one balance here that needs acting on.
+        */}
+        <Tile
+          label={period ? 'Closing balance' : 'Balance'}
+          value={money(account?.balance ?? 0)}
+          note={period ? `opened at ${money(account?.opening_balance ?? 0)}` : undefined}
+          fill={(account?.balance ?? 0) < 0 ? 'refused' : 'settled'}
+          icon={BalanceIcon}
+        />
       </Grid>
       <Grid size={CELL}>
         <Tile
-          label="Received"
+          label="Total credit"
           value={money(account?.credit_total ?? 0)}
           fill="settled"
           icon={ReceivedIcon}
         />
       </Grid>
       <Grid size={CELL}>
-        <Tile label="Sent" value={money(account?.debit_total ?? 0)} fill="brand" icon={SentIcon} />
+        <Tile label="Total debit" value={money(account?.debit_total ?? 0)} fill="brand" icon={SentIcon} />
       </Grid>
       <Grid size={CELL}>
         {/*
@@ -112,7 +144,10 @@ export function LedgerTable({
   title = 'Ledger',
   count,
   footer,
+  actions,
   bare,
+  onDecide,
+  deciding,
 }: {
   entries: LedgerEntry[];
   loading: boolean;
@@ -120,6 +155,8 @@ export function LedgerTable({
   title?: string;
   count?: string;
   footer?: React.ReactNode;
+  /** Controls for the header row, beside the title: the period filter. */
+  actions?: React.ReactNode;
   /**
    * Render the table alone, without the panel around it.
    *
@@ -129,6 +166,18 @@ export function LedgerTable({
    * titles, one of which is the tab that was just clicked.
    */
   bare?: boolean;
+  /**
+   * Accept or decline a pending movement from the row it is on.
+   *
+   * Offered only on money this account *received* and has not yet decided:
+   * deciding belongs to the receiver, and the API refuses it from anybody
+   * else, so a button on a row somebody sent would be a button that errors.
+   * Without this the table stays read-only, which is what every other caller
+   * wants.
+   */
+  onDecide?: (id: number, next: 1 | 2) => void;
+  /** The row a decision is in flight for; its buttons stop taking clicks. */
+  deciding?: number | null;
 }) {
   const table = (
     <>
@@ -151,9 +200,11 @@ export function LedgerTable({
               <TableCell>Party</TableCell>
               <TableCell>Remark</TableCell>
               <TableCell>Status</TableCell>
+              <TableCell>Payment type</TableCell>
               <TableCell align="right">Credit</TableCell>
               <TableCell align="right">Debit</TableCell>
               <TableCell align="right">Balance</TableCell>
+              {onDecide && <TableCell />}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -184,6 +235,7 @@ export function LedgerTable({
                 <TableCell>
                   <StatusChip status={e.status} />
                 </TableCell>
+                <TableCell sx={{ whiteSpace: 'nowrap' }}>{payModeLabel(e.pay_mode)}</TableCell>
                 {/*
                   Two columns rather than one signed figure: a statement is read
                   down its credit column or down its debit column, and a minus
@@ -218,13 +270,37 @@ export function LedgerTable({
                   {e.direction === 'debit' ? money(e.amount) : '—'}
                 </TableCell>
                 {/*
-                  The balance stays light. It is the running total beside the
-                  movement, not the movement — bold on both leaves the row with
-                  two things shouting and nothing said.
+                  Bold, because the running balance is the figure people read
+                  this statement for: where the account stood after each
+                  movement. It is weighted the same as the credit or debit on
+                  the row and takes no colour of its own, so the direction of
+                  the movement is still carried by that column alone.
                 */}
-                <TableCell align="right" className="tabular">
+                <TableCell align="right" className="tabular" sx={{ fontWeight: 700 }}>
                   {money(e.balance)}
                 </TableCell>
+                {onDecide && (
+                  <TableCell>
+                    {e.status === 0 && e.direction === 'credit' && (
+                      <Stack direction="row" spacing={0.75} sx={{ justifyContent: 'flex-end' }}>
+                        <ToneAction
+                          label="Accept"
+                          icon={ApproveIcon}
+                          tone="settled"
+                          disabled={deciding === e.id}
+                          onClick={() => onDecide(e.id, 1)}
+                        />
+                        <ToneAction
+                          label="Decline"
+                          icon={DeclineIcon}
+                          tone="refused"
+                          disabled={deciding === e.id}
+                          onClick={() => onDecide(e.id, 2)}
+                        />
+                      </Stack>
+                    )}
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>
@@ -236,7 +312,7 @@ export function LedgerTable({
   if (bare) return table;
 
   return (
-    <Panel title={title} count={count} footer={footer}>
+    <Panel title={title} count={count} footer={footer} actions={actions}>
       {table}
     </Panel>
   );

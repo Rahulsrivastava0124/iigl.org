@@ -2,10 +2,13 @@ import { Router } from 'express';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
-import { ROLE, requireAdmin, requireLabScope } from '../middleware/auth.js';
+import { ROLE, requireAdmin, requireEmployer, requireLabScope } from '../middleware/auth.js';
 import { numericId } from '../middleware/params.js';
 import {
+  ABILITIES,
+  PERMISSION_SCOPE,
   actionTypes,
+  grantableOnRole,
   invalidatePermissions,
   isActionType,
   permissionsFor,
@@ -28,6 +31,12 @@ import {
  * A laboratory owning its own roles is the point of the feature. Without the
  * owner column, one laboratory renaming "Front desk" would rename it for six
  * others.
+ *
+ * **Reading is open to anybody at a laboratory; writing is the employer's.**
+ * Every write below takes `requireEmployer` — head office or a laboratory. An
+ * employee could once create, rename and grant roles for their laboratory,
+ * including the role they hold themselves, which is a person handing
+ * themselves permissions.
  */
 export const roleRoutes = Router();
 roleRoutes.use(requireLabScope);
@@ -181,6 +190,7 @@ roleRoutes.get(
 
 roleRoutes.post(
   '/',
+  requireEmployer,
   wrap(async (req, res) => {
     const name = requireText(req.body?.name, 'Role name');
     const owner = ownerFor(req.user);
@@ -217,6 +227,7 @@ roleRoutes.post(
 roleRoutes.patch(
   '/:id',
   numericId,
+  requireEmployer,
   wrap(async (req, res) => {
     const role = await renameable(req.user, Number(req.params.id));
 
@@ -235,6 +246,7 @@ roleRoutes.patch(
 roleRoutes.delete(
   '/:id',
   numericId,
+  requireEmployer,
   wrap(async (req, res) => {
     const role = await deletable(req.user, Number(req.params.id));
 
@@ -327,26 +339,55 @@ roleRoutes.post(
   }),
 );
 
+/**
+ * What a role may be given, one row per permission, each saying what it opens
+ * (`description`), which of its four boxes mean anything (`abilities`) and
+ * whose employees it applies to (`applies_to`).
+ *
+ * Only employee permissions are listed. A laboratory's own role governs its
+ * staff, so it carries the laboratory side; a shared role may be held by
+ * either kind of employee and carries both. Super admin and laboratory are
+ * unconditional and have none.
+ */
 roleRoutes.get(
   '/:id/permissions',
   numericId,
   wrap(async (req, res) => {
     const role = await visible(req.user, Number(req.params.id));
-    res.json({ data: await permissionsFor(Number(role.id)) });
+    res.json({ data: await permissionsFor(Number(role.id), role.owner_id === null ? null : Number(role.owner_id)) });
   }),
 );
 
-/** Replace the flags for one action on one role. */
+/**
+ * Replace the flags for one permission on one role.
+ *
+ * Refused for a permission the role cannot carry — a laboratory's role and a
+ * head-office screen — and any flag the permission does not use is stored off,
+ * so a role never holds a grant that means nothing today and something later.
+ */
 roleRoutes.put(
   '/:id/permissions',
   numericId,
+  requireEmployer,
   wrap(async (req, res) => {
     const role = await grantable(req.user, Number(req.params.id));
+    if (Number(role.id) === ROLE.SUPER || Number(role.id) === ROLE.ADMIN) {
+      throw badRequest('Super admin and laboratory accounts are not limited by permissions.');
+    }
 
     const action = String(req.body?.action_type ?? '');
     if (!(await isActionType(action))) throw badRequest(`${action} is not a permission.`);
+    if (!grantableOnRole(role.owner_id === null ? null : Number(role.owner_id)).has(action)) {
+      throw badRequest(
+        role.owner_id === null
+          ? `${action} is not a permission an employee can be given.`
+          : `${action} is head office’s to grant; a laboratory’s role cannot carry it.`,
+      );
+    }
 
+    const scope = PERMISSION_SCOPE[action];
     const set = flags(req.body);
+    for (const a of ABILITIES) if (!scope.abilities.includes(a)) set[a] = 0;
     const existing = await db
       .selectFrom('role_permissions')
       .select('id')

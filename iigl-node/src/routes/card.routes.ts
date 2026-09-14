@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
+import { requirePermission } from '../services/permission.service.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { assertLabOwnership, requireLabScope, ROLE } from '../middleware/auth.js';
 import { cardDataFor, loadChrome } from '../services/card.service.js';
@@ -55,6 +56,7 @@ function send(res: Parameters<Parameters<typeof cardRoutes.get>[1]>[1], pdf: Buf
  */
 cardRoutes.get(
   '/data/:id',
+  requirePermission('report', 'view'),
   numericId,
   wrap(async (req, res) => {
     const id = Number(req.params.id);
@@ -83,6 +85,7 @@ cardRoutes.get(
  */
 cardRoutes.get(
   '/:kind/:id',
+  requirePermission('report', 'view'),
   numericId,
   wrap(async (req, res) => {
     const kind = kindFrom(String(req.params.kind));
@@ -108,6 +111,7 @@ cardRoutes.get(
  */
 cardRoutes.post(
   '/:kind',
+  requirePermission('report', 'create'),
   wrap(async (req, res) => {
     const kind = kindFrom(String(req.params.kind));
     const raw = (req.body ?? {}).report_ids;

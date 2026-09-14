@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Button,
+  Checkbox,
   Table,
   TableBody,
   TableCell,
@@ -12,7 +13,9 @@ import {
   Typography,
 } from '@mui/material';
 import { useFetch, useDebounced } from '../lib/useFetch';
-import { useAuth } from '../lib/auth';
+import { messageOf, useAuth } from '../lib/auth';
+import { api } from '../lib/api';
+import { useToast } from '../components/Toast';
 import { isSuper } from '../lib/portal';
 import { usePermissions } from '../lib/permissions';
 import {
@@ -77,6 +80,8 @@ interface Customer {
   lab_id?: number | null;
   company_name?: string | null;
   owner_name?: string | null;
+  /** Listed on the website. Null for a customer known only from orders: no record to list. */
+  show_on_site?: boolean | null;
 }
 
 
@@ -144,6 +149,32 @@ export default function Customers() {
     `/customers/${registered ? 'accounts' : current.id}?${query}`,
   );
   const rows = source.data?.data ?? [];
+
+  /*
+    The "Website" tick: whether the website's Our Registered Customers section
+    lists this customer. Saved the moment it changes; the box moves at once and
+    goes back only if the server refuses.
+  */
+  const toast = useToast();
+  const [onSite, setOnSite] = useState<Record<number, boolean>>({});
+  const [savingSite, setSavingSite] = useState<number | null>(null);
+  const shownOnSite = (r: Customer) => (r.account_id ? (onSite[r.account_id] ?? Boolean(r.show_on_site)) : false);
+  const toggleSite = async (r: Customer) => {
+    if (!r.account_id) return;
+    const id = r.account_id;
+    const next = !shownOnSite(r);
+    setOnSite((m) => ({ ...m, [id]: next }));
+    setSavingSite(id);
+    try {
+      await api.patch(`/customers/accounts/${id}`, { show_on_site: next });
+      toast.ok(next ? `${r.company_name} is shown on the website.` : `${r.company_name} is hidden from the website.`);
+    } catch (e) {
+      setOnSite((m) => ({ ...m, [id]: !next }));
+      toast.error(messageOf(e));
+    } finally {
+      setSavingSite(null);
+    }
+  };
 
 
   const setTab = (next: Tab) => setParams(next === 'registered' ? {} : { tab: next });
@@ -219,6 +250,7 @@ export default function Customers() {
                 <TableCell align="right">Paid</TableCell>
                 <TableCell align="right">Due</TableCell>
                 <TableCell>Last order</TableCell>
+                {registered && <TableCell align="center">Show on website</TableCell>}
                 {(canView || mayEdit || mayCreate) && <TableCell />}
               </TableRow>
             </TableHead>
@@ -270,6 +302,23 @@ export default function Customers() {
                     {money(r.due ?? 0)}
                   </TableCell>
                   <TableCell>{r.last_order ?? '—'}</TableCell>
+                  {registered && (
+                    <TableCell align="center" padding="checkbox">
+                      {r.account_id ? (
+                        <Checkbox
+                          size="small"
+                          sx={{ p: 0 }}
+                          checked={shownOnSite(r)}
+                          disabled={!mayEdit || savingSite === r.account_id}
+                          onChange={() => toggleSite(r)}
+                          slotProps={{ input: { 'aria-label': `Show ${r.company_name} on the website` } }}
+                        />
+                      ) : (
+                        // Known only from orders: register them first (Edit) to list them.
+                        '—'
+                      )}
+                    </TableCell>
+                  )}
                   {(canView || mayEdit || mayCreate) && (
                     <TableCell>
                       {/* What they have ordered, and what it came to. The list

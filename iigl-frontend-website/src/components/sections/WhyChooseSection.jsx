@@ -1,5 +1,6 @@
 import { FileBadge2, Gem, Microscope, ShieldCheck, UsersRound } from 'lucide-react';
 import whyChooseBg from '../../../Assets/whychoose_bg.png';
+import SectionLabel from '../SectionLabel.jsx';
 
 const reasons = [
   {
@@ -37,11 +38,9 @@ export default function WhyChooseSection() {
     >
       <div className="mx-auto max-w-[1390px]">
         <div className="mx-auto max-w-[680px] text-center">
-          <p className="m-0 text-[14px] font-medium uppercase leading-none tracking-normal text-[#d58a2b]">
-            Why Choose IIGL?
-          </p>
+          <SectionLabel>Why Choose IIGL?</SectionLabel>
 
-          <h2 className="mt-5 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[28px]">
+          <h2 className="mt-4 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[28px]">
             Excellence in Gemology,
             <span className="block">Trust in Every Report</span>
           </h2>

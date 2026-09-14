@@ -1073,6 +1073,53 @@ const document = {
       },
     },
 
+    '/api/public/laboratories': {
+      get: {
+        tags: ['Public'],
+        summary: 'List the laboratories shown as branches',
+        description: 'Active laboratories head office has ticked in Website Setup › Branches: id, fullname, city, state, logo (a public path under /api, or null), and latitude/longitude of the city (looked up with a geocoder and stored; null when the city was not found, and the website then uses the state). Readable from any origin.',
+        security: [],
+        responses: { 200: { description: 'Laboratories.' } },
+      },
+    },
+
+    '/api/public/laboratories/{id}/logo': {
+      get: {
+        tags: ['Public'],
+        summary: "A listed laboratory's logo",
+        description: 'Only for a laboratory shown on the website and active; 404 otherwise.',
+        security: [],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        responses: { 200: { description: 'The image.' }, 404: errorResponse('Logo not found.') },
+      },
+    },
+
+    '/api/public/customers': {
+      get: {
+        tags: ['Public'],
+        summary: 'Registered customers shown on the website',
+        description:
+          'Registered customers not unticked in Website Setup › Customers (listed by default): id, company_name, area, city, state, mobile and logo (a public path under /api, or null). `locations` lists every state with its cities across the whole published list, for the website filters. Readable from any origin.',
+        security: [],
+        parameters: [
+          { name: 'state', in: 'query', schema: { type: 'string' }, description: 'Only this state (case-insensitive).' },
+          { name: 'city', in: 'query', schema: { type: 'string' }, description: 'Only this city (case-insensitive).' },
+        ],
+        responses: { 200: { description: 'Customers and locations.' } },
+      },
+    },
+
+    '/api/public/customers/{id}/logo': {
+      get: {
+        tags: ['Public'],
+        summary: "A listed customer's logo",
+        description: 'Only for a customer shown on the website; 404 otherwise.',
+        security: [],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        responses: { 200: { description: 'The image.' }, 404: errorResponse('Logo not found.') },
+      },
+    },
+
     '/api/public/branches/{slug}': {
       get: {
         tags: ['Public'],
@@ -1662,12 +1709,58 @@ const document = {
       },
     },
 
+    '/api/transactions/float': {
+      post: {
+        tags: ['Transactions'],
+        summary: 'Send an employee an expense float',
+        description:
+          'The one transfer that goes down, from a laboratory or head office to their own working employee, for them to spend on its behalf. Approved at once: the sender is the account that approves everything that employee does, and there is nobody above it to ask.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  user_id: { type: 'integer' },
+                  amount: { type: 'number' },
+                  pay_mode: { type: 'string' },
+                  transaction_no: { type: 'string' },
+                  remark: { type: 'string' },
+                },
+                required: ['user_id', 'amount', 'pay_mode'],
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'The float was recorded.' },
+          400: errorResponse('No employee, no amount, or no payment mode.'),
+          403: errorResponse('Not a laboratory or head office, or not one of your employees.'),
+          401: guarded[401],
+        },
+      },
+    },
+
+    '/api/transactions/expense-wallet': {
+      get: {
+        tags: ['Transactions'],
+        summary: 'Your expense wallet',
+        description:
+          'Floats received, approved expenses, pending expenses, and the balance between them. The balance may be negative: that is the laboratory owing the employee for something they paid out of their own pocket.',
+        responses: {
+          200: { description: 'The expense wallet.' },
+          ...guarded,
+        },
+      },
+    },
+
     '/api/transactions/expense': {
       post: {
         tags: ['Transactions'],
         summary: 'Record an expense',
         description:
-          'Money an employee spent out of what they hold — fuel, a courier, stationery. Staff only; head office and laboratories are refused. Lands **pending** until the employer approves it, exactly as a transfer does: collected money belongs to the laboratory, and nobody writes it off unseen.\n\nThe employer is stored as `received_by`, which here means **approver, not recipient** — that is what lets it use the same receiver-only decision, queue and notification as a transfer. Every balance leaves these rows out of the approver\u2019s credit: the ledger, `/api/transactions/wallet` and the dashboard. Once approved it comes off the employee\u2019s wallet and off the laboratory\u2019s Employee wallet.\n\nNo ceiling at the wallet balance: somebody who paid a courier from their own pocket is owed it, and approval is the check.',
+          'Money an employee spent out of what they hold — fuel, a courier, stationery. Staff only; head office and laboratories are refused. Recorded **approved**, with no approval step: it comes out of the employee\u2019s expense float, which the employer handed over for exactly this, and a float spent past zero goes negative on the staff list rather than being refused.\n\nThe employer is stored as `received_by`, which here means **approver, not recipient** — that is what lets it use the same receiver-only decision, queue and notification as a transfer. Every balance leaves these rows out of the approver\u2019s credit: the ledger, `/api/transactions/wallet` and the dashboard. It comes off the employee\u2019s expense wallet at once.\n\nNo ceiling at the float: somebody who paid a courier from their own pocket is owed it, and the balance goes negative to say so.',
         requestBody: {
           required: true,
           content: {
@@ -1992,6 +2085,36 @@ const document = {
       },
     },
 
+    '/api/transactions/ledger/statement': {
+      get: {
+        tags: ['Transactions'],
+        summary: 'Download an account statement',
+        description:
+          'The ledger for the same account, wallet and period, as an A4 sheet: opening balance, every movement in the period oldest first with its running balance, total credit, total debit and closing balance. Every row in the period rather than a page. Takes the same user_id, scope, from, to, status, q and mode as the ledger, so it is the list as filtered on screen. Unfiltered, total credit and debit cover the whole period and opening plus credit less debit is the closing balance. Filtered, the sheet names its filters, totals only the approved rows it lists, and keeps opening and closing as the real balances of the account, which include movements not listed. format=html returns the markup the PDF is rendered from.',
+        parameters: [
+          { name: 'user_id', in: 'query', schema: { type: 'integer' }, description: 'Administrators only.' },
+          { name: 'scope', in: 'query', schema: { type: 'string', enum: ['all', 'collection', 'expense'] } },
+          { name: 'from', in: 'query', schema: { type: 'string', format: 'date' } },
+          { name: 'to', in: 'query', schema: { type: 'string', format: 'date' } },
+          { name: 'status', in: 'query', schema: { type: 'integer', enum: [0, 1, 2] } },
+          { name: 'q', in: 'query', schema: { type: 'string' } },
+          { name: 'mode', in: 'query', schema: { type: 'string' } },
+          { name: 'format', in: 'query', schema: { type: 'string', enum: ['html'] }, description: 'Return the markup instead of a PDF.' },
+        ],
+        responses: {
+          200: {
+            description: 'The statement as a PDF, or as HTML when format=html.',
+            content: {
+              'application/pdf': { schema: { type: 'string', format: 'binary' } },
+              'text/html': { schema: { type: 'string' } },
+            },
+          },
+          400: errorResponse('A date that is not YYYY-MM-DD, or a start after the end.'),
+          ...guarded,
+        },
+      },
+    },
+
     '/api/transactions/ledger': {
       get: {
         tags: ['Transactions'],
@@ -2003,6 +2126,45 @@ const document = {
             in: 'query',
             schema: { type: 'integer' },
             description: 'Administrators only: read another user ledger. Ignored for other roles.',
+          },
+          {
+            name: 'scope',
+            in: 'query',
+            schema: { type: 'string', enum: ['all', 'collection', 'expense'] },
+            description:
+              'Staff only: which wallet. collection is what customers paid less what was handed on; expense is floats received less expenses. Ignored for a laboratory and head office, which hold one account.',
+          },
+          {
+            name: 'from',
+            in: 'query',
+            schema: { type: 'string', format: 'date' },
+            description:
+              'First day of the statement, inclusive. Movements before it are folded into opening_balance, so every running balance is still the real one.',
+          },
+          {
+            name: 'to',
+            in: 'query',
+            schema: { type: 'string', format: 'date' },
+            description: 'Last day of the statement, inclusive. balance is where the account stood at the end of it.',
+          },
+          {
+            name: 'status',
+            in: 'query',
+            schema: { type: 'integer', enum: [0, 1, 2] },
+            description:
+              'List only pending (0), approved (1) or declined (2) rows. Narrows the rows shown; the running balances and totals are still the whole period.',
+          },
+          {
+            name: 'q',
+            in: 'query',
+            schema: { type: 'string' },
+            description: 'A reference to find: part of the transaction number, or the id with or without #. Narrows the rows shown only.',
+          },
+          {
+            name: 'mode',
+            in: 'query',
+            schema: { type: 'string', examples: ['cash', 'upi', 'card', 'bank', 'cheque'] },
+            description: 'List only movements paid this way, matched without case. Narrows the rows shown only.',
           },
         ],
         responses: {

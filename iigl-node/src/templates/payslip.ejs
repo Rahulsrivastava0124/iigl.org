@@ -31,9 +31,6 @@ const paidTotal = payments.reduce((t, p) => t + Number(p.amount || 0), 0);
     @page { size: A4; margin: 14mm; }
     * { box-sizing: border-box; }
     body { font: 12px/1.5 "Helvetica Neue", Arial, sans-serif; color: #101828; margin: 0; }
-    header { display: flex; align-items: center; gap: 12px; border-bottom: 2px solid #0b1f4b; padding-bottom: 10px; }
-    header img { height: 46px; }
-    .name { font-size: 20px; font-weight: 700; color: #0b1f4b; letter-spacing: .5px; }
     .sub { font-size: 11px; color: #667085; }
     h1 { font-size: 15px; margin: 18px 0 2px; }
     .period { color: #667085; font-size: 11.5px; margin-bottom: 14px; }
@@ -52,13 +49,8 @@ const paidTotal = payments.reduce((t, p) => t + Number(p.amount || 0), 0);
   </style>
 </head>
 <body>
-  <header>
-    <% if (logo) { %><img src="<%= logo %>" alt=""><% } %>
-    <div>
-      <div class="name">IIGL</div>
-      <div class="sub"><%= v(employer.fullname) %><%= employer.city ? ' · ' + v(employer.city) : '' %></div>
-    </div>
-  </header>
+  <%- letterhead %>
+  <div class="sub" style="margin-top: 8px;">Employer: <%= v(employer.fullname) %><%= employer.city ? ' · ' + v(employer.city) : '' %></div>
 
   <h1>Salary payslip</h1>
   <div class="period"><%= monthName(month) %></div>

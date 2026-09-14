@@ -37,18 +37,22 @@ const hits = (term: string, ...fields: (string | number | null | undefined)[]) =
 };
 
 import FileField from '../components/FileField';
+import BranchLaboratories from '../components/BranchLaboratories';
+import WebsiteCustomers from '../components/WebsiteCustomers';
 import AddIcon from '@mui/icons-material/AddOutlined';
 import EditIcon from '@mui/icons-material/EditOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
 
-type Section = 'articles' | 'branches' | 'types' | 'banners' | 'pages';
+type Section = 'articles' | 'branches' | 'customers' | 'types' | 'banners' | 'pages';
 
 const SECTIONS: Array<{ id: Section; label: string }> = [
-  { id: 'articles', label: 'Articles' },
-  { id: 'branches', label: 'Branch pages' },
-  { id: 'types', label: 'Certificate types' },
+  // The website's own order, as the sidebar lists them.
   { id: 'banners', label: 'Banners' },
-  { id: 'pages', label: 'Static pages' },
+  { id: 'types', label: 'Report Types' },
+  { id: 'customers', label: 'Customers' },
+  { id: 'branches', label: 'Branches' },
+  { id: 'articles', label: 'Blog' },
+  { id: 'pages', label: 'Pages' },
 ];
 
 /** An open editor: which section, which row, and the values being edited. */
@@ -79,7 +83,7 @@ export default function Content() {
   const toast = useToast();
   // The sidebar links straight to a tab, so the URL decides which is open.
   const [params, setParams] = useSearchParams();
-  const section = (params.get('tab') as Section) ?? 'articles';
+  const section = (params.get('tab') as Section) ?? 'banners';
   const setSection = (next: Section) => setParams({ tab: next });
   const [editing, setEditing] = useState<Editing | null>(null);
   // A form belongs to the table it was opened on: switching to another one —
@@ -89,12 +93,14 @@ export default function Content() {
   const [busy, setBusy] = useState(false);
 
   const articles = useFetch<{ data: any[] }>(section === 'articles' ? '/public/blogs' : null);
-  const branches = useFetch<{ data: any[] }>(section === 'branches' ? '/public/branches' : null);
+  // Branches and Customers have their own lists (BranchLaboratories,
+  // WebsiteCustomers); nothing is fetched for them here.
+  const own = useFetch<{ data: any[] }>(null);
   const types = useFetch<{ data: any[] }>(section === 'types' ? '/public/report-types' : null);
   const banners = useFetch<{ data: any[] }>(section === 'banners' ? '/content/banners' : null);
   const pages = useFetch<{ data: any[] }>(section === 'pages' ? '/content/pages' : null);
 
-  const source = { articles, branches, types, banners, pages }[section];
+  const source = { articles, branches: own, customers: own, types, banners, pages }[section];
 
   const open = (values: Record<string, string>, id?: number, image: string | null = null) =>
     setEditing({ section, id, values, image });
@@ -124,13 +130,14 @@ export default function Content() {
     const paths: Record<Section, string> = {
       articles: '/content/blogs',
       branches: '/content/branches',
+      customers: '/content/website-customers',
       types: '/content/report-types',
       banners: '/content/banners',
       pages: '/content/pages',
     };
 
     // Each section names its image column differently.
-    const imageKey = { articles: 'banner', branches: 'img', types: 'banner', banners: 'path', pages: 'banner' }[s];
+    const imageKey = { articles: 'banner', branches: 'img', customers: 'logo', types: 'banner', banners: 'path', pages: 'banner' }[s];
     const body: Record<string, unknown> = { ...values };
     if (image !== null || id) body[imageKey] = image;
 
@@ -187,6 +194,8 @@ export default function Content() {
         ))}
       </Tabs>
 
+      {/* Branches are the laboratories, ticked on and off rather than edited. */}
+      {section === 'branches' ? <BranchLaboratories /> : section === 'customers' ? <WebsiteCustomers /> : (
       <Panel
         form={editing && editing.section === section && (
           <FormPanel
@@ -216,7 +225,7 @@ export default function Content() {
             <Box sx={{ gridColumn: '1 / -1' }}>
               <FileField
                 label={section === 'banners' ? 'Image' : 'Banner image'}
-                bucket={section === 'branches' || section === 'banners' ? 'banner' : 'website'}
+                bucket={section === 'banners' ? 'banner' : 'website'}
                 value={form.image}
                 onChange={(path) => setEditing({ ...form, image: path })}
               />
@@ -252,13 +261,6 @@ export default function Content() {
                     <TableCell>Published</TableCell>
                   </>
                 )}
-                {section === 'branches' && (
-                  <>
-                    <TableCell>City</TableCell>
-                    <TableCell>Address</TableCell>
-                    <TableCell>Page title</TableCell>
-                  </>
-                )}
                 {section === 'types' && (
                   <>
                     <TableCell>Name</TableCell>
@@ -290,13 +292,6 @@ export default function Content() {
                       <TableCell sx={{ whiteSpace: 'normal', minWidth: 200 }}>{r.page_name}</TableCell>
                       <TableCell className="mono">/{r.slug}</TableCell>
                       <TableCell>{String(r.created_at ?? '').slice(0, 10) || '—'}</TableCell>
-                    </>
-                  )}
-                  {section === 'branches' && (
-                    <>
-                      <TableCell>{r.city}</TableCell>
-                      <TableCell className="mono">/{r.pageURL}</TableCell>
-                      <TableCell sx={{ whiteSpace: 'normal', minWidth: 220 }}>{r.title ?? '—'}</TableCell>
                     </>
                   )}
                   {section === 'types' && (
@@ -334,9 +329,7 @@ export default function Content() {
                           const keys =
                             section === 'articles'
                               ? ['page_name', 'slug', 'content', 'meta_title', 'meta_description']
-                              : section === 'branches'
-                                ? ['city', 'pageURL', 'h1', 'content', 'title', 'description']
-                                : section === 'types'
+                              : section === 'types'
                                   ? ['name', 'short_description', 'description']
                                   : section === 'banners'
                                     ? ['name', 'img_type', 'url']
@@ -366,6 +359,7 @@ export default function Content() {
           </Table>
         </TableFrame>
       </Panel>
+      )}
 
       {section === 'articles' && (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>

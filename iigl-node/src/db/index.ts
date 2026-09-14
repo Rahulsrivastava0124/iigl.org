@@ -5,9 +5,7 @@ import type { DB } from './types.js';
 
 const url = new URL(process.env.DATABASE_URL!);
 
-export const db = new Kysely<DB>({
-  dialect: new MysqlDialect({
-    pool: createPool({
+const pool = createPool({
       host: url.hostname,
       port: Number(url.port || 3306),
       user: decodeURIComponent(url.username),
@@ -52,6 +50,18 @@ export const db = new Kysely<DB>({
       keepAliveInitialDelay: 10_000,
 
       dateStrings: true,
-    }),
-  }),
+    });
+
+/*
+  A connection the database dropped while idle is reported on the pool. Without
+  a listener, an 'error' event with nobody listening is thrown, and thrown
+  outside any request. Logged here instead; the pool opens a fresh connection
+  for the next query.
+*/
+pool.on('error', (err) => {
+  console.error(`[${new Date().toISOString()}] database connection error (the pool will reconnect):`, err);
+});
+
+export const db = new Kysely<DB>({
+  dialect: new MysqlDialect({ pool }),
 });

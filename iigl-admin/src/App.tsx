@@ -1,7 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Box, Button, CircularProgress, Typography } from '@mui/material';
 import { AuthProvider, useAuth } from './lib/auth';
-import { PermissionProvider } from './lib/permissions';
+import { PermissionProvider, usePermissions, type ActionType } from './lib/permissions';
 import { basenameFor, currentPortal, isLab, isSuper } from './lib/portal';
 import Shell from './components/Shell';
 import { ToastProvider } from './components/Toast';
@@ -57,6 +57,25 @@ function AdminOnly({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   if (!isSuper(user)) return <Navigate to="/" replace />;
   return <>{children}</>;
+}
+
+/**
+ * Head office, or one of its employees who may view at least one of these.
+ *
+ * Head office's screens that it can hand to its own staff — laboratories,
+ * the enquiry books, website setup. The API checks the same permission on
+ * every request; this only keeps somebody without it from landing on a page
+ * that would load nothing but refusals. Waits for the permissions to load,
+ * because redirecting on "not yet known" would throw everybody off the page
+ * they reloaded.
+ */
+function HeadOfficeOr({ actions, children }: { actions: ActionType[]; children: React.ReactNode }) {
+  const { user } = useAuth();
+  const { staffOf, can, loading } = usePermissions();
+  if (isSuper(user)) return <>{children}</>;
+  if (loading) return null;
+  if (staffOf === 'head_office' && actions.some((a) => can(a, 'view'))) return <>{children}</>;
+  return <Navigate to="/" replace />;
 }
 
 /**
@@ -159,9 +178,9 @@ function Routed() {
         <Route
           path="/laboratories/:id"
           element={
-            <AdminOnly>
+            <HeadOfficeOr actions={['laboratory']}>
               <LaboratoryView />
-            </AdminOnly>
+            </HeadOfficeOr>
           }
         />
         <Route
@@ -188,9 +207,9 @@ function Routed() {
         <Route
           path="/student-enquiries"
           element={
-            <AdminOnly>
+            <HeadOfficeOr actions={['website_enquiry']}>
               <StudentEnquiries />
-            </AdminOnly>
+            </HeadOfficeOr>
           }
         />
         <Route
@@ -236,9 +255,9 @@ function Routed() {
         <Route
           path="/enquiries"
           element={
-            <AdminOnly>
+            <HeadOfficeOr actions={['visitor_book']}>
               <Enquiries />
-            </AdminOnly>
+            </HeadOfficeOr>
           }
         />
         {/*
@@ -305,9 +324,9 @@ function Routed() {
         <Route
           path="/content"
           element={
-            <AdminOnly>
+            <HeadOfficeOr actions={['website_home','website_report','website_blog']}>
               <Content />
-            </AdminOnly>
+            </HeadOfficeOr>
           }
         />
         <Route

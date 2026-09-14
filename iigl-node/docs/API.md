@@ -1,6 +1,6 @@
 # IIGL API
 
-234 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
+245 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
 
 The interactive version is at `/docs` when the server is running, and the raw
 document at `/openapi.json`.
@@ -113,6 +113,10 @@ Open endpoints: the marketing site and certificate verification.
 | GET | `/api/public/blogs/{slug}` | public | — | — | 404 | Read an article |
 | GET | `/api/public/branches` | public | — | — | — | List branch city pages |
 | GET | `/api/public/branches/{slug}` | public | — | — | 404 | Read a branch page |
+| GET | `/api/public/customers` | public | `state`, `city` | — | — | Registered customers shown on the website |
+| GET | `/api/public/customers/{id}/logo` | public | — | — | 404 | A listed customer's logo |
+| GET | `/api/public/laboratories` | public | — | — | — | List the laboratories shown as branches |
+| GET | `/api/public/laboratories/{id}/logo` | public | — | — | 404 | A listed laboratory's logo |
 | GET | `/api/public/pages/{pageType}` | public | — | — | 404 | Website page content |
 | GET | `/api/public/report-types` | public | — | — | — | List certificate types |
 | GET | `/api/public/verify-by-id/{id}` | public | — | — | 404 | Verify a certificate by its id |
@@ -183,7 +187,10 @@ Remittances, approvals, dues collection and wallet balance.
 | GET | `/api/transactions/commission/summary` | session | — | — | 401, 403 | Commission earned, paid and due |
 | POST | `/api/transactions/dues/{orderId}` | session | — | **amount**, pay_mode, transaction_no, remark | 400, 401, 403, 404 | Collect dues against an order |
 | POST | `/api/transactions/expense` | session | — | **amount**, **remark**, pay_mode, transaction_no, attachment | 400, 401, 403 | Record an expense |
-| GET | `/api/transactions/ledger` | session | `user_id` | — | 401, 403 | Running account |
+| GET | `/api/transactions/expense-wallet` | session | — | — | 401, 403 | Your expense wallet |
+| POST | `/api/transactions/float` | session | — | **user_id**, **amount**, **pay_mode**, transaction_no, remark | 400, 401, 403 | Send an employee an expense float |
+| GET | `/api/transactions/ledger` | session | `user_id`, `scope`, `from`, `to`, `status`, `q`, `mode` | — | 401, 403 | Running account |
+| GET | `/api/transactions/ledger/statement` | session | `user_id`, `scope`, `from`, `to`, `status`, `q`, `mode`, `format` | — | 400, 401, 403 | Download an account statement |
 | GET | `/api/transactions/wallet` | session | — | — | 401, 403 | Your balance |
 
 ## Users
@@ -287,6 +294,8 @@ The public site: articles, branch pages, certificate types, banners and static p
 | DELETE | `/api/content/banners/{id}` | session | — | — | 401, 403, 404 | Delete a banner |
 | POST | `/api/content/blogs` | session | — | **page_name**, slug, content, thumbnail, banner, meta_title, meta_description, meta_keywords | 400, 401, 403, 409 | Add a article |
 | PATCH | `/api/content/blogs/{id}` | session | — | page_name, slug, content, thumbnail, banner, meta_title, meta_description, meta_keywords | 400, 401, 403, 404 | Update a article |
+| GET | `/api/content/branch-laboratories` | session | — | — | 401, 403 | List laboratories with their website visibility |
+| PATCH | `/api/content/branch-laboratories/{id}` | session | — | **show_on_site** | 400, 401, 403, 404 | Show or hide a laboratory on the website |
 | POST | `/api/content/branches` | session | — | **city**, pageURL, h1, content, img, title, description, keywords | 400, 401, 403, 409 | Add a branch page |
 | PATCH | `/api/content/branches/{id}` | session | — | city, pageURL, h1, content, img, title, description, keywords | 400, 401, 403, 404 | Update a branch page |
 | GET | `/api/content/pages` | session | — | — | 401, 403 | List the static pages |
@@ -295,6 +304,8 @@ The public site: articles, branch pages, certificate types, banners and static p
 | PATCH | `/api/content/report-types/{id}` | session | — | name, short_description, description, banner, icon, meta_title, meta_description, meta_keywords | 400, 401, 403, 404 | Update a certificate type |
 | POST | `/api/content/roles` | session | — | **role_name** | 401, 403, 409 | Add a role |
 | PATCH | `/api/content/roles/{id}` | session | — | **role_name** | 401, 403, 404 | Rename a role |
+| GET | `/api/content/website-customers` | session | — | — | 401, 403 | List registered customers with their website visibility |
+| PATCH | `/api/content/website-customers/{id}` | session | — | **show_on_site** | 400, 401, 403, 404 | Show or hide a registered customer on the website |
 
 ## Uploads
 
@@ -347,9 +358,9 @@ Views over orders, grouped by mobile number. There is no customer table.
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/customers/{mobile}/orders` | session | — | — | 400, 401, 403 | One customer's orders, and what they come to |
 | GET | `/api/customers/accounts` | session | `page`, `per_page`, `q` | — | 401, 403 | Registered customers |
-| POST | `/api/customers/accounts` | session | — | lab_id, **company_name**, **owner_name**, **mobile**, email, city, **gst_no**, show_name_in_card, +4 more | 400, 401, 403, 409 | Register a customer |
+| POST | `/api/customers/accounts` | session | — | lab_id, **company_name**, **owner_name**, **mobile**, email, area, city, state, +7 more | 400, 401, 403, 409 | Register a customer |
 | GET | `/api/customers/accounts/{id}` | session | — | — | 401, 403, 404 | One registered customer, with their discounts |
-| PATCH | `/api/customers/accounts/{id}` | session | — | company_name, owner_name, mobile, email, city, gst_no, show_name_in_card, show_name_input, +3 more | 401, 403, 404, 409 | Update a registered customer |
+| PATCH | `/api/customers/accounts/{id}` | session | — | company_name, owner_name, mobile, email, area, city, state, logo, +7 more | 401, 403, 404, 409 | Update a registered customer |
 | DELETE | `/api/customers/accounts/{id}` | session | — | — | 401, 403, 404 | Remove a registered customer |
 | GET | `/api/customers/all` | session | `page`, `per_page`, `q` | — | 401, 403 | Every customer, registered or not |
 | GET | `/api/customers/registered` | session | `page`, `per_page` | — | 401, 403 | Customers with a GST number |
@@ -470,7 +481,7 @@ Commission billed to a laboratory on a period, its grace days, and the lock on c
 | Method | Path | Auth | Query | Body | Fails | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/messages` | session | `from`, `box`, `open`, `page`, `per_page` | — | 401, 403 | Inbox, or one person’s messages |
-| POST | `/api/messages` | session | — | **body**, kind, topic, about_date, to, reply_to | 400, 401, 403, 404 | Write a message, to one person or several |
+| POST | `/api/messages` | session | — | **body**, attachment, kind, topic, about_date, to, reply_to | 400, 401, 403, 404 | Write a message, to one person or several |
 | PATCH | `/api/messages/{id}/resolve` | session | — | resolved, decision, reply | 401, 403, 404 | Answer one: approve, decline, or simply close it |
 | GET | `/api/messages/employer` | session | — | — | 401, 403 | Who this account writes to |
 | GET | `/api/messages/recipients` | session | — | — | 401, 403 | Everybody this account may write to |
@@ -487,4 +498,4 @@ Commission billed to a laboratory on a period, its grace days, and the lock on c
 
 Bold body fields are required.
 
-234 endpoints: 16 public, 218 requiring a session.
+245 endpoints: 20 public, 225 requiring a session.

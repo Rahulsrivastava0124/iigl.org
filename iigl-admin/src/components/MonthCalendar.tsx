@@ -1,4 +1,5 @@
 import { Box, Stack, Tooltip, Typography } from '@mui/material';
+import LateIcon from '@mui/icons-material/AlarmOutlined';
 import type { ReactNode } from 'react';
 import PrevIcon from '@mui/icons-material/ChevronLeftOutlined';
 import NextIcon from '@mui/icons-material/ChevronRightOutlined';
@@ -37,6 +38,12 @@ export interface CalendarDay {
   /** Up to two short lines under the date. Times, a count, a figure. */
   lines?: string[];
   tooltip?: string;
+  /**
+   * They came in after the shift's late time. Drawn as a red Late mark along the
+   * foot of the day, so a late day is picked out of a green month at a glance
+   * rather than by reading the word in small type beside a time.
+   */
+  late?: boolean;
 }
 
 /**
@@ -192,6 +199,9 @@ export default function MonthCalendar({
                   bgcolor: tint ? tint.main : 'transparent',
                   minHeight: { xs: 58, sm: 74 },
                   p: { xs: 0.5, sm: 1 },
+                  // A column, so the Late mark can sit at the foot of the day.
+                  display: 'flex',
+                  flexDirection: 'column',
                   opacity: future ? 0.45 : 1,
                   ...(pickable && {
                     cursor: 'pointer',
@@ -228,6 +238,29 @@ export default function MonthCalendar({
                     {line}
                   </Typography>
                 ))}
+                {day?.late && (
+                  <Box
+                    sx={{
+                      mt: 'auto',
+                      pt: 0.5,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.25,
+                      alignSelf: 'flex-start',
+                      px: 0.6,
+                      py: 0.1,
+                      borderRadius: 0.75,
+                      bgcolor: 'error.main',
+                      color: '#fff',
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    <LateIcon sx={{ fontSize: 12 }} />
+                    Late
+                  </Box>
+                )}
               </Box>
             );
 

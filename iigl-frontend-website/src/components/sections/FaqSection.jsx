@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import SectionLabel from '../SectionLabel.jsx';
 import {
   ArrowRight,
   Clock,
@@ -76,9 +77,7 @@ export default function FaqSection() {
     <section id="faq" className="bg-white px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[1390px]">
         <div className="mx-auto max-w-[820px] text-center">
-          <p className="m-0 text-[12px] font-medium uppercase tracking-[0.14em] text-[#bd7724]">
-            FAQ
-          </p>
+          <SectionLabel>FAQ</SectionLabel>
           <h2 className="m-0 mt-4 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[28px]">
             Frequently Asked Questions
           </h2>

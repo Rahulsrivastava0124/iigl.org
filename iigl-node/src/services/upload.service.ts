@@ -34,6 +34,16 @@ export const BUCKETS = {
   icon: 'uploads/icon',
   website: 'uploads/website',
   documentation: 'uploads/documentation',
+  /**
+   * An employee's own papers: an Aadhaar scan, a PAN card, a certificate.
+   *
+   * Apart from `documentation` because that one is head office's alone, and the
+   * people who keep these are the employers — a laboratory filing its own
+   * staff's papers was refused on the first upload.
+   */
+  staff_document: 'uploads/staff_document',
+  /** A photograph or PDF sent in a chat message. Anybody who may write may attach. */
+  message: 'uploads/message',
   /** Course certificate artwork: one design per course, printed under a name. */
   certificate: 'uploads/certificate',
   /** Payment proof. Laravel writes these to public/screenshots, not uploads/. */
@@ -47,9 +57,11 @@ export const isBucket = (v: string): v is Bucket => v in BUCKETS;
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 const DOCUMENT_TYPES = new Set([...IMAGE_TYPES, 'application/pdf']);
 
-/** Documentation may be a PDF; everything else is an image. */
+/** Documents may be a PDF; everything else is an image. */
 const allowedFor = (bucket: Bucket) =>
-  bucket === 'documentation' ? DOCUMENT_TYPES : IMAGE_TYPES;
+  bucket === 'documentation' || bucket === 'staff_document' || bucket === 'message'
+    ? DOCUMENT_TYPES
+    : IMAGE_TYPES;
 
 const EXTENSIONS: Record<string, string> = {
   'image/jpeg': '.jpg',
@@ -105,7 +117,7 @@ export const upload = multer({
     if (!isBucket(bucket)) return cb(badRequest('Unknown upload type.'));
 
     if (!allowedFor(bucket).has(file.mimetype)) {
-      const allowed = bucket === 'documentation' ? 'an image or a PDF' : 'an image';
+      const allowed = allowedFor(bucket) === DOCUMENT_TYPES ? 'an image or a PDF' : 'an image';
       return cb(badRequest(`${file.originalname} is not ${allowed}.`));
     }
     cb(null, true);
