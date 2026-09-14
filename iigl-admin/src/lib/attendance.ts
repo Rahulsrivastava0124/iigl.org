@@ -238,6 +238,9 @@ export function absentDay(
  * is added to the tooltip of those days rather than painted over them.
  */
 export interface DayNote {
+  id?: number;
+  /** The request a reply answers. */
+  reply_to?: number | null;
   about_date: string | null;
   kind: string;
   body: string;
@@ -246,8 +249,20 @@ export interface DayNote {
   decision?: string | null;
 }
 
-export const noteOn = (notes: DayNote[], date: string) =>
-  notes.filter((n) => String(n.about_date ?? '').slice(0, 10) === date);
+const isDeclined = (n: DayNote) => n.kind === 'request' && Boolean(n.resolved_at) && n.decision === 'declined';
+
+/**
+ * The notes on one day.
+ *
+ * A declined request, and the reply that declined it, are left out: nothing
+ * was granted, so the day shows exactly as it would without them — blank ahead,
+ * absent once it has passed with no punch. They stay in the inbox.
+ */
+export const noteOn = (notes: DayNote[], date: string) => {
+  const day = notes.filter((n) => String(n.about_date ?? '').slice(0, 10) === date);
+  const declined = new Set(day.filter(isDeclined).map((n) => n.id));
+  return day.filter((n) => !isDeclined(n) && !(n.reply_to != null && declined.has(n.reply_to)));
+};
 
 /** What the notes on one day add to its tooltip. */
 export const noteTip = (notes: DayNote[]) =>
@@ -256,15 +271,10 @@ export const noteTip = (notes: DayNote[]) =>
     .join(' · ');
 
 /**
- * The mark for a day with notes on it, by what was asked and what was answered.
- *
- * Answered used to be one grey "request" whichever way it went, so a declined
- * leave looked exactly like an approved one. Unanswered is amber, approved is
- * green, declined is red. `absent` is what the day would be with no note at
- * all: a refused request does not excuse the day, so once it has passed with
- * no punch it is absent, and the request stays in the tooltip.
+ * The mark for a day with notes on it: unanswered amber, approved green.
+ * Declined requests never get here — `noteOn` leaves them out.
  */
-export function noteDay(notes: DayNote[], absent?: CalendarDay | null): CalendarDay {
+export function noteDay(notes: DayNote[]): CalendarDay {
   const tooltip = noteTip(notes);
   // A reply is a message on the same day as the request it answers, so the
   // requests alone decide the mark.
@@ -273,11 +283,6 @@ export function noteDay(notes: DayNote[], absent?: CalendarDay | null): Calendar
 
   if (requests.some((n) => !n.resolved_at)) return { tone: 'waiting', lines: ['request'], tooltip };
   if (requests.some(answered('approved'))) return { tone: 'settled', lines: ['approved'], tooltip };
-  if (requests.length > 0 && requests.every(answered('declined'))) {
-    return absent
-      ? { ...absent, tooltip: `${absent.tooltip ?? ''} · ${tooltip}` }
-      : { tone: 'refused', lines: ['declined'], tooltip };
-  }
   // Closed without a decision, or only messages: nothing waits on the day.
   const request = requests.length > 0;
   return {

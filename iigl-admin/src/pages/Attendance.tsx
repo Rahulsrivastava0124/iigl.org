@@ -342,9 +342,7 @@ export default function Attendance() {
             const day = weekOffDay();
             return { ...day, tooltip: `${day.tooltip ?? ''}${said}` };
           }
-          // A declined request does not excuse the day, so the note is given
-          // what the day would be without it.
-          if (notes.length > 0) return noteDay(notes, absentDay(date, since, shift.lateAfter));
+          if (notes.length > 0) return noteDay(notes);
           // Nothing punched, nothing said, and they were due in: red.
           return absentDay(date, since, shift.lateAfter);
         }}
