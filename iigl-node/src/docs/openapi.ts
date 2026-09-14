@@ -64,7 +64,7 @@ const document = {
       'JSON API for the IIGL gemstone certification portal, replacing the Laravel 7 backend.',
       '',
       '**Authentication.** Sign in at `POST /api/auth/login` with a mobile number and password.',
-      'The response sets an httpOnly session cookie named `iigl.sid`; send it with every',
+      'The response sets an httpOnly session cookie — `iigl.sid.super`, `iigl.sid.admin` or `iigl.sid.team` for the panel named by `?portal=`, plain `iigl.sid` without one; send it with every',
       'subsequent request. Passwords are the existing Laravel bcrypt hashes, so credentials',
       'carried over unchanged from the PHP application.',
       '',
@@ -706,7 +706,7 @@ const document = {
         tags: ['Auth'],
         summary: 'Sign in',
         description:
-          'Verifies the password against the existing Laravel bcrypt hash and sets the `iigl.sid` session cookie. A missing account and a wrong password return the same response, so the endpoint cannot be used to discover which mobile numbers are registered.',
+          'Verifies the password against the existing Laravel bcrypt hash and sets the session cookie for the panel named by `?portal=` (`iigl.sid.<portal>`, or `iigl.sid` without one), so each panel stays signed in on its own. A missing account and a wrong password return the same response, so the endpoint cannot be used to discover which mobile numbers are registered.',
         security: [],
         requestBody: {
           required: true,

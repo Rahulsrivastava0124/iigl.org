@@ -14,7 +14,7 @@ Content-Type: application/json
 { "mobile": "9800000000", "password": "…" }
 ```
 
-The response sets an httpOnly cookie named `iigl.sid`. Send it with every
+The response sets an httpOnly cookie named `iigl.sid.<portal>` for the panel named by `?portal=` (plain `iigl.sid` without one). Send it with every
 subsequent request — `credentials: "include"` in the browser, `-b` with curl.
 Sessions last two days by default, and the length is a setting.
 

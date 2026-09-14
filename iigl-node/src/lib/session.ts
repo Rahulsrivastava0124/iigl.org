@@ -35,6 +35,27 @@ export interface SessionUser {
 export const SESSION_COOKIE = 'iigl.sid';
 
 /**
+ * One session per panel.
+ *
+ * The three panels — super., admin., team. — call the same API, so one cookie
+ * was shared by all of them: signing in to admin in one tab replaced the super
+ * admin's session in the next, and that tab was signed out. Each panel now
+ * names itself on every request (`?portal=`, added by the panel's `apiUrl`) and
+ * keeps its session in a cookie of its own: `iigl.sid.super`, `iigl.sid.admin`,
+ * `iigl.sid.team`.
+ *
+ * A request that names no panel — curl, the sweep, the API docs — keeps the
+ * plain `iigl.sid`. The name only chooses which cookie is read; the signature
+ * is still the only thing that makes one valid.
+ */
+const PORTALS = new Set(['super', 'admin', 'team']);
+
+export function sessionCookieFor(req: Request): string {
+  const portal = String(req.query?.portal ?? '').toLowerCase();
+  return PORTALS.has(portal) ? `${SESSION_COOKIE}.${portal}` : SESSION_COOKIE;
+}
+
+/**
  * How long a sign-in lasts: two days, unless Settings says otherwise.
  *
  * Read at issue time rather than at import, so a change applies to the next
@@ -79,20 +100,22 @@ const cookieOptions = {
 
 export function issueSession(res: Response, user: SessionUser, ttlMs = DEFAULT_TTL_MS): void {
   const body = Buffer.from(JSON.stringify({ ...user, exp: Date.now() + ttlMs })).toString('base64url');
-  res.cookie(SESSION_COOKIE, `${body}.${sign(body)}`, { ...cookieOptions, maxAge: ttlMs });
+  res.cookie(sessionCookieFor(res.req), `${body}.${sign(body)}`, { ...cookieOptions, maxAge: ttlMs });
 }
 
 export function clearSession(res: Response): void {
-  res.clearCookie(SESSION_COOKIE, cookieOptions);
+  // Only this panel's: signing out of one tab leaves the others signed in.
+  res.clearCookie(sessionCookieFor(res.req), cookieOptions);
 }
 
 /** The signed-in user, or null when the cookie is absent, tampered with or expired. */
 export function readSession(req: Request): SessionUser | null {
+  const name = sessionCookieFor(req);
   const token = (req.headers.cookie ?? '')
     .split(';')
     .map((c) => c.trim())
-    .find((c) => c.startsWith(`${SESSION_COOKIE}=`))
-    ?.slice(SESSION_COOKIE.length + 1);
+    .find((c) => c.startsWith(`${name}=`))
+    ?.slice(name.length + 1);
   if (!token) return null;
 
   const [body, mac] = decodeURIComponent(token).split('.');

@@ -20,6 +20,8 @@
  * survives third-party cookie restrictions that a cross-origin setup does not.
  */
 
+import { currentPortal } from './portal';
+
 const RAW = (import.meta.env.VITE_API_URL ?? '/api').trim();
 
 /** No trailing slash, so joining a path never produces a double slash. */
@@ -27,9 +29,18 @@ export const API_BASE = RAW.replace(/\/+$/, '') || '/api';
 
 export const IS_CROSS_ORIGIN = /^https?:\/\//i.test(API_BASE);
 
-/** Builds a full URL for an API path. Paths are written with a leading slash. */
+/**
+ * Builds a full URL for an API path. Paths are written with a leading slash.
+ *
+ * Every URL names the panel it comes from. The API keeps one session per panel,
+ * chosen by this, so signing in to admin. in one tab no longer signs super. out
+ * in the next. Added here because everything reaches the API through this —
+ * requests, uploads, pictures, and the PDFs opened in a new tab, where no
+ * header could be set.
+ */
 export function apiUrl(path: string): string {
-  return `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+  const url = `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+  return `${url}${url.includes('?') ? '&' : '?'}portal=${currentPortal()}`;
 }
 
 /**
