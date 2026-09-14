@@ -246,7 +246,6 @@ export default function RoleEdit() {
               onToggleGroup={(title) => setOpen({ ...open, [title]: !(open[title] ?? true) })}
               disabled={busy}
               showSide={role.owner_id === null}
-              maxHeight="none"
             />
           )}
         </Box>
