@@ -179,7 +179,7 @@ export default function RolePermissionsDialog({
             rows={rows}
             onChange={setRows}
             open={open}
-            onToggleGroup={(title) => setOpen({ ...open, [title]: !open[title] })}
+            onToggleGroup={(title) => setOpen({ ...open, [title]: !(open[title] ?? true) })}
             disabled={busy || readOnly}
             showSide={shared}
           />

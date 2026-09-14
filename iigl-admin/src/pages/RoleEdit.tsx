@@ -243,9 +243,10 @@ export default function RoleEdit() {
               rows={rows}
               onChange={setRows}
               open={open}
-              onToggleGroup={(title) => setOpen({ ...open, [title]: !open[title] })}
+              onToggleGroup={(title) => setOpen({ ...open, [title]: !(open[title] ?? true) })}
               disabled={busy}
               showSide={role.owner_id === null}
+              maxHeight="none"
             />
           )}
         </Box>

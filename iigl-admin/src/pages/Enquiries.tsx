@@ -23,6 +23,7 @@ import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import { useDebounced, useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
+import { usePermissions } from '../lib/permissions';
 import SourceField from '../components/SourceField';
 import { useToast } from '../components/Toast';
 import { BRAND } from '../lib/theme';
@@ -135,6 +136,11 @@ const BLANK = {
  * either way.
  */
 export default function Enquiries({ fixedKind }: { fixedKind?: Kind } = {}) {
+  // Head office always; its staff by Visitor book.
+  const { can } = usePermissions();
+  const mayAdd = can('visitor_book', 'create');
+  const mayChange = can('visitor_book', 'update');
+  const mayDelete = can('visitor_book', 'delete');
   const toast = useToast();
   const [params, setParams] = useSearchParams();
   // No "All": each kind is a book of its own, and one with no kind named opens
@@ -506,7 +512,7 @@ export default function Enquiries({ fixedKind }: { fixedKind?: Kind } = {}) {
                 go({ page: 1 });
               }}
             />
-            <Button
+            {mayAdd && <Button
               variant="contained"
               startIcon={<AddIcon />}
               // Pinned, the new record is that kind and is dated today, the
@@ -522,7 +528,7 @@ export default function Enquiries({ fixedKind }: { fixedKind?: Kind } = {}) {
               }
             >
               Record an enquiry
-            </Button>
+            </Button>}
           </>
         }
       >
@@ -607,7 +613,7 @@ export default function Enquiries({ fixedKind }: { fixedKind?: Kind } = {}) {
                         icon={ViewIcon}
                         onClick={() => setViewing(e)}
                       />
-                      {e.status !== 'closed' && (
+                      {mayChange && e.status !== 'closed' && (
                         <IconAction
                           label={e.status === 'new' ? 'Mark in progress' : 'Mark resolved'}
                           icon={e.status === 'new' ? OpenIcon : CloseIcon}
@@ -615,7 +621,7 @@ export default function Enquiries({ fixedKind }: { fixedKind?: Kind } = {}) {
                           onClick={() => move(e, e.status === 'new' ? 'open' : 'closed')}
                         />
                       )}
-                      <IconAction
+                      {mayChange && <IconAction
                         label="Edit enquiry"
                         overflow
                         icon={EditIcon}
@@ -637,13 +643,13 @@ export default function Enquiries({ fixedKind }: { fixedKind?: Kind } = {}) {
                             remark: e.remark ?? '',
                           })
                         }
-                      />
-                      <IconAction
+                      />}
+                      {mayDelete && <IconAction
                         label="Delete enquiry"
                         icon={DeleteIcon}
                         danger
                         onClick={() => setDeleting(e)}
-                      />
+                      />}
                     </RowActions>
                   </TableCell>
                 </TableRow>

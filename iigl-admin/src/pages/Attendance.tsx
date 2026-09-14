@@ -5,7 +5,6 @@ import LogoutIcon from '@mui/icons-material/LogoutOutlined';
 import BreakIcon from '@mui/icons-material/FreeBreakfastOutlined';
 import { useToast } from '../components/Toast';
 import { isSuper, isLab } from '../lib/portal';
-import { usePermissions } from '../lib/permissions';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
@@ -53,9 +52,9 @@ export default function Attendance() {
   // Head office and a laboratory may read somebody else's days; a team member
   // reads their own.
   const canReadOthers = isSuper(user) || isLab(user);
-  // A laboratory always may; its staff may when they have been granted it.
-  const { can } = usePermissions();
-  const canMessage = canReadOthers || can('message', 'create');
+  // Writing to one's employer is one's own business, not a grant: an employee
+  // always may, as the API has always allowed.
+  const canMessage = true;
 
   // 'me' rather than '' — an empty MUI select value leaves the label
   // unshrunk, so the field shows its label where the choice should be.
@@ -252,8 +251,6 @@ export default function Attendance() {
                 employer may change a record. What they can do is say so, and
                 this is where they say it.
               */}
-              {/* Granted, like everything else a laboratory decides about
-                  its front desk. */}
               {canMessage && (
                 <Button startIcon={<MessageIcon />} onClick={() => setWriting(true)}>
                   Message employer

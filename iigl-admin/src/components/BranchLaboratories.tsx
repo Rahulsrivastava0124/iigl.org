@@ -59,7 +59,7 @@ function MapLocation({ lab }: { lab: Lab }) {
  * An inactive laboratory is never shown on the site whatever its tick says; it
  * is listed here, marked Inactive, so a closed branch still ticked is visible.
  */
-export default function BranchLaboratories() {
+export default function BranchLaboratories({ readOnly = false }: { /** Seen, not changed: no Edit on Website Setup. */ readOnly?: boolean } = {}) {
   const toast = useToast();
   const source = useFetch<{ data: Lab[] }>('/content/branch-laboratories');
   // Ticks changed on screen, ahead of the reload that confirms them.
@@ -123,7 +123,7 @@ export default function BranchLaboratories() {
                     }}
                     checked={allShown}
                     indeterminate={!allShown && rows.some(shown)}
-                    disabled={saving || rows.length === 0}
+                    disabled={readOnly || saving || rows.length === 0}
                     onChange={() => setShown(rows.map((l) => l.id), !allShown)}
                     slotProps={{ input: { 'aria-label': 'Show every listed laboratory on the website' } }}
                   />
@@ -159,7 +159,7 @@ export default function BranchLaboratories() {
                     size="small"
                     sx={{ p: 0 }}
                     checked={shown(l)}
-                    disabled={saving}
+                    disabled={readOnly || saving}
                     onChange={() => setShown([l.id], !shown(l))}
                     slotProps={{ input: { 'aria-label': `Show ${l.fullname} on the website` } }}
                   />

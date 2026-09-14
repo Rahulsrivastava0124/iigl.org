@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Box, FormControl, FormControlLabel, FormLabel, Radio, RadioGroup } from '@mui/material';
+import { Box, FormControl, FormControlLabel, FormLabel, Radio, RadioGroup, Stack } from '@mui/material';
 
 /**
  * A yes/no question with the field it governs underneath.
@@ -19,12 +19,37 @@ export default function YesNoField({
   value,
   onChange,
   children,
+  inline = false,
 }: {
   label: string;
   value: boolean;
   onChange: (value: boolean) => void;
   children?: ReactNode;
+  /**
+   * The question and its field side by side on one row, rather than the field
+   * underneath. Stacks again on a narrow screen, where one row has no room.
+   */
+  inline?: boolean;
 }) {
+  if (inline) {
+    return (
+      <FormControl component="fieldset" fullWidth>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ alignItems: { sm: 'center' } }}>
+          <Box sx={{ flexShrink: 0 }}>
+            <FormLabel component="legend" sx={{ fontSize: 13.5, fontWeight: 600, color: 'text.primary' }}>
+              {label}
+            </FormLabel>
+            <RadioGroup row value={value ? '1' : '0'} onChange={(e) => onChange(e.target.value === '1')}>
+              <FormControlLabel value="1" control={<Radio size="small" />} label="Yes" />
+              <FormControlLabel value="0" control={<Radio size="small" />} label="No" />
+            </RadioGroup>
+          </Box>
+          {children && <Box sx={{ flex: 1, minWidth: 0 }}>{children}</Box>}
+        </Stack>
+      </FormControl>
+    );
+  }
+
   return (
     <FormControl component="fieldset" fullWidth>
       <FormLabel

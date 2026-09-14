@@ -23,7 +23,8 @@ import DuesIcon from '@mui/icons-material/PendingActionsOutlined';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { fileUrl } from '../lib/config';
-import { messageOf } from '../lib/auth';
+import { messageOf, useAuth } from '../lib/auth';
+import { isSuper } from '../lib/portal';
 import { useToast } from '../components/Toast';
 import FilePreview from '../components/FilePreview';
 import { StatementsTable } from '../components/Statements';
@@ -110,6 +111,9 @@ interface Detail {
 const day = (v: string | null | undefined) => (v ? String(v).slice(0, 10) : '—');
 
 export default function LaboratoryView() {
+  // Head office's staff may open this page (Laboratories → View) but not change
+  // the laboratory or which of its certificates are published.
+  const superAdmin = isSuper(useAuth().user);
   const { id } = useParams();
   const navigate = useNavigate();
   const [tab, setTab] = useState<'payments' | 'staff' | 'reports' | 'statements'>('payments');
@@ -173,7 +177,7 @@ export default function LaboratoryView() {
             />
           )}
         </Stack>
-        {lab && (
+        {lab && superAdmin && (
           <Button
             variant="contained"
             startIcon={<EditIcon />}
@@ -340,7 +344,7 @@ export default function LaboratoryView() {
                           }}
                           checked={allHidden}
                           indeterminate={!allHidden && reports.some((r) => !!r.hidden_on_site)}
-                          disabled={saving || reports.length === 0}
+                          disabled={!superAdmin || saving || reports.length === 0}
                           onChange={() => setHidden(reports.map((r) => r.id), !allHidden)}
                           slotProps={{
                             input: { 'aria-label': 'Hide every certificate shown from the public site' },
@@ -397,7 +401,7 @@ export default function LaboratoryView() {
                           size="small"
                           sx={{ p: 0 }}
                           checked={!!r.hidden_on_site}
-                          disabled={saving}
+                          disabled={!superAdmin || saving}
                           onChange={() => setHidden([r.id], !r.hidden_on_site)}
                           slotProps={{
                             input: { 'aria-label': `Hide ${r.report_no} from the public site` },

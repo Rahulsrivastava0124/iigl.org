@@ -234,12 +234,12 @@ another door. `iigl-admin/src/lib/portal.ts` holds the doors; `requireAdmin` and
 
 | | Super admin | Admin (laboratory) | Team |
 | --- | --- | --- | --- |
-| Orders, certificates, customers | Every laboratory | Own laboratory | Own laboratory, **or only their own work** — see below |
-| Catalogue, prices, website, roles | Yes | No | No |
-| Laboratories | All, and can create them | Own record only | No |
+| Orders, certificates, customers | Every laboratory | Own laboratory | Laboratory staff: own laboratory by grant, **or only their own orders** — see below. Head office staff: customers by grant |
+| Catalogue, prices, website, roles | Yes | No | Head office staff: website setup by grant. Never catalogue, prices or roles |
+| Laboratories | All, and can create them | Own record only | Head office staff: view all, by grant |
 | Employees | All | Own laboratory's | No |
 | Money | Own account by default — see below | Own | Own |
-| Students, enquiries, courses | Yes | No | No |
+| Students, enquiries, courses | Yes | No | Head office staff: the enquiry book and student enquiries, by grant |
 | Issue a certificate | **No** — head office has no laboratory to issue against | Yes | With permission |
 
 The last row is not a policy choice. A certificate is written against the
@@ -320,57 +320,90 @@ renaming "Front desk" would rename it for six others.
 
 ## Permissions
 
-`role_permissions` holds one row per role per action type.
+Permissions govern **employees, and only employees**. Head office (role 1) and a
+laboratory (role 2) are unconditional — the laboratory account *is* its admin,
+and every role 1 and role 2 row in the ported `role_permissions` is zero. Read
+literally those zeros would lock a laboratory out of its own counter, so
+`can()` returns true for both and consults the matrix for everybody else.
 
-**It describes the team, and only the team.** Every row for role 1 and role 2 is
-zero, and the Laravel laboratory sidebar never reads them: the controllers branch
-on `role_id == 2` before they ever call `filterPermission()`. Read literally, the
-zeros would lock a laboratory out of its own counter.
-
-So `can()` returns true unconditionally for role 1 and role 2, and consults the
-matrix for role 3 and above.
+### Who sets them
 
 ```
-role 1  super admin     0 flags set   ← never read; unconditional
-role 2  admin           0 flags set   ← never read; unconditional
-role 3  team           38 flags set   ← the matrix means this
-role 4  MANAGER         0 flags set   ← see the warning below
-role 5  Office Boy      0 flags set   ← no users hold this role
-NULL    no role         —             ← only their own grants
+                      whose permissions it may set
+    ──────────────────────────────────────────────────────────────
+    Super admin       any employee — its own staff and every laboratory's
+    Laboratory        its own staff only
+    An employee       nobody, not even themselves
 ```
 
-### NULL is not a role
+Every write — a role's matrix, a role's name, one person's own grants — takes
+`requireEmployer`, and nobody may read or change their own permissions. Head
+office and laboratory accounts have no permissions to set (403).
 
-`role_id` is nullable, and NULL means **no role**: somebody whose permissions
-were granted one row at a time in `user_permissions`.
+> **This was once a hole.** The permission and role endpoints admitted
+> employees, and an employee's "laboratory" is their employer — so they passed
+> the *works for your laboratory* test for every colleague and for themselves,
+> and could create a role, grant it everything, and grant themselves anything.
 
-Nothing coerces a role through `Number()`. `Number(null)` is `0`, and while 0 is
-not a role today, a decoder that turns "no role" into a number is one schema
-change away from turning it into somebody's role. The session decoder and the
-login both keep null as null for that reason.
+### Two kinds of employee, two sets of permissions
 
-Custom roles take any id above the built-in five, so **rank tests are written as
-sets, not inequalities** — `isSuper()`, `isAdmin()`, or an explicit pair — and
-never `roleId <= 2`.
+What an employee may be given depends on **whose** employee they are
+(`staffKindOf()`, from the employer the session's `labId` points at):
 
-### The permission list can grow
+| Permission | Laboratory staff | Head office staff | Boxes | What the API enforces |
+| --- | :-: | :-: | --- | --- |
+| `product_collection` Orders | ✓ | | View Add Edit Delete | View+Add together show the laboratory's orders, else only their own; Add takes an order; Edit settles, delivers, amends; Delete removes an order or item |
+| `report` Certificates | ✓ | | View Add Edit | List and print (incl. card PDFs); issue; edit and hide. Never deleted |
+| `customer` Customers | ✓ | ✓ | View Add Edit Delete | Lists and registered accounts. Head office staff see every laboratory's |
+| `laboratory` Laboratories | | ✓ | View | Franchise list, laboratory page, agreement, registration form. Changing a laboratory stays Super Admin's |
+| `visitor_book` Enquiry book | | ✓ | View Add Edit Delete | `/api/enquiries`, with follow-ups |
+| `website_enquiry` Student enquiries | | ✓ | View Add Edit Delete | `/api/students/enquiries`; convert is Edit. The rest of the student pipeline stays Super Admin's |
+| `website_home` Website setup | | ✓ | View Add Edit Delete | Banners, pages, branch pages, which laboratories and customers the website shows |
+| `website_report` Report types | | ✓ | View Add Edit | Website Setup › Report Types |
+| `website_blog` Blog | | ✓ | View Add Edit | Website Setup › Blog |
 
-The action types live in `permission_actions` rather than in a constant —
-fourteen at first, sixteen since migration 036 added `attendance` and
-`message`, so a new one can be added without a deployment — `POST
-/api/roles/actions`, head office only.
+`PERMISSION_SCOPE` in `iigl-node/src/services/permission.service.ts` is this
+table. A grant outside the person's side, or on a box the permission does not
+use, is worth nothing — `can()` answers no — and the write endpoints refuse the
+first and store the second as off. That matters because role 3 **Team** is
+shared by both kinds: its website flags must not reach a laboratory's front desk,
+and its order flags must not reach head office's staff.
 
-**There is no button for it in the panel.** It was removed deliberately: adding
-a name puts it on every role's screen while granting nothing, because the API
-does not check it until somebody writes the check. That is a decision to make
-alongside the code that reads it, not from a form. The permission screens still
-read the list rather than a constant, and still mark anything the API does not
-enforce as **not enforced yet**.
+**Not employee permissions**, and on no permission screen: `account`,
+`employee_management`, `admin_employee`, `website_contact`,
+`website_education` (nothing to govern — managing money and people is the
+employer's), and `attendance` and `message` — a person's own month and their
+own messages to their employer are always theirs.
 
-### One person's own permissions
+### How it is enforced
 
-A grant on `user_permissions` **replaces** the role's answer for that action.
-That cuts both ways, deliberately:
+```
+requirePermission(action, ability?)   laboratory routes: head office and
+                                      laboratories pass; an employee needs it
+headOfficeOr(action, ability?)        head office's routes: head office passes,
+                                      and its own staff holding it; a
+                                      laboratory or its staff never
+```
+
+The ability defaults to the request method — GET view, POST add, PATCH/PUT
+edit, DELETE delete. Each route file shows its guard beside the path.
+
+### Head office's employees
+
+They sign in at the team door, and the panel gives them **head office's** menu
+cut down to what they hold (`staff_of` on `/api/users/me/permissions`), plus
+their own Attendance page. Screens they can open show only the buttons their
+grant allows; anything without a permission — prices, masters, settings,
+courses, employees, roles — stays Super Admin's.
+
+### Roles and one person's own grants
+
+A laboratory's own role governs laboratory staff, so its screen lists the
+laboratory side. A shared role may be held by either kind and lists both, each
+row marked with the side it applies to.
+
+A grant on `user_permissions` **replaces** the role's answer for that
+permission. That cuts both ways, deliberately:
 
 ```
       role says          the person's own row       what happens
@@ -381,18 +414,27 @@ That cuts both ways, deliberately:
       (no role at all)   view                       view
 ```
 
-Which is what makes **a user with no role** work: `role_id` is NULL, they have
-no role rows, and their own grants are all there is. `can()` resolves own-grant, then role,
-then deny — the same order on every request, so a screen that hides a control on
-this answer hides exactly what the API would refuse.
+`can()` resolves: head office or laboratory → yes; permission not for this
+side or box not used → no; own row; role row; no. The same order on every
+request, and `/api/users/me/permissions` returns that same answer, so a
+control the panel hides is exactly one the API refuses.
 
-> **Worth deciding before cutover.** Role 4 (MANAGER) has one live user, and they
-> are head office's employee — `employements.parent_id = 'admin'`, head
-> office's own empid. Every one of their
-> permission flags is zero, so the matrix grants them nothing, and
-> `orderVisibility()` puts them on "only their own work". Either give role 4 its
-> flags, or fold that person into role 3. Right now they can sign in and see
-> almost nothing.
+### NULL is not a role
+
+`role_id` is nullable, and NULL means **no role**: somebody whose permissions
+were granted one row at a time in `user_permissions`. Nothing coerces a role
+through `Number()` — `Number(null)` is `0` — and custom roles take any id above
+the built-in five, so rank tests are written as sets (`isSuper()`, `isLab()`),
+never `roleId <= 2`.
+
+### The live data, when this was written
+
+```
+role 3  Team          shared   laboratory side and head-office side both set
+role 9  Office Boy    lab 26   Orders view + add only
+user 25 (head office staff, Team)       own grant: Laboratories view
+users 31, 33 (lab 26 staff, Office Boy) Orders only — no certificates or customers
+```
 
 ---
 

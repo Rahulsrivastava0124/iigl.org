@@ -20,7 +20,9 @@ import ConvertIcon from '@mui/icons-material/HowToRegOutlined';
 import UndoIcon from '@mui/icons-material/UndoOutlined';
 import { useDebounced, useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
-import { messageOf } from '../lib/auth';
+import { messageOf, useAuth } from '../lib/auth';
+import { usePermissions } from '../lib/permissions';
+import { isSuper } from '../lib/portal';
 import SourceField from '../components/SourceField';
 import { useToast } from '../components/Toast';
 import { BRAND } from '../lib/theme';
@@ -94,6 +96,13 @@ const BLANK = {
 };
 
 export default function StudentEnquiries() {
+  // Head office always; its staff by Student enquiries. Undoing a registration
+  // touches the student record, which stays Super Admin's.
+  const { can } = usePermissions();
+  const superAdmin = isSuper(useAuth().user);
+  const mayAdd = can('website_enquiry', 'create');
+  const mayChange = can('website_enquiry', 'update');
+  const mayDelete = can('website_enquiry', 'delete');
   const toast = useToast();
   const [params, setParams] = useSearchParams();
   const status = (params.get('status') as Status | null) ?? 'all';
@@ -297,7 +306,8 @@ export default function StudentEnquiries() {
               */
               form.id ? (
                 form.student_id ? (
-                  <Button
+                  // Deletes a student record, which is Super Admin's alone.
+                  superAdmin && <Button
                     type="button"
                     variant="outlined"
                     color="error"
@@ -444,7 +454,7 @@ export default function StudentEnquiries() {
                 go({ page: 1 });
               }}
             />
-            <Button
+            {mayAdd && <Button
               variant="contained"
               startIcon={<AddIcon />}
               // Dated today unless somebody says otherwise: an enquiry is
@@ -453,7 +463,7 @@ export default function StudentEnquiries() {
               onClick={() => setForm({ ...BLANK, enquiry_date: today() })}
             >
               New enquiry
-            </Button>
+            </Button>}
           </>
         }
       >
@@ -523,7 +533,7 @@ export default function StudentEnquiries() {
                         icon={ViewIcon}
                         onClick={() => setViewing(e)}
                       />
-                      <IconAction
+                      {mayChange && <IconAction
                         label="Edit enquiry"
                         overflow
                         icon={EditIcon}
@@ -551,13 +561,13 @@ export default function StudentEnquiries() {
                             remarks: e.remarks ?? '',
                           })
                         }
-                      />
-                      <IconAction
+                      />}
+                      {mayDelete && <IconAction
                         label="Delete enquiry"
                         icon={DeleteIcon}
                         danger
                         onClick={() => setDeleting(e)}
-                      />
+                      />}
                     </RowActions>
                   </TableCell>
                 </TableRow>

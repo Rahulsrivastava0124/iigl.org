@@ -33,7 +33,7 @@ interface Customer {
  * What the card shows — logo, area, city, state — is edited on the customer's
  * own record, which the pencil opens.
  */
-export default function WebsiteCustomers() {
+export default function WebsiteCustomers({ readOnly = false }: { /** Seen, not changed: no Edit on Website Setup. */ readOnly?: boolean } = {}) {
   const toast = useToast();
   const navigate = useNavigate();
   const source = useFetch<{ data: Customer[] }>('/content/website-customers');
@@ -101,7 +101,7 @@ export default function WebsiteCustomers() {
                     }}
                     checked={allShown}
                     indeterminate={!allShown && rows.some(shown)}
-                    disabled={saving || rows.length === 0}
+                    disabled={readOnly || saving || rows.length === 0}
                     onChange={() => setShown(rows.map((c) => c.id), !allShown)}
                     slotProps={{ input: { 'aria-label': 'Show every listed customer on the website' } }}
                   />
@@ -135,7 +135,7 @@ export default function WebsiteCustomers() {
                     size="small"
                     sx={{ p: 0 }}
                     checked={shown(c)}
-                    disabled={saving}
+                    disabled={readOnly || saving}
                     onChange={() => setShown([c.id], !shown(c))}
                     slotProps={{ input: { 'aria-label': `Show ${c.company_name} on the website` } }}
                   />

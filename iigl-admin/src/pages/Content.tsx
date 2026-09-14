@@ -18,6 +18,7 @@ import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
+import { usePermissions, type ActionType } from '../lib/permissions';
 import {
   ConfirmDialog,
   FormPanel,
@@ -79,11 +80,28 @@ const blankFor = (section: Section): Record<string, string> =>
         ? { name: '', short_description: '', description: '' }
         : { name: '', img_type: '', url: '' };
 
+/** The permission each tab is: what head office can give its staff for it. */
+const PERMISSION: Record<Section, ActionType> = {
+  banners: 'website_home',
+  customers: 'website_home',
+  branches: 'website_home',
+  pages: 'website_home',
+  types: 'website_report',
+  articles: 'website_blog',
+};
+
 export default function Content() {
   const toast = useToast();
+  // Head office always holds all of these; its staff see the tabs they may view,
+  // and the Add, Edit and Delete their grant allows.
+  const { can } = usePermissions();
+  const visible = SECTIONS.filter((s) => can(PERMISSION[s.id], 'view'));
+  const may = (s: Section, a: 'create' | 'update' | 'delete') => can(PERMISSION[s], a);
   // The sidebar links straight to a tab, so the URL decides which is open.
   const [params, setParams] = useSearchParams();
-  const section = (params.get('tab') as Section) ?? 'banners';
+  const asked = params.get('tab') as Section | null;
+  const section: Section =
+    asked && visible.some((s) => s.id === asked) ? asked : (visible[0]?.id ?? 'banners');
   const setSection = (next: Section) => setParams({ tab: next });
   const [editing, setEditing] = useState<Editing | null>(null);
   // A form belongs to the table it was opened on: switching to another one —
@@ -189,13 +207,17 @@ export default function Content() {
         onChange={(_, v) => setSection(v)}
         sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
       >
-        {SECTIONS.map((s) => (
+        {visible.map((s) => (
           <Tab key={s.id} value={s.id} label={s.label} />
         ))}
       </Tabs>
 
       {/* Branches are the laboratories, ticked on and off rather than edited. */}
-      {section === 'branches' ? <BranchLaboratories /> : section === 'customers' ? <WebsiteCustomers /> : (
+      {section === 'branches' ? (
+        <BranchLaboratories readOnly={!may('branches', 'update')} />
+      ) : section === 'customers' ? (
+        <WebsiteCustomers readOnly={!may('customers', 'update')} />
+      ) : (
       <Panel
         form={editing && editing.section === section && (
           <FormPanel
@@ -238,7 +260,7 @@ export default function Content() {
           <>
             <SearchField value={search} onChange={setSearch} />
             {/* `pages` is a fixed set of site pages — they are edited, never added. */}
-            {section !== 'pages' && (
+            {section !== 'pages' && may(section, 'create') && (
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
@@ -322,7 +344,7 @@ export default function Content() {
                   )}
                   <TableCell>
                     <RowActions>
-                      <IconAction
+                      {may(section, 'update') && <IconAction
                         label="Edit"
                         icon={EditIcon}
                         onClick={() => {
@@ -342,8 +364,8 @@ export default function Content() {
                           }[section];
                           open(values, r.id, r[imageKey] ?? null);
                         }}
-                      />
-                      {section === 'banners' && (
+                      />}
+                      {section === 'banners' && may('banners', 'delete') && (
                         <IconAction
                           label="Delete banner"
                           icon={DeleteIcon}

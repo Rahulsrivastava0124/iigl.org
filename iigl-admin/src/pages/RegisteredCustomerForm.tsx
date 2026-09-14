@@ -374,8 +374,9 @@ export default function RegisteredCustomerForm() {
               />
             </Grid>
 
-            <Grid size={cell}>
-              <YesNoField label="Show Name on Card" value={showName} onChange={setShowName}>
+            {/* The question and its field on one row, so each takes the width of two cells. */}
+            <Grid size={{ xs: 12, md: 6 }}>
+              <YesNoField inline label="Show Name on Card" value={showName} onChange={setShowName}>
                 {/* Shown either way so the row does not jump when the answer
                     changes, and disabled until "Yes" — a name typed under "No"
                     is printed nowhere. Blank prints the company name. */}
@@ -389,8 +390,8 @@ export default function RegisteredCustomerForm() {
                 />
               </YesNoField>
             </Grid>
-            <Grid size={cell}>
-              <YesNoField label="Show Image on Card" value={showImage} onChange={setShowImage}>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <YesNoField inline label="Show Image on Card" value={showImage} onChange={setShowImage}>
                 {/* The upload only appears on "Yes": there is nothing to hold
                     a place for, and an empty drop zone under "No" invites a
                     picture that would never print. Same bucket, types and shape

@@ -99,8 +99,10 @@ export default function Customers() {
   const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
 
   const { user } = useAuth();
-  const admin = isSuper(user);
-  const { can } = usePermissions();
+  const { can, headOffice } = usePermissions();
+  // Head office and its staff read the network's customers; the tabs and the
+  // Laboratory column follow that, not the account's role alone.
+  const admin = isSuper(user) || headOffice;
 
   /* All Customers is head office's: its list spans the network. A laboratory
      sees the two GST tabs, which is the only distinction its own data draws. */

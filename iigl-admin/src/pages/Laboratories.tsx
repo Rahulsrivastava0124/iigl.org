@@ -61,11 +61,14 @@ export default function Laboratories() {
   const navigate = useNavigate();
   const toast = useToast();
   const { user } = useAuth();
-  const { can } = usePermissions();
-  const admin = isSuper(user);
-  const mayAdd = admin && can('laboratory', 'create');
-  const mayEdit = admin && can('laboratory', 'update');
-  const mayDelete = admin && can('laboratory', 'delete');
+  const { can, headOffice } = usePermissions();
+  // The network view — every laboratory, the totals — is head office's and its
+  // staff's. Changing a laboratory stays with Super Admin: the permission head
+  // office can give its staff here is View.
+  const admin = headOffice;
+  const mayAdd = isSuper(user) && can('laboratory', 'create');
+  const mayEdit = isSuper(user) && can('laboratory', 'update');
+  const mayDelete = isSuper(user) && can('laboratory', 'delete');
   const { data, loading, error, reload } = useFetch<{ data: Lab[] }>('/users/laboratories');
   const all = data?.data ?? [];
   const [search, setSearch] = useState('');
