@@ -44,7 +44,6 @@ Required — the container refuses to start without them:
 NODE_ENV=production
 DATABASE_URL=mysql://user:password@host:3306/iigl
 SESSION_SECRET=<32+ random characters>
-PANEL_URL=https://admin.iigl.org
 ```
 
 `SESSION_SECRET` signs the session cookie, and startup refuses a placeholder or
@@ -71,9 +70,11 @@ R2_BUCKET_NAME=iigl
 R2_PUBLIC_URL=https://pub-….r2.dev
 ```
 
-`CORS_ORIGINS` is only needed when the panel is served from a **different**
-origin than the API. Authentication is a cookie, so this is an explicit
-allowlist: a wildcard cannot be combined with credentials.
+`CORS_ORIGINS` lists the panel's addresses. Authentication is a cookie, so this
+is an explicit allowlist: a wildcard cannot be combined with credentials. It is
+also where a password reset link may point: the link goes back to the panel it
+was asked from, only when that address is listed here, so list all three doors
+even when the panel shares the API's host.
 
 `SMTP_URL` and `MAIL_FROM` can also be set on the Settings screen, which takes
 precedence — that is how the SMTP password is changed without a redeploy.

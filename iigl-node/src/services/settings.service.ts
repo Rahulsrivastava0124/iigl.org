@@ -87,13 +87,6 @@ export const SETTINGS: SettingSpec[] = [
     check: number('Session length', 1, 720),
   },
   {
-    key: 'mail.panel_url',
-    label: 'Panel URL',
-    kind: 'url',
-    fallback: () => env.panelUrl,
-    help: 'Where a password reset link points. It has to be the address people open.',
-  },
-  {
     key: 'mail.from',
     label: 'Mail from',
     kind: 'text',

@@ -45,7 +45,6 @@ services:
 
       # Where the panel is served from. A password reset link points here, so
       # it has to be the address people actually open.
-      PANEL_URL: ${PANEL_URL:?set PANEL_URL, e.g. https://admin.iigl.org}
 
       # The origin printed QR codes resolve against. Certificates already in
       # circulation point at PUBLIC_SITE_URL/verify-report/{id}, so changing

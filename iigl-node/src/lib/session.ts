@@ -50,9 +50,49 @@ export const SESSION_COOKIE = 'iigl.sid';
  */
 const PORTALS = new Set(['super', 'admin', 'team']);
 
-export function sessionCookieFor(req: Request): string {
+export type PortalName = 'super' | 'admin' | 'team';
+
+/** The panel a request names with `?portal=`, or null when it names none. */
+export function portalOf(req: Request): PortalName | null {
   const portal = String(req.query?.portal ?? '').toLowerCase();
-  return PORTALS.has(portal) ? `${SESSION_COOKIE}.${portal}` : SESSION_COOKIE;
+  return PORTALS.has(portal) ? (portal as PortalName) : null;
+}
+
+export function sessionCookieFor(req: Request): string {
+  const portal = portalOf(req);
+  return portal ? `${SESSION_COOKIE}.${portal}` : SESSION_COOKIE;
+}
+
+/**
+ * The address of the panel a request came from, for a link mailed back to it.
+ *
+ * A password reset link used to point at one configured Panel URL — the
+ * laboratories' door — so head office and team accounts were mailed a link to a
+ * sign-in that refuses them. It now goes back to the page that asked: the
+ * browser's Origin, plus the portal's path where the doors share one host and
+ * are told apart by path rather than subdomain.
+ *
+ * The Origin is believed only when it is one of this system's own panels: an
+ * address in CORS_ORIGINS, or localhost. Anything else could be a page on
+ * somebody else's site asking for a reset so the victim's token is mailed
+ * inside a link to that site. Null then, and the caller refuses.
+ */
+export function panelAddressFor(req: Request): string | null {
+  let origin: URL;
+  try {
+    origin = new URL(req.get('origin') ?? '');
+  } catch {
+    return null;
+  }
+  const host = origin.hostname;
+  const local = host === 'localhost' || host.endsWith('.localhost');
+  if (!local && !env.corsOrigins.includes(origin.origin)) return null;
+
+  const portal = portalOf(req);
+  // A subdomain door (team.iigl.org) is the address itself. On one host the
+  // door is the path, and the bare address is head office's.
+  const byPath = portal !== null && portal !== 'super' && !host.startsWith(`${portal}.`);
+  return byPath ? `${origin.origin}/${portal}` : origin.origin;
 }
 
 /**

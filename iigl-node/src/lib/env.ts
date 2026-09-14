@@ -50,11 +50,6 @@ export const env = {
    */
   geocoderUrl: process.env.GEOCODER_URL ?? 'https://nominatim.openstreetmap.org',
   /**
-   * Where the admin panel is served from. A password reset link points here,
-   * so it has to be the address the person actually uses, not the API's.
-   */
-  panelUrl: (process.env.PANEL_URL ?? 'http://localhost:5173').replace(/\/+$/, ''),
-  /**
    * SMTP connection string, e.g. `smtps://user:pass@smtp.example.com:465`.
    * Absent means no mail: password reset then logs the link in development and
    * refuses in production rather than reporting a success that never arrives.

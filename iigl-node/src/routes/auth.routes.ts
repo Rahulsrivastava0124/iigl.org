@@ -2,13 +2,13 @@ import { Router } from 'express';
 import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { db } from '../db/index.js';
-import { setting, settingNumber } from '../services/settings.service.js';
+import { settingNumber } from '../services/settings.service.js';
 import { wrap } from '../lib/async.js';
 import { badRequest, unauthorized } from '../lib/errors.js';
 import { env } from '../lib/env.js';
 import { sendPasswordReset } from '../lib/mail.js';
 import { requireAuth, resolveLabId } from '../middleware/auth.js';
-import { clearSession, issueSession, type SessionUser } from '../lib/session.js';
+import { clearSession, issueSession, panelAddressFor, type SessionUser } from '../lib/session.js';
 
 /** How long a reset link works for. Long enough to read mail, short enough to matter. */
 const RESET_TTL_MS = 60 * 60 * 1000;
@@ -162,6 +162,14 @@ authRoutes.post(
       .toLowerCase();
     if (!identifier) throw badRequest('Enter your mobile number or the email on your account.');
 
+    // Where the link will point: the panel this was asked from. Settled before
+    // anything is looked up or written, so a request from a page that is not
+    // one of the panels leaves no token behind.
+    const panel = panelAddressFor(req);
+    if (!panel) {
+      throw badRequest('Ask for the reset link from the sign-in page of your IIGL panel.');
+    }
+
     /*
       The account is checked before anything is promised.
 
@@ -211,10 +219,7 @@ authRoutes.post(
       })
       .execute();
 
-    // Where the panel is served from, as Settings has it — the address people
-    // actually open, which is not always the one in the environment.
-    const panelUrl = (await setting('mail.panel_url')).replace(/\/+$/, '');
-    const url = `${panelUrl}/reset-password?email=${encodeURIComponent(email)}&token=${token}`;
+    const url = `${panel}/reset-password?email=${encodeURIComponent(email)}&token=${token}`;
     // Counted from the row that was just written, so the mail and the check in
     // /reset-password are reading the same clock.
     try {

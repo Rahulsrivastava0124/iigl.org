@@ -81,6 +81,7 @@ Every file also carries its own rollback in a comment at the bottom.
 | `058-laboratory-geocode.sql` | **applied** | `users.geo_*`: the laboratory's city, looked up by `geocode.service.ts` and kept, with the city/state it was found for so an edit triggers a new lookup. |
 | `059-registered-customer-website.sql` | **applied** | `registered_customers.area`, `state`, `logo` and `show_on_site` for the website's Our Registered Customers section. Default 0 — no customer is published until head office ticks it. |
 | `060-registered-customers-shown-by-default.sql` | **applied** | Reverses 059's default: registered customers are listed on the website unless unticked in Website Setup › Customers. Default 1, and every existing customer (one row) switched on. |
+| `061-remove-panel-url-setting.sql` | **applied** | Deletes the `mail.panel_url` settings row: password reset links point back at the panel they were asked from, so the Panel URL setting and `PANEL_URL` are removed. |
 
 ---
 
