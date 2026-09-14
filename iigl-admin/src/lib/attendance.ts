@@ -242,6 +242,8 @@ export interface DayNote {
   kind: string;
   body: string;
   resolved_at: string | null;
+  /** How a request was answered: `approved`, `declined`, or null. */
+  decision?: string | null;
 }
 
 export const noteOn = (notes: DayNote[], date: string) =>
@@ -250,17 +252,37 @@ export const noteOn = (notes: DayNote[], date: string) =>
 /** What the notes on one day add to its tooltip. */
 export const noteTip = (notes: DayNote[]) =>
   notes
-    .map((n) => `${n.kind === 'request' ? 'Request' : 'Message'}: ${n.body}`)
+    .map((n) => `${n.kind === 'request' ? `Request${n.decision ? ` (${n.decision})` : ''}` : 'Message'}: ${n.body}`)
     .join(' · ');
 
-export function noteDay(notes: DayNote[]): CalendarDay {
-  const open = notes.some((n) => !n.resolved_at);
-  const request = notes.some((n) => n.kind === 'request');
+/**
+ * The mark for a day with notes on it, by what was asked and what was answered.
+ *
+ * Answered used to be one grey "request" whichever way it went, so a declined
+ * leave looked exactly like an approved one. Unanswered is amber, approved is
+ * green, declined is red. `absent` is what the day would be with no note at
+ * all: a refused request does not excuse the day, so once it has passed with
+ * no punch it is absent, and the request stays in the tooltip.
+ */
+export function noteDay(notes: DayNote[], absent?: CalendarDay | null): CalendarDay {
+  const tooltip = noteTip(notes);
+  // A reply is a message on the same day as the request it answers, so the
+  // requests alone decide the mark.
+  const requests = notes.filter((n) => n.kind === 'request');
+  const answered = (decision: string) => (n: DayNote) => Boolean(n.resolved_at) && n.decision === decision;
+
+  if (requests.some((n) => !n.resolved_at)) return { tone: 'waiting', lines: ['request'], tooltip };
+  if (requests.some(answered('approved'))) return { tone: 'settled', lines: ['approved'], tooltip };
+  if (requests.length > 0 && requests.every(answered('declined'))) {
+    return absent
+      ? { ...absent, tooltip: `${absent.tooltip ?? ''} · ${tooltip}` }
+      : { tone: 'refused', lines: ['declined'], tooltip };
+  }
+  // Closed without a decision, or only messages: nothing waits on the day.
+  const request = requests.length > 0;
   return {
-    // Asked and unanswered reads as waiting; answered is settled. A day that is
-    // only a message keeps the plain tone: nothing is pending on it.
-    tone: open && request ? 'waiting' : 'plain',
+    tone: 'plain',
     lines: [notes.length === 1 ? (request ? 'request' : 'message') : `${notes.length} notes`],
-    tooltip: noteTip(notes),
+    tooltip,
   };
 }
