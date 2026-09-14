@@ -1120,6 +1120,28 @@ const document = {
       },
     },
 
+    '/api/public/courses': {
+      get: {
+        tags: ['Public'],
+        summary: 'Courses on offer, for the website cards',
+        security: [],
+        description:
+          'Every course still offered, by name: its title, sub title, description, duration, lessons, level badge, categories (an array of strings) and card picture (a path in uploads/website). Nothing about fees or enrolments.',
+        responses: { 200: { description: 'Offered courses.' } },
+      },
+    },
+
+    '/api/public/categories': {
+      get: {
+        tags: ['Public'],
+        summary: 'Report categories, for the website cards',
+        security: [],
+        description:
+          'Every report category: its name, short and long description, and pictures (`icon` in uploads/icon, `banner`). Nothing about weight units or pricing.',
+        responses: { 200: { description: 'Report categories.' } },
+      },
+    },
+
     '/api/public/branches/{slug}': {
       get: {
         tags: ['Public'],

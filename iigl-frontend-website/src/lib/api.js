@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 /**
  * Where the website reads from.
  *
@@ -16,4 +18,34 @@ export async function getPublic(path, { signal } = {}) {
   if (!response.ok) throw new Error(`${path} answered ${response.status}`);
   const body = await response.json();
   return body.data;
+}
+
+/**
+ * A URL for a stored `public/uploads/…` path, built the way the panel builds
+ * it. The website's own folders (website, banner, icon) need no session.
+ */
+export function fileUrl(stored) {
+  const path = stored?.trim();
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path;
+  return apiUrl(`/files/${path.replace(/^\/*(public\/)?uploads\//, '')}`);
+}
+
+/**
+ * The rows a public endpoint returns, or null until they arrive — and null for
+ * good when the API cannot be reached, so a section keeps its built-in content
+ * instead of going blank.
+ */
+export function usePublic(path) {
+  const [rows, setRows] = useState(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getPublic(`/public${path}`, { signal: controller.signal })
+      .then((data) => setRows(Array.isArray(data) ? data : null))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [path]);
+
+  return rows;
 }

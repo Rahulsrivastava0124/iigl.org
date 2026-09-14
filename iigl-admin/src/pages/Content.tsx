@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   Chip,
+  MenuItem,
   Tab,
   Table,
   TableBody,
@@ -14,6 +15,12 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import AddIcon from '@mui/icons-material/AddOutlined';
+import EditIcon from '@mui/icons-material/EditOutlined';
+import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
+import FileField from '../components/FileField';
+import BranchLaboratories from '../components/BranchLaboratories';
+import WebsiteCustomers from '../components/WebsiteCustomers';
 import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
@@ -28,6 +35,7 @@ import {
   SearchField,
   TableFrame,
   YesNo,
+  hint,
 } from '../components/ui';
 
 /** True when the row's text contains the term. Case-insensitive; blank matches all. */
@@ -37,48 +45,17 @@ const hits = (term: string, ...fields: (string | number | null | undefined)[]) =
   return fields.some((f) => f != null && String(f).toLowerCase().includes(q));
 };
 
-import FileField from '../components/FileField';
-import BranchLaboratories from '../components/BranchLaboratories';
-import WebsiteCustomers from '../components/WebsiteCustomers';
-import AddIcon from '@mui/icons-material/AddOutlined';
-import EditIcon from '@mui/icons-material/EditOutlined';
-import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
-
 type Section = 'articles' | 'branches' | 'customers' | 'types' | 'banners' | 'pages';
 
-const SECTIONS: Array<{ id: Section; label: string }> = [
+const SECTIONS: Array<{ id: Section; label: string; noun: string }> = [
   // The website's own order, as the sidebar lists them.
-  { id: 'banners', label: 'Banners' },
-  { id: 'types', label: 'Report Types' },
-  { id: 'customers', label: 'Customers' },
-  { id: 'branches', label: 'Branches' },
-  { id: 'articles', label: 'Blog' },
-  { id: 'pages', label: 'Pages' },
+  { id: 'banners', label: 'Banners', noun: 'banner' },
+  { id: 'types', label: 'Report Types', noun: 'report type' },
+  { id: 'customers', label: 'Customers', noun: 'customer' },
+  { id: 'branches', label: 'Branches', noun: 'branch' },
+  { id: 'articles', label: 'Blog', noun: 'article' },
+  { id: 'pages', label: 'Pages', noun: 'page' },
 ];
-
-/** An open editor: which section, which row, and the values being edited. */
-interface Editing {
-  section: Section;
-  id?: number;
-  values: Record<string, string>;
-  image: string | null;
-}
-
-/**
- * An empty record for a section, which is the shape its form renders from.
- *
- * The form is a panel on the page rather than a dialog, so it needs these
- * fields before anyone has clicked anything — a dialog could wait until the
- * Add button said which section it was for.
- */
-const blankFor = (section: Section): Record<string, string> =>
-  section === 'articles'
-    ? { page_name: '', slug: '', content: '', meta_title: '', meta_description: '' }
-    : section === 'branches'
-      ? { city: '', pageURL: '', h1: '', content: '', title: '', description: '' }
-      : section === 'types'
-        ? { name: '', short_description: '', description: '' }
-        : { name: '', img_type: '', url: '' };
 
 /** The permission each tab is: what head office can give its staff for it. */
 const PERMISSION: Record<Section, ActionType> = {
@@ -89,6 +66,113 @@ const PERMISSION: Record<Section, ActionType> = {
   types: 'website_report',
   articles: 'website_blog',
 };
+
+/** The sections edited on this page. Branches and Customers are lists of their own. */
+type Edited = Exclude<Section, 'branches' | 'customers'>;
+
+/**
+ * Where each section is read from and written to.
+ *
+ * The reads are the whole record, because the editor is filled from the list:
+ * a list without the body saved every article and page back with it emptied.
+ */
+const READ: Record<Edited, string> = {
+  banners: '/content/banners',
+  types: '/public/report-types',
+  articles: '/content/blogs',
+  pages: '/content/pages',
+};
+const WRITE: Record<Edited, string> = {
+  banners: '/content/banners',
+  types: '/content/report-types',
+  articles: '/content/blogs',
+  pages: '/content/pages',
+};
+
+/**
+ * One input of a section's form, named for the person filling it in rather than
+ * for its column — "SEO title", not "Meta title". `image` makes it an upload
+ * into that folder; `options` makes it a select.
+ */
+interface Field {
+  key: string;
+  label: string;
+  required?: boolean;
+  long?: boolean;
+  hint?: string;
+  options?: Array<[value: string, label: string]>;
+  image?: 'website' | 'banner';
+  initial?: string;
+}
+
+const SEO_TITLE = 'The title in the browser tab and in search results.';
+const SEO_LINE = 'The line under the title in search results.';
+
+const FIELDS: Record<Edited, Field[]> = {
+  banners: [
+    { key: 'name', label: 'Name', hint: 'Describes the picture to anyone who cannot see it.' },
+    {
+      key: 'img_type',
+      label: 'Type',
+      required: true,
+      initial: 'slider',
+      options: [
+        ['slider', 'Slider — home page'],
+        ['banner', 'Banner'],
+      ],
+    },
+    { key: 'url', label: 'Link', hint: 'Where clicking the banner goes. Blank for nowhere.' },
+    {
+      key: 'status',
+      label: 'Active',
+      initial: '1',
+      options: [
+        ['1', 'Yes'],
+        ['0', 'No'],
+      ],
+      hint: 'Only active banners show on the website.',
+    },
+    { key: 'path', label: 'Image', image: 'banner', hint: 'A wide picture — 1600 × 600 for the slider.' },
+    {
+      key: 'mobile_slider',
+      label: 'Phone image',
+      image: 'banner',
+      hint: 'Shown on phones in place of the image above. Blank uses that one.',
+    },
+  ],
+  types: [
+    { key: 'name', label: 'Name', required: true },
+    { key: 'short_description', label: 'Short description' },
+    { key: 'description', label: 'Description', long: true },
+    { key: 'banner', label: 'Banner image', image: 'website' },
+  ],
+  articles: [
+    { key: 'page_name', label: 'Title', required: true },
+    {
+      key: 'slug',
+      label: 'Address',
+      hint: "The end of the article's web address. Left blank, it is made from the title.",
+    },
+    { key: 'meta_title', label: 'SEO title', hint: SEO_TITLE },
+    { key: 'meta_description', label: 'Meta description', long: true, hint: SEO_LINE },
+    { key: 'content', label: 'Content', long: true },
+    { key: 'banner', label: 'Banner image', image: 'website' },
+  ],
+  pages: [
+    { key: 'page_name', label: 'Page name', required: true },
+    { key: 'meta_title', label: 'SEO title', hint: SEO_TITLE },
+    { key: 'meta_description', label: 'Meta description', long: true, hint: SEO_LINE },
+    { key: 'content', label: 'Content', long: true },
+    { key: 'banner', label: 'Banner image', image: 'website' },
+  ],
+};
+
+/** An open editor: which section, which row, and every input as a string. */
+interface Editing {
+  section: Section;
+  id?: number;
+  values: Record<string, string>;
+}
 
 export default function Content() {
   const toast = useToast();
@@ -102,69 +186,51 @@ export default function Content() {
   const asked = params.get('tab') as Section | null;
   const section: Section =
     asked && visible.some((s) => s.id === asked) ? asked : (visible[0]?.id ?? 'banners');
-  const setSection = (next: Section) => setParams({ tab: next });
+  const { label, noun } = SECTIONS.find((s) => s.id === section)!;
+  const edited: Edited | null = section === 'branches' || section === 'customers' ? null : section;
+  const fields = edited ? FIELDS[edited] : [];
+
   const [editing, setEditing] = useState<Editing | null>(null);
   // A form belongs to the table it was opened on: switching to another one —
   // by its tab or from the menu — closes it rather than carrying it across.
   useEffect(() => setEditing(null), [section]);
-  const [deletingBanner, setDeletingBanner] = useState<{ id: number; name: string } | null>(null);
+  const [deletingBanner, setDeletingBanner] = useState<{ id: number; name: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [search, setSearch] = useState('');
 
-  const articles = useFetch<{ data: any[] }>(section === 'articles' ? '/public/blogs' : null);
-  // Branches and Customers have their own lists (BranchLaboratories,
-  // WebsiteCustomers); nothing is fetched for them here.
-  const own = useFetch<{ data: any[] }>(null);
-  const types = useFetch<{ data: any[] }>(section === 'types' ? '/public/report-types' : null);
-  const banners = useFetch<{ data: any[] }>(section === 'banners' ? '/content/banners' : null);
-  const pages = useFetch<{ data: any[] }>(section === 'pages' ? '/content/pages' : null);
+  // One request per section, each idle until its tab is open, so a tab never
+  // shows the last tab's rows while its own load.
+  const articles = useFetch<{ data: any[] }>(section === 'articles' ? READ.articles : null);
+  const types = useFetch<{ data: any[] }>(section === 'types' ? READ.types : null);
+  const banners = useFetch<{ data: any[] }>(section === 'banners' ? READ.banners : null);
+  const pages = useFetch<{ data: any[] }>(section === 'pages' ? READ.pages : null);
+  const source = { articles, types, banners, pages }[edited ?? 'banners'];
 
-  const source = { articles, branches: own, customers: own, types, banners, pages }[section];
-
-  const open = (values: Record<string, string>, id?: number, image: string | null = null) =>
-    setEditing({ section, id, values, image });
-
-  const clear = () => setEditing(null);
-
-  /**
-   * What the form is showing: the record being edited, or an empty one for the
-   * section in view. Switching tabs drops an edit rather than carrying it over,
-   * since the record belongs to the tab just left.
-   */
-  const form: Editing =
-    editing && editing.section === section
-      ? editing
-      : { section, values: blankFor(section), image: null };
-
-  const set = (key: string, v: string) =>
-    setEditing((e) => {
-      const base = e && e.section === section ? e : form;
-      return { ...base, values: { ...base.values, [key]: v } };
+  /** The form for a row, or a blank one for the section in view. */
+  const open = (row?: any) =>
+    setEditing({
+      section,
+      id: row?.id,
+      values: Object.fromEntries(
+        fields.map((f) => [f.key, row ? (row[f.key] == null ? '' : String(row[f.key])) : (f.initial ?? '')]),
+      ),
     });
 
+  const set = (key: string, value: string) =>
+    setEditing((e) => (e ? { ...e, values: { ...e.values, [key]: value } } : e));
+
   const save = async () => {
+    if (!editing || !edited) return;
     setBusy(true);
-
-    const { section: s, id, values, image } = form;
-    const paths: Record<Section, string> = {
-      articles: '/content/blogs',
-      branches: '/content/branches',
-      customers: '/content/website-customers',
-      types: '/content/report-types',
-      banners: '/content/banners',
-      pages: '/content/pages',
-    };
-
-    // Each section names its image column differently.
-    const imageKey = { articles: 'banner', branches: 'img', customers: 'logo', types: 'banner', banners: 'path', pages: 'banner' }[s];
-    const body: Record<string, unknown> = { ...values };
-    if (image !== null || id) body[imageKey] = image;
+    const body: Record<string, unknown> = { ...editing.values };
+    if (edited === 'banners') body.status = editing.values.status !== '0';
 
     try {
-      if (id) {
-        await api.patch(`${paths[s]}/${id}`, body);
+      if (editing.id) {
+        await api.patch(`${WRITE[edited]}/${editing.id}`, body);
         toast.ok('Saved.');
       } else {
-        await api.post(paths[s], body);
+        await api.post(WRITE[edited], body);
         toast.ok('Added.');
       }
       setEditing(null);
@@ -192,19 +258,17 @@ export default function Content() {
   };
 
   const all = source.data?.data ?? [];
-  const [search, setSearch] = useState('');
-  // The four sections hold different shapes, so the search looks at whichever
-  // of these a row happens to carry rather than at a fixed column list.
+  // The sections hold different shapes, so the search looks at whichever of
+  // these a row happens to carry rather than at a fixed column list.
   const rows = all.filter((r: any) =>
-    hits(search, r.id, r.page_name, r.slug, r.title, r.city, r.pageURL, r.h1, r.page_type, r.img_type),
+    hits(search, r.page_name, r.page_type, r.name, r.slug, r.title, r.img_type, r.url),
   );
 
   return (
     <>
-
       <Tabs
         value={section}
-        onChange={(_, v) => setSection(v)}
+        onChange={(_, v) => setParams({ tab: v })}
         sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
       >
         {visible.map((s) => (
@@ -218,182 +282,181 @@ export default function Content() {
       ) : section === 'customers' ? (
         <WebsiteCustomers readOnly={!may('customers', 'update')} />
       ) : (
-      <Panel
-        form={editing && editing.section === section && (
-          <FormPanel
-            title={`${form.id ? 'Edit' : 'Add'} ${SECTIONS.find((s) => s.id === section)!.label.replace(/s$/, '').toLowerCase()}`}
-            onClose={clear}
-            onSubmit={save}
-            submitLabel={form.id ? 'Save changes' : 'Add'}
-            busy={busy}
-          >
-            {Object.keys(form.values).map((key) => {
-                const long = key === 'content' || key === 'description';
-                return (
-                  <TextField
-                    key={key}
-                    label={key.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())}
-                    value={form.values[key]}
-                    onChange={(e) => set(key, e.target.value)}
-                    multiline={long}
-                    minRows={long ? 4 : undefined}
-                    // A body of text needs the width; a slug does not.
-                    sx={long ? { gridColumn: '1 / -1' } : undefined}
-                    required={['page_name', 'city', 'name', 'img_type'].includes(key)}
-                  />
-                );
-            })}
-
-            <Box sx={{ gridColumn: '1 / -1' }}>
-              <FileField
-                label={section === 'banners' ? 'Image' : 'Banner image'}
-                bucket={section === 'banners' ? 'banner' : 'website'}
-                value={form.image}
-                onChange={(path) => setEditing({ ...form, image: path })}
-              />
-            </Box>
-          </FormPanel>
-        )}
-        title={SECTIONS.find((s) => s.id === section)?.label ?? 'Website content'}
-        count={source.loading ? 'Loading…' : `${rows.length} of ${all.length}`}
-        actions={
-          <>
-            <SearchField value={search} onChange={setSearch} />
-            {/* `pages` is a fixed set of site pages — they are edited, never added. */}
-            {section !== 'pages' && may(section, 'create') && (
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => open(blankFor(section))}
+        <Panel
+          form={
+            editing &&
+            editing.section === section && (
+              <FormPanel
+                title={`${editing.id ? 'Edit' : 'Add'} ${noun}`}
+                onClose={() => setEditing(null)}
+                onSubmit={save}
+                submitLabel={editing.id ? 'Save changes' : 'Add'}
+                busy={busy}
               >
-                Add
-              </Button>
-            )}
-          </>
-        }
-      >
-        <TableFrame loading={source.loading} error={source.error} empty={rows.length === 0}>
-          <Table size="small" stickyHeader>
-            <TableHead>
-              <TableRow>
-                {section === 'articles' && (
-                  <>
-                    <TableCell>Title</TableCell>
-                    <TableCell>Address</TableCell>
-                    <TableCell>Published</TableCell>
-                  </>
+                {fields.map((f) =>
+                  f.image ? (
+                    <Box key={f.key} sx={{ gridColumn: '1 / -1' }}>
+                      <FileField
+                        label={f.label}
+                        bucket={f.image}
+                        value={editing.values[f.key] || null}
+                        onChange={(path) => set(f.key, path ?? '')}
+                        helperText={f.hint}
+                      />
+                    </Box>
+                  ) : (
+                    <TextField
+                      key={f.key}
+                      label={f.label}
+                      value={editing.values[f.key]}
+                      onChange={(e) => set(f.key, e.target.value)}
+                      required={f.required}
+                      select={Boolean(f.options)}
+                      multiline={f.long}
+                      minRows={f.long ? 3 : undefined}
+                      // A body of text needs the width; a name does not.
+                      sx={f.long ? { gridColumn: '1 / -1' } : undefined}
+                      slotProps={f.hint ? hint(f.hint, Boolean(f.options)) : undefined}
+                    >
+                      {f.options?.map(([value, text]) => (
+                        <MenuItem key={value} value={value}>
+                          {text}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  ),
                 )}
-                {section === 'types' && (
-                  <>
-                    <TableCell>Name</TableCell>
-                    <TableCell>Summary</TableCell>
-                  </>
-                )}
-                {section === 'banners' && (
-                  <>
-                    <TableCell>Name</TableCell>
-                    <TableCell>Placement</TableCell>
-                    <TableCell>Links to</TableCell>
-                    <TableCell>Active</TableCell>
-                  </>
-                )}
-                {section === 'pages' && (
-                  <>
-                    <TableCell>Page</TableCell>
-                    <TableCell>Type</TableCell>
-                  </>
-                )}
-                <TableCell />
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((r: any) => (
-                <TableRow key={r.id} hover>
+              </FormPanel>
+            )
+          }
+          title={label}
+          count={source.loading ? 'Loading…' : `${rows.length} of ${all.length}`}
+          actions={
+            <>
+              <SearchField value={search} onChange={setSearch} />
+              {/* The pages are a fixed set of site pages — edited, never added. */}
+              {section !== 'pages' && may(section, 'create') && (
+                <Button variant="contained" startIcon={<AddIcon />} onClick={() => open()}>
+                  Add
+                </Button>
+              )}
+            </>
+          }
+        >
+          <TableFrame loading={source.loading} error={source.error} empty={rows.length === 0}>
+            <Table size="small" stickyHeader>
+              <TableHead>
+                <TableRow>
                   {section === 'articles' && (
                     <>
-                      <TableCell sx={{ whiteSpace: 'normal', minWidth: 200 }}>{r.page_name}</TableCell>
-                      <TableCell className="mono">/{r.slug}</TableCell>
-                      <TableCell>{String(r.created_at ?? '').slice(0, 10) || '—'}</TableCell>
+                      <TableCell>Title</TableCell>
+                      <TableCell>Address</TableCell>
+                      <TableCell>Published</TableCell>
                     </>
                   )}
                   {section === 'types' && (
                     <>
-                      <TableCell>{r.name}</TableCell>
-                      <TableCell sx={{ whiteSpace: 'normal', minWidth: 260 }}>
-                        {r.short_description || '—'}
-                      </TableCell>
+                      <TableCell>Name</TableCell>
+                      <TableCell>Short description</TableCell>
                     </>
                   )}
                   {section === 'banners' && (
                     <>
-                      <TableCell>{r.name || '—'}</TableCell>
-                      <TableCell>
-                        <Chip size="small" variant="outlined" label={r.img_type} />
-                      </TableCell>
-                      <TableCell className="mono">{r.url || '—'}</TableCell>
-                      <TableCell>
-                        <YesNo on={r.status} />
-                      </TableCell>
+                      <TableCell>Name</TableCell>
+                      <TableCell>Type</TableCell>
+                      <TableCell>Links to</TableCell>
+                      <TableCell>Active</TableCell>
                     </>
                   )}
                   {section === 'pages' && (
                     <>
-                      <TableCell>{r.page_name}</TableCell>
-                      <TableCell className="mono">{r.page_type}</TableCell>
+                      <TableCell>Page</TableCell>
+                      <TableCell>Type</TableCell>
+                      <TableCell>SEO title</TableCell>
                     </>
                   )}
-                  <TableCell>
-                    <RowActions>
-                      {may(section, 'update') && <IconAction
-                        label="Edit"
-                        icon={EditIcon}
-                        onClick={() => {
-                          const keys =
-                            section === 'articles'
-                              ? ['page_name', 'slug', 'content', 'meta_title', 'meta_description']
-                              : section === 'types'
-                                  ? ['name', 'short_description', 'description']
-                                  : section === 'banners'
-                                    ? ['name', 'img_type', 'url']
-                                    : ['page_name', 'content', 'meta_title', 'meta_description'];
-                          const values: Record<string, string> = {};
-                          for (const k of keys) values[k] = r[k] ?? '';
-                          const imageKey = {
-                            articles: 'banner', branches: 'img', types: 'banner',
-                            banners: 'path', pages: 'banner',
-                          }[section];
-                          open(values, r.id, r[imageKey] ?? null);
-                        }}
-                      />}
-                      {section === 'banners' && may('banners', 'delete') && (
-                        <IconAction
-                          label="Delete banner"
-                          icon={DeleteIcon}
-                          danger
-                          onClick={() => setDeletingBanner({ id: r.id, name: r.name })}
-                        />
-                      )}
-                    </RowActions>
-                  </TableCell>
+                  <TableCell />
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableFrame>
-      </Panel>
+              </TableHead>
+              <TableBody>
+                {rows.map((r: any) => (
+                  <TableRow key={r.id} hover>
+                    {section === 'articles' && (
+                      <>
+                        <TableCell sx={{ whiteSpace: 'normal', minWidth: 200 }}>{r.page_name}</TableCell>
+                        <TableCell className="mono">/{r.slug}</TableCell>
+                        <TableCell>{String(r.created_at ?? '').slice(0, 10) || '—'}</TableCell>
+                      </>
+                    )}
+                    {section === 'types' && (
+                      <>
+                        <TableCell>{r.name}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'normal', minWidth: 260 }}>
+                          {r.short_description || '—'}
+                        </TableCell>
+                      </>
+                    )}
+                    {section === 'banners' && (
+                      <>
+                        <TableCell>{r.name || '—'}</TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            label={r.img_type === 'slider' ? 'Slider' : r.img_type === 'banner' ? 'Banner' : r.img_type}
+                          />
+                        </TableCell>
+                        <TableCell className="mono">{r.url || '—'}</TableCell>
+                        <TableCell>
+                          <YesNo on={r.status} />
+                        </TableCell>
+                      </>
+                    )}
+                    {section === 'pages' && (
+                      <>
+                        <TableCell>{r.page_name}</TableCell>
+                        <TableCell className="mono">{r.page_type}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'normal', minWidth: 200 }}>{r.meta_title || '—'}</TableCell>
+                      </>
+                    )}
+                    <TableCell>
+                      <RowActions>
+                        {may(section, 'update') && (
+                          <IconAction label={`Edit ${noun}`} icon={EditIcon} onClick={() => open(r)} />
+                        )}
+                        {section === 'banners' && may('banners', 'delete') && (
+                          <IconAction
+                            label="Delete banner"
+                            icon={DeleteIcon}
+                            danger
+                            onClick={() => setDeletingBanner({ id: r.id, name: r.name })}
+                          />
+                        )}
+                      </RowActions>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableFrame>
+        </Panel>
       )}
 
       {section === 'articles' && (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
-          The address is the public URL. Changing it breaks any existing link to that article, so it
-          only moves when you edit it deliberately — renaming the title leaves it alone.
+          The address is the public URL. Changing it breaks any existing link to that article, so it only
+          moves when you edit it deliberately — renaming the title leaves it alone.
         </Typography>
       )}
 
       <ConfirmDialog
         open={Boolean(deletingBanner)}
         title="Delete Banner"
-        message={<>Are you sure you want to delete <strong>{deletingBanner?.name}</strong>?</>}
+        message={
+          <>
+            Are you sure you want to delete <strong>{deletingBanner?.name || 'this banner'}</strong>?
+          </>
+        }
         warning="This action cannot be undone."
         onClose={() => setDeletingBanner(null)}
         onConfirm={removeBanner}

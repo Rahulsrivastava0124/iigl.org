@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  Autocomplete,
   Box,
   Button,
+  Chip,
   Dialog as MuiDialog,
   DialogActions,
   DialogContent,
@@ -67,6 +69,13 @@ interface Course {
   /** A rate typed for this course alone. Set only when `gst_id` is null. */
   gst_percent: string | null;
   description: string | null;
+  /** The website card: picture (uploads/website), badge, categories and lessons. */
+  image: string | null;
+  level: string | null;
+  categories: string[] | null;
+  lessons: string | null;
+  title: string | null;
+  subtitle: string | null;
   /**
    * The sheet this course's certificates are printed on, in
    * `uploads/certificate`. Null means the course cannot be printed yet: the
@@ -158,6 +167,13 @@ const BLANK_COURSE = {
   /** A rate typed for this course alone, when it is not one from the list. */
   gst_percent: '',
   description: '',
+  // The website's course card.
+  image: null as string | null,
+  level: '',
+  categories: [] as string[],
+  lessons: '',
+  title: '',
+  subtitle: '',
   certificate_template: null as string | null,
   is_active: true,
 };
@@ -445,6 +461,12 @@ export default function Courses() {
         gst_id: form.gst_id ? Number(form.gst_id) : null,
         gst_percent: form.gst_id ? null : form.gst_percent || null,
         description: form.description,
+        image: form.image,
+        level: form.level || null,
+        categories: form.categories,
+        lessons: form.lessons || null,
+        title: form.title || null,
+        subtitle: form.subtitle || null,
         certificate_template: form.certificate_template,
         is_active: form.is_active,
       };
@@ -642,7 +664,7 @@ export default function Courses() {
                   label="Duration"
                   value={form.duration}
                   onChange={(e) => set('duration', e.target.value)}
-                  slotProps={hint('As the prospectus states it — "6 months".')}
+                  slotProps={hint('As the prospectus and the website card state it — "6 months", "6 Hours".')}
                 />
                 <TextField
                   label="Course fee"
@@ -681,11 +703,106 @@ export default function Courses() {
                   sx={{ gridColumn: '1 / -1' }}
                 />
                 {/*
+                  The website's Available Courses card. The name, description
+                  and duration above are on it too; these are the rest.
+                */}
+                <TextField
+                  label="Title"
+                  value={form.title}
+                  onChange={(e) => set('title', e.target.value)}
+                  slotProps={{
+                    htmlInput: { maxLength: 150 },
+                    ...hint('The heading on the website card.'),
+                  }}
+                />
+                <TextField
+                  label="Sub title"
+                  value={form.subtitle}
+                  onChange={(e) => set('subtitle', e.target.value)}
+                  sx={{ gridColumn: 'span 2' }}
+                  slotProps={{
+                    htmlInput: { maxLength: 255 },
+                    ...hint('The line under the title on the website card.'),
+                  }}
+                />
+                <TextField
+                  select
+                  label="Level"
+                  value={form.level}
+                  onChange={(e) => set('level', e.target.value)}
+                  slotProps={hint('The badge on the card picture.', true)}
+                >
+                  <MenuItem value="">
+                    <em>None</em>
+                  </MenuItem>
+                  {['Beginner', 'Intermediate', 'Advanced', 'Certification'].map((l) => (
+                    <MenuItem key={l} value={l}>
+                      {l}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                {/*
+                  Typed, not picked: Enter adds one, the chip's X removes it.
+                  Suggestions are only what other courses already hold, so the
+                  same category is not spelt two ways.
+                */}
+                <Autocomplete
+                  multiple
+                  freeSolo
+                  options={[...new Set(courses.flatMap((c) => c.categories ?? []))].filter(
+                    (o) => !form.categories.some((h) => h.toLowerCase() === o.toLowerCase()),
+                  )}
+                  value={form.categories}
+                  onChange={(_, v) =>
+                    setForm({
+                      ...form,
+                      categories: (v as string[])
+                        .map((one) => one.trim())
+                        .filter(
+                          (one, i, all) =>
+                            one && all.findIndex((x) => x.toLowerCase() === one.toLowerCase()) === i,
+                        ),
+                    })
+                  }
+                  renderValue={(chosen, getProps) =>
+                    (chosen as string[]).map((value, i) => (
+                      <Chip size="small" label={value} {...getProps({ index: i })} key={value} />
+                    ))
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Categories"
+                      placeholder="Type a category and press Enter"
+                    />
+                  )}
+                />
+                <TextField
+                  label="Lessons"
+                  placeholder="Eg. 12 Lessons"
+                  value={form.lessons}
+                  onChange={(e) => set('lessons', e.target.value)}
+                  slotProps={{
+                    htmlInput: { maxLength: 40 },
+                    ...hint('As the card prints it — "12 Lessons", "Self Paced".'),
+                  }}
+                />
+                <Box sx={{ gridColumn: '1 / -1' }}>
+                  <FileField
+                    label="Card image"
+                    bucket="website"
+                    value={form.image}
+                    onChange={(image) => setForm({ ...form, image })}
+                    accept="image/png,image/jpeg,image/webp"
+                    ratio="16 / 9"
+                    helperText="The picture at the top of the course's card on the website."
+                  />
+                </Box>
+                {/*
                   The printed sheet, on the course rather than on a certificate:
                   everybody finishing this course takes away the same design
-                  with a different name on it. Full width because it is a
-                  landscape picture, and a certificate cropped into a third of a
-                  row cannot be checked by looking at it.
+                  with a different name on it. A square frame, the shape the
+                  certificate artwork is drawn to.
                 */}
                 <Box sx={{ gridColumn: '1 / -1' }}>
                   <FileField
@@ -695,7 +812,7 @@ export default function Courses() {
                     onChange={(certificate_template) =>
                       setForm({ ...form, certificate_template })
                     }
-                    fill
+                    ratio="1 / 1"
                     helperText={
                       'The blank sheet certificates print on. The name, course, grade, number ' +
                       'and date are laid over it. Without one, this course cannot be printed.'
@@ -807,6 +924,12 @@ export default function Courses() {
                                 gst_percent: c.gst_percent == null ? '' : String(c.gst_percent),
                                 description: c.description ?? '',
                                 certificate_template: c.certificate_template,
+                                image: c.image,
+                                level: c.level ?? '',
+                                categories: c.categories ?? [],
+                                lessons: c.lessons ?? '',
+                                title: c.title ?? '',
+                                subtitle: c.subtitle ?? '',
                                 is_active: Boolean(c.is_active),
                               })
                             }

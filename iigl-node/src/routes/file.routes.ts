@@ -14,8 +14,8 @@ export const fileRoutes = Router();
  * worth a stack trace.
  *
  * The key is the request path under `uploads/`, matching how the object was
- * written. `..` cannot survive Express's path parsing, and the bucket holds
- * nothing but uploads in any case.
+ * written. Express does not strip `..` from a raw path, so app.ts refuses any
+ * dot segment before a request gets here.
  *
  * **Two ways out, and the fast one is a redirect.** A round trip to R2 from
  * this network measures 0.6–1.8 seconds whatever the file weighs — a

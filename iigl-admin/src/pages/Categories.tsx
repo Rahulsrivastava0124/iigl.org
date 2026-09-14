@@ -233,7 +233,7 @@ export default function Categories() {
               bucket="icon"
               value={catForm.icon}
               onChange={(icon) => setCatForm({ ...catForm, icon })}
-              helperText="Shown against the category in lists."
+              helperText="Shown against the category in lists, and as the picture on its card in the website's Our Report Categories."
             />
           </FormPanel>
         )}

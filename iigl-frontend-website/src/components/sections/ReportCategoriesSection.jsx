@@ -3,6 +3,7 @@ import card1Url from '../../../Assets/card1.png';
 import card2Url from '../../../Assets/card2.png';
 import card3Url from '../../../Assets/card3.png';
 import card4Url from '../../../Assets/card4.png';
+import { fileUrl, usePublic } from '../../lib/api.js';
 
 const reportCategories = [
   {
@@ -49,7 +50,26 @@ function ReportIcon({ category }) {
   );
 }
 
+/** The disc's icon, by what the category is called; the gem for anything else. */
+const iconFor = (name) =>
+  /jewel/i.test(name) ? CircleDot : /diamond/i.test(name) ? Diamond : /rudraksh/i.test(name) ? Flower2 : Gem;
+
 export default function ReportCategoriesSection() {
+  /*
+    The categories from Report Master › Categories, with the picture uploaded
+    there (a banner where one exists). The four above until there are any.
+  */
+  const rows = usePublic('/categories');
+  const categories = rows?.length
+    ? rows.map((category) => ({
+        title: category.name,
+        description: category.short_description ?? category.description ?? '',
+        image: fileUrl(category.banner ?? category.icon),
+        imageAlt: category.name,
+        icon: iconFor(category.name),
+      }))
+    : reportCategories;
+
   return (
     <section id="reports" className="bg-[#f8f9fb] px-5 py-9 text-[#2c3b64] sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[1390px]">
@@ -65,13 +85,15 @@ export default function ReportCategoriesSection() {
         </div>
 
         <div className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          {reportCategories.map((category) => (
+          {categories.map((category) => (
             <article
               className="relative flex min-h-[422px] flex-col overflow-hidden rounded-xl border border-[#e6e8ee] bg-white text-center shadow-[0_22px_52px_rgba(44,59,100,0.16)] max-[1260px]:min-h-[416px] max-[640px]:min-h-[436px]"
               key={category.title}
             >
               <div className="h-[166px] overflow-hidden bg-[#f8f9fb] max-[1260px]:h-[158px] max-[640px]:h-[152px]">
-                <img className="h-full w-full object-cover" src={category.image} alt={category.imageAlt} />
+                {category.image && (
+                  <img className="h-full w-full object-cover" src={category.image} alt={category.imageAlt} />
+                )}
               </div>
 
               <ReportIcon category={category} />

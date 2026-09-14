@@ -235,6 +235,16 @@ for (const m of MASTER_DOCS) {
     },
   };
 }
+/** Content bodies: a branch's list line and map pin, and a banner's placement and phone picture. */
+const BRANCH_CARD = {
+  state: { type: ['string', 'null'], maxLength: 60 },
+  blurb: { type: ['string', 'null'], maxLength: 120, description: 'The line under the city in the website branch list.' },
+  lat: { type: ['number', 'string', 'null'], description: 'Map pin latitude, decimal degrees, -90 to 90.' },
+  lon: { type: ['number', 'string', 'null'], description: 'Map pin longitude, decimal degrees, -180 to 180.' },
+};
+const BANNER_TYPE = { type: 'string', enum: ['slider', 'banner'], description: 'slider is the website home page slider.' };
+const MOBILE_SLIDER = { type: ['string', 'null'], description: 'The picture phones get instead, a path in uploads/banner.' };
+
 
 export const extraPaths: Record<string, unknown> = {
   '/api/statements': {
@@ -1064,6 +1074,12 @@ export const extraPaths: Record<string, unknown> = {
               'A rate typed on this record instead of chosen from the list. One of the two is stored and the other cleared.',
           },
           description: str,
+          level: { type: ['string', 'null'], enum: ['Beginner', 'Intermediate', 'Advanced', 'Certification', null], description: 'The badge on the website card.' },
+          categories: { type: ['array', 'null'], items: { type: 'string', maxLength: 40 }, maxItems: 20, description: 'Typed in the panel. The website lists the course under each. Duplicates, ignoring case, are dropped.' },
+          lessons: { type: ['string', 'null'], maxLength: 40, description: 'As the card prints it — "12 Lessons", "Self Paced".' },
+        title: { type: ['string', 'null'], maxLength: 150, description: 'The heading on the website card.' },
+        subtitle: { type: ['string', 'null'], maxLength: 255, description: 'The line under the title on the website card.' },
+          image: { type: ['string', 'null'], description: 'The card picture, a path in uploads/website.' },
           is_active: bool,
         },
         ['name'],
@@ -1090,6 +1106,12 @@ export const extraPaths: Record<string, unknown> = {
         duration: str,
         fee: { type: 'number' },
         description: str,
+        level: { type: ['string', 'null'], enum: ['Beginner', 'Intermediate', 'Advanced', 'Certification', null], description: 'The badge on the website card.' },
+        categories: { type: ['array', 'null'], items: { type: 'string', maxLength: 40 }, maxItems: 20, description: 'Typed in the panel. The website lists the course under each. Duplicates, ignoring case, are dropped.' },
+        lessons: { type: ['string', 'null'], maxLength: 40, description: 'As the card prints it — "12 Lessons", "Self Paced".' },
+        title: { type: ['string', 'null'], maxLength: 150, description: 'The heading on the website card.' },
+        subtitle: { type: ['string', 'null'], maxLength: 255, description: 'The line under the title on the website card.' },
+        image: { type: ['string', 'null'], description: 'The card picture, a path in uploads/website.' },
         is_active: bool,
       }),
       responses: {
@@ -1991,15 +2013,35 @@ export const extraPaths: Record<string, unknown> = {
       meta_description: str,
       meta_keywords: str,
     },
+    {
+      '/api/content/blogs': {
+        get: {
+          tags: ['Content'],
+          summary: 'List every article, with its body',
+          description: 'For the editor. The public list leaves the body out.',
+          responses: { 200: ok('Articles.'), ...guarded },
+        },
+      },
+    },
   ),
 
   ...crud(
     'Content',
     'branch page',
     '/api/content/branches',
-    { city: { type: 'string' }, pageURL: { type: 'string' }, h1: str, content: str, img: str, title: str, description: str, keywords: str },
+    { city: { type: 'string' }, ...BRANCH_CARD, pageURL: { type: 'string' }, h1: str, content: str, img: str, title: str, description: str, keywords: str },
     ['city'],
-    { city: str, pageURL: { type: 'string' }, h1: str, content: str, img: str, title: str, description: str, keywords: str },
+    { city: str, ...BRANCH_CARD, pageURL: { type: 'string' }, h1: str, content: str, img: str, title: str, description: str, keywords: str },
+    {
+      '/api/content/branches': {
+        get: {
+          tags: ['Content'],
+          summary: 'List every branch page, whole',
+          description: 'For the editor. The public list carries only what the website lists.',
+          responses: { 200: ok('Branch pages.'), ...guarded },
+        },
+      },
+    },
   ),
 
   ...crud(
@@ -2015,9 +2057,9 @@ export const extraPaths: Record<string, unknown> = {
     'Content',
     'banner',
     '/api/content/banners',
-    { path: { type: 'string', description: 'An uploaded path from POST /api/uploads/banner.' }, img_type: { type: 'string' }, name: str, url: str, status: bool },
+    { path: { type: 'string', description: 'An uploaded path from POST /api/uploads/banner.' }, img_type: BANNER_TYPE, name: str, url: str, mobile_slider: MOBILE_SLIDER, status: bool },
     ['path', 'img_type'],
-    { path: { type: 'string' }, img_type: { type: 'string' }, name: str, url: str, status: bool },
+    { path: { type: 'string' }, img_type: BANNER_TYPE, name: str, url: str, mobile_slider: MOBILE_SLIDER, status: bool },
     {
       '/api/content/banners': {
         get: {
@@ -2080,7 +2122,7 @@ export const extraPaths: Record<string, unknown> = {
     get: {
       tags: ['Content'],
       summary: 'List the static pages',
-      responses: { 200: ok('Pages, without their bodies.'), ...guarded },
+      responses: { 200: ok('Every page, with its body, for the editor.'), ...guarded },
     },
   },
 

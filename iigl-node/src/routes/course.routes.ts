@@ -278,6 +278,56 @@ function gstChoice(b: Record<string, unknown>) {
   return { gst_id: null, gst_percent: String(percent) };
 }
 
+/*
+  The website card: a picture, the level badge, the categories it is listed under, and
+  the lesson count as the card prints it, and its own title and sub title. The name, description and duration
+  on the card are the course's own.
+*/
+const LEVELS = ['Beginner', 'Intermediate', 'Advanced', 'Certification'];
+
+function cardFields(b: Record<string, unknown>, partial: boolean) {
+  const out: Record<string, string | null> = {};
+  const pick = (key: string, allowed: string[], label: string) => {
+    if (partial && b[key] === undefined) return;
+    const v = text(b[key]);
+    if (v !== null && !allowed.includes(v)) {
+      throw badRequest(`${label} must be one of: ${allowed.join(', ')}.`);
+    }
+    out[key] = v;
+  };
+  pick('level', LEVELS, 'Level');
+  // Typed in the panel, so no fixed list: trimmed, blanks dropped, one of each
+  // however it is capitalised. Stored as a JSON array; none at all is null.
+  if (!partial || b.categories !== undefined) {
+    const given = b.categories ?? [];
+    if (!Array.isArray(given)) throw badRequest('Categories must be a list.');
+    const seen = new Set<string>();
+    const categories: string[] = [];
+    for (const one of given) {
+      const v = text(one);
+      if (!v || seen.has(v.toLowerCase())) continue;
+      if (v.length > 40) throw badRequest(`Category "${v.slice(0, 40)}…" is longer than 40 characters.`);
+      seen.add(v.toLowerCase());
+      categories.push(v);
+    }
+    if (categories.length > 20) throw badRequest('A course can hold at most 20 categories.');
+    out.categories = categories.length ? JSON.stringify(categories) : null;
+  }
+  if (!partial || b.lessons !== undefined) {
+    const lessons = text(b.lessons);
+    if (lessons && lessons.length > 40) throw badRequest('Lessons is at most 40 characters — "12 Lessons".');
+    out.lessons = lessons;
+  }
+  for (const [key, label, max] of [['title', 'Title', 150], ['subtitle', 'Sub title', 255]] as const) {
+    if (partial && b[key] === undefined) continue;
+    const v = text(b[key]);
+    if (v && v.length > max) throw badRequest(`${label} is at most ${max} characters.`);
+    out[key] = v;
+  }
+  if (!partial || b.image !== undefined) out.image = text(b.image);
+  return out;
+}
+
 courseRoutes.post(
   '/',
   wrap(async (req, res) => {
@@ -300,6 +350,7 @@ courseRoutes.post(
         fee: String(money(b.fee, 'Fee')),
         ...gstChoice(b),
         description: text(b.description),
+        ...cardFields(b, false),
         // The sheet this course's certificates print on. A path in
         // uploads/certificate, uploaded separately like every other image here.
         certificate_template: text(b.certificate_template),
@@ -337,6 +388,7 @@ courseRoutes.patch(
       Object.assign(patch, gstChoice(b));
     }
     if (b.description !== undefined) patch.description = text(b.description);
+    Object.assign(patch, cardFields(b, true));
     if (b.certificate_template !== undefined) {
       patch.certificate_template = text(b.certificate_template);
     }

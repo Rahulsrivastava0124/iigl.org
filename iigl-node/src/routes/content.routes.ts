@@ -57,12 +57,24 @@ const BLOG_FIELDS = [
   'meta_keywords',
 ] as const;
 
+/*
+  The whole record, for the editor. The public list leaves the body out, and an
+  editor filled from it saved every article back with its content emptied.
+*/
+contentRoutes.get(
+  '/blogs',
+  wrap(async (_req, res) => {
+    res.json({ data: await db.selectFrom('blogs').selectAll().orderBy('id', 'desc').execute() });
+  }),
+);
+
 contentRoutes.post(
   '/blogs',
   headOfficeOr('website_blog', 'create'),
   wrap(async (req, res) => {
     const name = required(req.body?.page_name, 'Title');
-    const slug = slugify(String(req.body?.slug ?? name));
+    // Blank means "from the title", not an empty address.
+    const slug = slugify(String(text(req.body?.slug) ?? name));
 
     const clash = await db.selectFrom('blogs').select('id').where('slug', '=', slug).executeTakeFirst();
     if (clash) throw conflict(`An article already uses the address /${slug}.`);
@@ -102,7 +114,8 @@ contentRoutes.patch(
     // The slug is the public address. Changing it breaks any existing link, so
     // it moves only when asked for explicitly, never as a side effect of a
     // renamed title.
-    if (req.body?.slug !== undefined) {
+    // A cleared address keeps the one it had rather than becoming empty.
+    if (text(req.body?.slug)) {
       const slug = slugify(String(req.body.slug));
       const clash = await db
         .selectFrom('blogs')
@@ -123,17 +136,42 @@ contentRoutes.patch(
 // ---------------------------------------------------------------- branches
 
 const BRANCH_FIELDS = [
-  'city', 'h1', 'content', 'img', 'alt', 'title', 'description', 'keywords',
+  'city', 'state', 'blurb', 'h1', 'content', 'img', 'alt', 'title', 'description', 'keywords',
   'canonical', 'intro', 'acdnitm1', 'acdnitm2', 'acdnitm3',
   'acdnbd1', 'acdnbd2', 'acdnbd3', 'schm',
 ] as const;
+
+/** A map coordinate in decimal degrees, or null when left blank. */
+function coordinate(v: unknown, field: string, limit: number, example: string): string | null {
+  const given = text(v);
+  if (given === null) return null;
+  const n = Number(given);
+  if (!Number.isFinite(n) || Math.abs(n) > limit) {
+    throw badRequest(`${field} must be a number between -${limit} and ${limit} — for example ${example}.`);
+  }
+  return n.toFixed(6);
+}
+
+/** The two short columns the website's branch list prints, at their stored widths. */
+function checkBranch(body: any) {
+  if ((text(body?.state) ?? '').length > 60) throw badRequest('State is at most 60 characters.');
+  if ((text(body?.blurb) ?? '').length > 120) throw badRequest('Short line is at most 120 characters.');
+}
+
+contentRoutes.get(
+  '/branches',
+  wrap(async (_req, res) => {
+    res.json({ data: await db.selectFrom('branches').selectAll().orderBy('city').execute() });
+  }),
+);
 
 contentRoutes.post(
   '/branches',
   headOfficeOr('website_home', 'create'),
   wrap(async (req, res) => {
     const city = required(req.body?.city, 'City');
-    const pageURL = slugify(String(req.body?.pageURL ?? city));
+    checkBranch(req.body);
+    const pageURL = slugify(String(text(req.body?.pageURL) ?? city));
 
     const clash = await db
       .selectFrom('branches')
@@ -149,6 +187,8 @@ contentRoutes.post(
       updated_at: new Date(),
     };
     for (const k of BRANCH_FIELDS) if (k !== 'city') values[k] = text(req.body?.[k]);
+    values.lat = coordinate(req.body?.lat, 'Latitude', 90, '22.5726');
+    values.lon = coordinate(req.body?.lon, 'Longitude', 180, '88.3639');
 
     const result = await db.insertInto('branches').values(values as never).executeTakeFirst();
     res.status(201).json({ data: { id: Number(result.insertId), pageURL } });
@@ -164,8 +204,11 @@ contentRoutes.patch(
     const row = await db.selectFrom('branches').select('id').where('id', '=', id).executeTakeFirst();
     if (!row) throw notFound('Branch page not found.');
 
+    checkBranch(req.body);
     const patch = patchFrom(req.body, BRANCH_FIELDS);
-    if (req.body?.pageURL !== undefined) {
+    if (req.body?.lat !== undefined) patch.lat = coordinate(req.body.lat, 'Latitude', 90, '22.5726');
+    if (req.body?.lon !== undefined) patch.lon = coordinate(req.body.lon, 'Longitude', 180, '88.3639');
+    if (text(req.body?.pageURL)) {
       const pageURL = slugify(String(req.body.pageURL));
       const clash = await db
         .selectFrom('branches')
@@ -349,6 +392,13 @@ contentRoutes.patch(
 
 // ----------------------------------------------------------------- banners
 
+/** Where a banner shows: the website's home page slider, or a plain banner. */
+function placement(v: unknown): string {
+  const given = required(v, 'Type');
+  if (given !== 'slider' && given !== 'banner') throw badRequest('Type must be slider or banner.');
+  return given;
+}
+
 contentRoutes.get(
   '/banners',
   headOfficeOr('website_home', 'view'),
@@ -365,9 +415,11 @@ contentRoutes.post(
       .insertInto('banners')
       .values({
         path: required(req.body?.path, 'Image'),
-        img_type: required(req.body?.img_type, 'Placement'),
+        img_type: placement(req.body?.img_type),
         name: text(req.body?.name),
         url: text(req.body?.url),
+        // The picture phones get instead, as the old home page served it.
+        mobile_slider: text(req.body?.mobile_slider),
         status: req.body?.status === undefined ? 1 : req.body.status ? 1 : 0,
         created_at: new Date(),
         updated_at: new Date(),
@@ -388,9 +440,12 @@ contentRoutes.patch(
     if (!row) throw notFound('Banner not found.');
 
     const patch: Record<string, unknown> = { updated_at: new Date() };
-    for (const k of ['path', 'img_type', 'name', 'url'] as const) {
+    for (const k of ['name', 'url', 'mobile_slider'] as const) {
       if (req.body?.[k] !== undefined) patch[k] = text(req.body[k]);
     }
+    // Both are NOT NULL: a banner without a picture or a place is not a banner.
+    if (req.body?.path !== undefined) patch.path = required(req.body.path, 'Image');
+    if (req.body?.img_type !== undefined) patch.img_type = placement(req.body.img_type);
     if (req.body?.status !== undefined) patch.status = req.body.status ? 1 : 0;
     if (Object.keys(patch).length === 1) throw badRequest('Nothing to update.');
 
@@ -424,7 +479,9 @@ contentRoutes.get(
   wrap(async (_req, res) => {
     const rows = await db
       .selectFrom('websites')
-      .select(['id', 'page_name', 'page_type', 'meta_title'])
+      // The whole page: the editor is filled from this list, and a list without
+      // the body saved every page back empty.
+      .selectAll()
       .orderBy('page_type')
       .execute();
     res.json({ data: rows });

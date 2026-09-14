@@ -14,18 +14,16 @@ import ac2Url from '../../../Assets/AC2.png';
 import ac3Url from '../../../Assets/AC3.png';
 import ac4Url from '../../../Assets/AC4.png';
 import SectionLabel from '../SectionLabel.jsx';
+import { fileUrl, usePublic } from '../../lib/api.js';
 
 /**
- * The filter row. `all` is the resting state, so it is first and starts active;
- * every other id is matched against a course's `track`.
+ * The filter row is the categories the shown courses carry, typed per course in
+ * the panel (Student › Course). A category named like one of the originals keeps
+ * its icon; any other gets the gem.
  */
-const filters = [
-  { id: 'all', label: 'All Courses', icon: LayoutGrid },
-  { id: 'gemology', label: 'Gemology', icon: Diamond },
-  { id: 'jewellery', label: 'Jewellery', icon: Gem },
-  { id: 'certification', label: 'Certification', icon: ScrollText },
-  { id: 'fundamentals', label: 'Fundamentals', icon: GraduationCap },
-];
+const ICONS = { gemology: Diamond, jewellery: Gem, certification: ScrollText, fundamentals: GraduationCap };
+
+/** The four cards shown until a course in the panel has a website card written. */
 
 const courses = [
   {
@@ -34,7 +32,7 @@ const courses = [
     level: 'Beginner',
     duration: '6 Hours',
     lessons: '12 Lessons',
-    track: 'fundamentals',
+    categories: ['Fundamentals'],
     image: ac1Url,
     imageAlt: 'A polished diamond held in tweezers',
     // icon: Diamond,
@@ -45,7 +43,7 @@ const courses = [
     level: 'Intermediate',
     duration: '8 Hours',
     lessons: '18 Lessons',
-    track: 'gemology',
+    categories: ['Gemology'],
     image: ac2Url,
     imageAlt: 'A gemstone examined through a loupe',
     // icon: Sparkles,
@@ -56,7 +54,7 @@ const courses = [
     level: 'Advanced',
     duration: '12 Hours',
     lessons: '24 Lessons',
-    track: 'jewellery',
+    categories: ['Jewellery'],
     image: ac3Url,
     imageAlt: 'A diamond necklace and matching earrings',
     // icon: Gem,
@@ -67,7 +65,7 @@ const courses = [
     level: 'Certification',
     duration: 'Varies',
     lessons: 'Self Paced',
-    track: 'certification',
+    categories: ['Certification'],
     image: ac4Url,
     imageAlt: 'An IIGL certificate with a gold seal',
     // icon: ScrollText,
@@ -76,7 +74,38 @@ const courses = [
 
 export default function AvailableCoursesSection() {
   const [active, setActive] = useState('all');
-  const shown = active === 'all' ? courses : courses.filter((course) => course.track === active);
+
+  /*
+    The offered courses whose website card has been written — a Title set on
+    the course in the panel. A course without one is still a real course, but a
+    card with no heading is not a card.
+  */
+  const rows = usePublic('/courses');
+  const live = (rows ?? [])
+    .filter((course) => course.title)
+    .map((course) => ({
+      title: course.title,
+      description: course.subtitle ?? course.description ?? '',
+      level: course.level,
+      duration: course.duration,
+      lessons: course.lessons,
+      categories: course.categories ?? [],
+      image: fileUrl(course.image),
+      imageAlt: course.title,
+    }));
+  const list = live.length ? live : courses;
+
+  // One button per category, however each course capitalised it.
+  const filters = [{ id: 'all', label: 'All Courses', icon: LayoutGrid }];
+  for (const name of list.flatMap((course) => course.categories)) {
+    const id = name.toLowerCase();
+    if (!filters.some((filter) => filter.id === id)) filters.push({ id, label: name, icon: ICONS[id] ?? Gem });
+  }
+  const current = filters.some((filter) => filter.id === active) ? active : 'all';
+  const shown =
+    current === 'all'
+      ? list
+      : list.filter((course) => course.categories.some((name) => name.toLowerCase() === current));
 
   return (
     <section id="courses" className="bg-white px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
@@ -96,7 +125,7 @@ export default function AvailableCoursesSection() {
         <div className="mt-7 border-b border-[#e6e8ee] pb-6">
           <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-3">
             {filters.map(({ id, label, icon: Icon }) => {
-              const on = id === active;
+              const on = id === current;
 
               return (
                 <button
@@ -122,16 +151,18 @@ export default function AvailableCoursesSection() {
         </div>
 
         <div className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          {shown.map(({ title, description, level, duration, lessons, image, imageAlt, icon: Icon }) => (
+          {shown.map(({ title, description, level, duration, lessons, image, imageAlt }) => (
             <article
               className="flex flex-col overflow-hidden rounded-xl border border-[#e6e8ee] bg-white shadow-[0_15px_38px_rgba(44,59,100,0.08)]"
               key={title}
             >
               <div className="relative h-[196px] overflow-hidden bg-[#f8f9fb]">
-                <img className="h-full w-full object-cover" src={image} alt={imageAlt} />
-                <span className="absolute right-3 top-3 rounded-md bg-[#bd7724] px-2.5 py-1 text-[11px] font-medium leading-none text-white">
-                  {level}
-                </span>
+                {image && <img className="h-full w-full object-cover" src={image} alt={imageAlt} />}
+                {level && (
+                  <span className="absolute right-3 top-3 rounded-md bg-[#bd7724] px-2.5 py-1 text-[11px] font-medium leading-none text-white">
+                    {level}
+                  </span>
+                )}
               </div>
 
               {/* Padding lives here, not on the article, so the image stays
@@ -149,15 +180,20 @@ export default function AvailableCoursesSection() {
                 {/* Pushed to the bottom so the meta row lines up across cards
                     whose descriptions run to different lengths. */}
                 <div className="mt-auto flex items-center gap-3 pt-6 text-[13px] font-normal leading-none text-[#4a5265]">
-                  <span className="inline-flex items-center gap-2">
-                    <Clock className="h-[15px] w-[15px] text-[#2c3b64]" strokeWidth={1.6} />
-                    {duration}
-                  </span>
-                  <span className="h-[14px] w-px bg-[#e6e8ee]" />
-                  <span className="inline-flex items-center gap-2">
-                    <BarChart3 className="h-[15px] w-[15px] text-[#2c3b64]" strokeWidth={1.6} />
-                    {lessons}
-                  </span>
+                  {duration && (
+                    <span className="inline-flex items-center gap-2">
+                      <Clock className="h-[15px] w-[15px] text-[#2c3b64]" strokeWidth={1.6} />
+                      {duration}
+                    </span>
+                  )}
+                  {duration && lessons && <span className="h-[14px] w-px bg-[#e6e8ee]" />}
+                  {lessons && (
+                    <span className="inline-flex items-center gap-2">
+                      <BarChart3 className="h-[15px] w-[15px] text-[#2c3b64]" strokeWidth={1.6} />
+                      {/* "12" typed in the panel reads as "12 Lessons" on the card. */}
+                      {/^\d+$/.test(lessons) ? `${lessons} Lessons` : lessons}
+                    </span>
+                  )}
                 </div>
               </div>
 

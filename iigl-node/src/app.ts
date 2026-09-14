@@ -126,6 +126,38 @@ export function createApp() {
   app.use('/api/auth', authRoutes);
   app.use('/api/public', publicRoutes);
 
+  // Uploaded files, from the legacy disk first and R2 after (see the note
+  // where they are mounted for everyone else, below the session guard).
+  const files = express
+    .Router()
+    .use((req, res, next) => {
+      // Express does not normalise a raw path, and R2 and the disk both would:
+      // `website/../signature/x.png` names a private file under a public
+      // folder. No stored path has a dot segment, so any is refused.
+      let decoded = '..';
+      try {
+        decoded = decodeURIComponent(req.path);
+      } catch {
+        // Malformed escapes are refused along with the rest.
+      }
+      if (/[\\\0]/.test(decoded) || decoded.split('/').some((s) => s === '.' || s === '..')) {
+        res.status(404).json({ message: 'Not found.' });
+        return;
+      }
+      next();
+    })
+    .use(express.static(path.resolve(env.legacyPublicRoot, 'uploads'), { index: false }), fileRoutes);
+
+  // The website's own pictures are as public as the pages they sit on: what
+  // Website Setup uploads (banner), the course cards (website), and category
+  // pictures (icon — which also holds attribute pictures and laboratory logos,
+  // branding printed on every certificate). Only those three folders: reports,
+  // signatures, employee and laboratory papers keep the session guard.
+  const PUBLIC_UPLOADS = new Set(['website', 'banner', 'icon']);
+  app.use('/api/files', (req, res, next) =>
+    PUBLIC_UPLOADS.has(req.path.split('/')[1] ?? '') ? files(req, res, next) : next(),
+  );
+
   // Everything below requires a session. Routes are private by default —
   // the inverse of the Laravel app, where 15 routes sat outside all middleware.
   app.use('/api', requireAuth);
@@ -154,11 +186,7 @@ export function createApp() {
   // holds the application's own source. `screenshots/` — payment proof — is
   // deliberately left out; it is evidence attached to a transaction rather than
   // a picture a list needs to render.
-  app.use(
-    '/api/files',
-    express.static(path.resolve(env.legacyPublicRoot, 'uploads'), { index: false }),
-    fileRoutes,
-  );
+  app.use('/api/files', files);
   app.use('/api/attendance', attendanceRoutes);
   app.use('/api/content', contentRoutes);
   app.use('/api/customers', customerRoutes);

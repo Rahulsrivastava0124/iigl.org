@@ -153,7 +153,18 @@ back rather than ruining a week of scans: `VITE_IMAGE_QUALITY`,
 - **Build context** `iigl-frontend-website`
 - **Port** `80`
 
-No environment. Nothing to configure.
+The home page reads its courses, slider banners, report categories, branches and
+registered customers from the API's public endpoints, at the `VITE_API_URL` in
+`iigl-frontend-website/.env.production` (`https://api.iigl.org/api`). It is read
+at build time, so changing it means a rebuild. Public reads answer any origin, so
+the website needs no `CORS_ORIGINS` entry.
+
+A section with nothing in the panel yet, or that cannot reach the API, keeps its
+built-in content rather than going blank.
+
+Pictures uploaded in Website Setup, on courses and on categories are served under
+`/api/files/website/`, `/api/files/banner/` and `/api/files/icon/` without a
+session. Every other upload folder still needs one.
 
 ---
 

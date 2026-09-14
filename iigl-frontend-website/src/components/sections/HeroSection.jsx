@@ -6,6 +6,7 @@ import heroUrl from '../../../Assets/Hero banner 1.png';
 import heroAltUrl from '../../../Assets/Hero banner.png';
 import hero2Url from '../../../Assets/Hero banner 3.png';
 import hero2AltUrl from '../../../Assets/Hero banner 4.png';
+import { fileUrl, usePublic } from '../../lib/api.js';
 
 
 /**
@@ -25,9 +26,23 @@ const banners = [
 ];
 
 export default function HeroSection() {
+  /*
+    The sliders from the panel's Website Setup › Banners — type "slider",
+    active — as the old home page read them, with the phone-sized picture
+    where one was uploaded. The four above until there are any.
+  */
+  const rows = usePublic('/banners?type=slider');
+  const live = (rows ?? [])
+    .map((b) => ({ image: fileUrl(b.path), mobile: fileUrl(b.mobile_slider), alt: b.name ?? '', url: b.url }))
+    .filter((b) => b.image);
+  const slides = live.length ? live : banners;
+
   return (
     <main className="bg-white">
       <Swiper
+        // Remounted when the live slides replace the built-in ones, so the loop
+        // is rebuilt around the new set.
+        key={live.length ? 'live' : 'built-in'}
         className="hero-swiper w-full"
         modules={[A11y, Autoplay, Keyboard, Pagination]}
         loop
@@ -49,15 +64,23 @@ export default function HeroSection() {
         keyboard={{ enabled: true }}
         a11y={{ prevSlideMessage: 'Previous banner', nextSlideMessage: 'Next banner' }}
       >
-        {banners.map((banner) => (
-          <SwiperSlide key={banner.image}>
-            <img
-              className="h-[clamp(340px,48vw,760px)] w-full object-cover"
-              src={banner.image}
-              alt={banner.alt}
-            />
-          </SwiperSlide>
-        ))}
+        {slides.map((banner) => {
+          const picture = (
+            <picture className="block">
+              {banner.mobile && <source media="(max-width: 640px)" srcSet={banner.mobile} />}
+              <img
+                className="h-[clamp(340px,48vw,760px)] w-full object-cover"
+                src={banner.image}
+                alt={banner.alt}
+              />
+            </picture>
+          );
+          return (
+            <SwiperSlide key={banner.image}>
+              {banner.url ? <a href={banner.url}>{picture}</a> : picture}
+            </SwiperSlide>
+          );
+        })}
       </Swiper>
 
       <div className="hero-dots flex items-center justify-center gap-2 py-5" />

@@ -11,6 +11,20 @@ import { numericId, numericParams } from '../middleware/params.js';
 
 export const publicRoutes = Router();
 
+/*
+  Every public read answers any site. The website is its own origin, and the
+  courses, categories and banners it reads were blocked by the browser while
+  only the laboratory and customer lists said so. Set only where CORS has not
+  already answered for a listed origin, so the panel keeps its credentialed
+  reply; writes (the verify log) are left to the global CORS rules.
+*/
+publicRoutes.use((req, res, next) => {
+  if (req.method === 'GET' && !res.get('Access-Control-Allow-Origin')) {
+    res.set('Access-Control-Allow-Origin', '*');
+  }
+  next();
+});
+
 publicRoutes.get(
   '/pages/:pageType',
   wrap(async (req, res) => {
@@ -52,7 +66,7 @@ publicRoutes.get(
 publicRoutes.get(
   '/branches',
   wrap(async (_req, res) => {
-    const rows = await db.selectFrom('branches').select(['id', 'city', 'pageURL', 'img', 'title']).execute();
+    const rows = await db.selectFrom('branches').select(['id', 'city', 'state', 'blurb', 'lat', 'lon', 'pageURL', 'img', 'title']).execute();
     res.json({ data: rows });
   }),
 );
@@ -253,6 +267,41 @@ publicRoutes.get(
       .executeTakeFirst();
     if (!row) throw notFound('Branch page not found.');
     res.json({ data: row });
+  }),
+);
+
+/**
+ * The courses on offer, as the website's Available Courses cards show them:
+ * name, description, duration, lessons, level, categories and picture. Retired
+ * courses are left out, and nothing about fees or enrolments is exposed.
+ */
+publicRoutes.get(
+  '/courses',
+  wrap(async (_req, res) => {
+    const rows = await db
+      .selectFrom('courses')
+      .select(['id', 'name', 'code', 'description', 'duration', 'lessons', 'level', 'categories', 'image', 'title', 'subtitle'])
+      .where('is_active', '=', 1)
+      .orderBy('name')
+      .execute();
+    res.json({ data: rows });
+  }),
+);
+
+/**
+ * The report categories, as the website's Our Report Categories cards show
+ * them: name, the short line and the picture (Report Master › Categories).
+ * Weight units and anything about pricing stay private.
+ */
+publicRoutes.get(
+  '/categories',
+  wrap(async (_req, res) => {
+    const rows = await db
+      .selectFrom('categories')
+      .select(['id', 'name', 'short_description', 'description', 'icon', 'banner'])
+      .orderBy('id')
+      .execute();
+    res.json({ data: rows });
   }),
 );
 
