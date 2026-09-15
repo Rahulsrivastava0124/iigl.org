@@ -21,6 +21,10 @@ import { fileUrl, usePublic } from '../../lib/api.js';
  * the panel (Student › Course). A category named like one of the originals keeps
  * its icon; any other gets the gem.
  */
+/** A course description is formatted HTML from the panel; a card shows its words. */
+const plainText = (html) =>
+  html ? (new DOMParser().parseFromString(html, 'text/html').body.textContent ?? '').replace(/\s+/g, ' ').trim() : '';
+
 const ICONS = { gemology: Diamond, jewellery: Gem, certification: ScrollText, fundamentals: GraduationCap };
 
 /** The four cards shown until a course in the panel has a website card written. */
@@ -84,8 +88,9 @@ export default function AvailableCoursesSection() {
   const live = (rows ?? [])
     .filter((course) => course.title)
     .map((course) => ({
+      id: course.id,
       title: course.title,
-      description: course.subtitle ?? course.description ?? '',
+      description: course.subtitle ?? plainText(course.description),
       level: course.level,
       duration: course.duration,
       lessons: course.lessons,
@@ -113,7 +118,7 @@ export default function AvailableCoursesSection() {
         <div className="mx-auto max-w-[820px] text-center">
           <SectionLabel>IIGL Education</SectionLabel>
 
-          <h2 className="relative m-0 mt-4 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[46px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[34px]">
+          <h2 className="relative m-0 mt-4 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[28px]">
             Available Courses
           </h2>
 
@@ -151,7 +156,7 @@ export default function AvailableCoursesSection() {
         </div>
 
         <div className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          {shown.map(({ title, description, level, duration, lessons, image, imageAlt }) => (
+          {shown.map(({ id, title, description, level, duration, lessons, image, imageAlt }) => (
             <article
               className="flex flex-col overflow-hidden rounded-xl border border-[#e6e8ee] bg-white shadow-[0_15px_38px_rgba(44,59,100,0.08)]"
               key={title}
@@ -199,7 +204,8 @@ export default function AvailableCoursesSection() {
 
               <a
                 className="flex items-center justify-between bg-[#061948] px-5 py-4 text-[15px] font-medium leading-none text-white transition duration-200 hover:bg-[#10285e] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#d58a2b]"
-                href="#courses"
+                // A course from the panel opens its own page; the built-in cards have none.
+                href={id ? `/courses/${id}` : '#courses'}
               >
                 <span>View Course</span>
                 <ArrowRight className="h-[17px] w-[17px]" strokeWidth={1.8} />

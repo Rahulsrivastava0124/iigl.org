@@ -71,8 +71,9 @@ export default function Roles() {
     Which roles this screen is about, per viewer. This screen manages roles, so
     it lists the ones the viewer can manage and nothing else.
 
-    Head office: the shared roles it owns, less super admin. A laboratory's own
-    roles belong to that laboratory's panel.
+    Head office: Laboratory, Team and head office's own custom roles. Not super
+    admin, and not a role a laboratory made for its staff (owner_id set): that
+    belongs to the laboratory's panel.
 
     A laboratory: the roles it owns, and only those. Super admin, Laboratory and
     Team are head office's — shared with every franchise, so none of them can be
@@ -81,7 +82,7 @@ export default function Roles() {
     to an employee; they are simply not this screen's business.
   */
   const shown = list.filter((r) => {
-    if (isSuper(user) ? r.id === ROLE.SUPER || r.id === ROLE.ADMIN || r.owner_id !== null : r.owner_id === null) {
+    if (isSuper(user) ? r.id === ROLE.SUPER || r.owner_id !== null : r.owner_id === null) {
       return false;
     }
     return hits(search, r.id, r.role_name);
@@ -262,11 +263,15 @@ export default function Roles() {
                       />
                       <IconAction
                         label={
-                          mayRename(r) ? 'Edit role' : 'A shared role — ask head office'
+                          r.id === ROLE.ADMIN
+                            ? 'Built-in — a laboratory can do everything in its panel'
+                            : mayRename(r)
+                              ? 'Edit role'
+                              : 'A shared role — ask head office'
                         }
                         icon={EditIcon}
-                        disabled={!mayRename(r)}
-                        to={mayRename(r) ? `/roles/${r.id}/edit` : undefined}
+                        disabled={r.id === ROLE.ADMIN || !mayRename(r)}
+                        to={r.id !== ROLE.ADMIN && mayRename(r) ? `/roles/${r.id}/edit` : undefined}
                       />
                       <IconAction
                         label={deleteReason(r)}
@@ -289,10 +294,12 @@ export default function Roles() {
           key={role.id}
           roleId={role.id}
           roleName={role.id === ROLE.ADMIN ? 'Laboratory' : role.role_name}
-          readOnly={!mayRename(role)}
-          shared={role.owner_id === null}
+          readOnly={role.id === ROLE.ADMIN || !mayRename(role)}
+          shared={role.owner_id === null && role.id !== ROLE.ADMIN}
           note={
-            !mayRename(role)
+            role.id === ROLE.ADMIN
+              ? 'A laboratory account is not limited by permissions: it can do everything in its own panel. Shown ticked, and not changeable.'
+              : !mayRename(role)
                 ? "Head office's role, shared with every laboratory. You can see what it allows; to change it, make one of your own."
                 : undefined
           }

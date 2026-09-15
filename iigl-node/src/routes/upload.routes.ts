@@ -40,7 +40,10 @@ uploadRoutes.post(
         badRequest(`Unknown upload type. Expected one of: ${Object.keys(BUCKETS).join(', ')}.`),
       );
     }
-    if (ADMIN_ONLY.has(bucket) && req.user.roleId !== ROLE.SUPER) {
+    // A laboratory puts its own branch page's pictures — banner and gallery —
+    // in the public banner folder. Its staff do not.
+    const labSite = bucket === 'banner' && req.user.roleId === ROLE.LAB;
+    if (ADMIN_ONLY.has(bucket) && req.user.roleId !== ROLE.SUPER && !labSite) {
       return next(badRequest('Only an administrator can upload this kind of file.'));
     }
     next();

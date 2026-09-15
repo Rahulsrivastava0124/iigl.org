@@ -62,7 +62,7 @@ interface Pending {
  * Stage five: the certificate a student takes away.
  *
  * Not the gemstone certificates under Operations — those are the laboratory's
- * reports on stones. These are course certificates, numbered `IIGL-C-YYYY-NNNN`
+ * reports on stones. These are course certificates, numbered `IIGL-C-YYYY-NNNN-XXXX`
  * so that the two cannot be confused when they are read side by side.
  *
  * Issued against a completed enrolment, which is why the screen opens with what
@@ -365,7 +365,7 @@ export default function StudentCertificates() {
       </Panel>
 
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
-        These are course certificates, numbered IIGL-C-YYYY-NNNN — not the gemstone certificates
+        These are course certificates, numbered IIGL-C-YYYY-NNNN-XXXX — not the gemstone certificates
         under Operations. One is issued per completed enrolment, so a student who takes two courses
         earns two, and the number cannot be edited once it is on a document somebody is holding.
       </Typography>

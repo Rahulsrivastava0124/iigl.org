@@ -794,6 +794,28 @@ photo, ID proof and qualification.
   `public/` directories, and the stored path keeps the `public/uploads/...`
   shape the old application uses.
 
+### A picture's frame is its shape
+
+A picture upload is framed in the shape the picture will be shown in — pass
+`ratio` to `FileField`, never leave a picture on the plain wide strip:
+
+| Picture | `ratio` |
+|---|---|
+| Website cards, blog and page banners, report type banners | `16 / 9` (landscape) |
+| Home page slider banner (1600 × 600) | `8 / 3` |
+| Report category picture, company certificate (website) | `3 / 2` |
+| Order and customer card picture | `4 / 3` |
+| Passport photo, ID proof, document scan | `3 / 4` |
+| Logo, profile photo | `1 / 1` |
+| Course certificate design (A4 landscape) | `297 / 210` |
+| Signature, company logo strip | `3 / 1` |
+
+The wide strip without a ratio is only for a file of no fixed shape — a
+payment proof, a bill photo — where any frame would crop what matters.
+
+The pictures of one form sit side by side on one row, after its other fields,
+and wrap under each other on a narrow screen — never one full-width row each.
+
 ## Messages
 
 **The result of an action is a toast.** `useToast()` from

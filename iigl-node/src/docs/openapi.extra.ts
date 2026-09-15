@@ -244,15 +244,74 @@ const BRANCH_CARD = {
 };
 const BANNER_TYPE = { type: 'string', enum: ['slider', 'banner'], description: 'slider is the website home page slider.' };
 const MOBILE_SLIDER = { type: ['string', 'null'], description: 'The picture phones get instead, a path in uploads/banner.' };
+const REVIEW_RATING = { type: 'integer', minimum: 1, maximum: 5, description: 'Stars; 5 when not given.' };
+const REVIEW_KIND = { type: 'string', enum: ['client', 'student'], description: 'client for the home page’s Our Reviews, student for the Education page’s testimonials; client when not given.' };
+const CERTIFICATE_ICON = { type: 'string', enum: ['award', 'building', 'gear', 'handshake', 'shield'], description: 'Beside the title; award when not given.' };
+const CERTIFICATE_IMAGE = { type: 'string', description: 'An uploaded path from POST /api/uploads/website.' };
+/** A website page's own settings: head office's, or a laboratory's branch page. */
+const SITE_BODY = {
+  banner: { type: ['string', 'null'], description: 'A path in uploads/banner.' },
+  content: { type: 'string', description: 'HTML from the panel editor.' },
+  gallery: { type: 'array', maxItems: 24, items: { type: 'string', description: 'A path in uploads/banner.' } },
+  whatsapp: { type: ['string', 'null'], description: 'With country code; ten digits get 91 in front.' },
+  facebook: { type: ['string', 'null'], description: 'A link on facebook.com.' },
+  instagram: { type: ['string', 'null'], description: 'A link on instagram.com.' },
+};
+const LAB_PARAM = { name: 'labId', in: 'path', required: true, schema: { type: 'integer' } };
 
 
 export const extraPaths: Record<string, unknown> = {
+  '/api/site/profile': {
+    get: {
+      tags: ['Website'],
+      summary: 'Your own website page',
+      description: 'Head office: its own page, the main site. A laboratory: its branch page. Staff are refused.',
+      responses: { ...guarded, 200: ok('Banner, content, gallery and social links.'), 403: err('Only head office and a laboratory have a page.') },
+    },
+    put: {
+      tags: ['Website'],
+      summary: 'Save your own website page',
+      description: 'Only the fields sent change: head office saves its social links and its gallery separately.',
+      requestBody: body(SITE_BODY),
+      responses: {
+        ...guarded,
+        200: ok('Saved; the settings as stored.'),
+        400: err('A picture is not an upload, a link is not on its site, or the WhatsApp number is not a number.'),
+        403: err('Only head office and a laboratory have a page.'),
+      },
+    },
+  },
+
+  '/api/site/profile/{labId}': {
+    get: {
+      tags: ['Website'],
+      summary: "A laboratory's branch page",
+      description: 'Head office only.',
+      parameters: [LAB_PARAM],
+      responses: { ...guarded, 200: ok('Banner, content, gallery and social links.'), 403: err('Head office only.'), 404: err('Laboratory not found.') },
+    },
+    put: {
+      tags: ['Website'],
+      summary: "Save a laboratory's branch page",
+      description: 'Head office only. Only the fields sent change.',
+      parameters: [LAB_PARAM],
+      requestBody: body(SITE_BODY),
+      responses: {
+        ...guarded,
+        200: ok('Saved; the settings as stored.'),
+        400: err('A picture is not an upload, a link is not on its site, or the WhatsApp number is not a number.'),
+        403: err('Head office only.'),
+        404: err('Laboratory not found.'),
+      },
+    },
+  },
+
   '/api/statements': {
     get: {
       tags: ['Statements'],
       summary: 'A laboratory’s commission statements',
       description:
-        'Each finished period (`statement_period` months, from `statement_from`) is billed the day after it ends and falls due `statement_grace_days` later. What it bills is the commission on orders delivered or paid on in it, dated by `order_date`, at the laboratory’s rate. Approved commission payments since billing started settle the oldest statement first.\n\n`standing` is `clear`, `grace` (a billed statement is unpaid and inside its grace days — the reminder) or `locked` (past them: `POST /api/reports` is refused with 423 until head office approves a payment that covers it). `reminder` names the oldest unpaid statement.\n\nHead office names the laboratory with `lab_id`; a laboratory reads its own; a laboratory’s staff receive `standing` alone.',
+        'Each finished period (`statement_period` months, from `statement_from`) is billed the day after it ends and falls due `statement_grace_days` later. A `statement_period` of 0 is None: one statement from billing start to today, billed today, never overdue and never locked. What it bills is the commission on orders delivered or paid on in it, dated by `order_date`, at the laboratory’s rate. Approved commission payments since billing started settle the oldest statement first.\n\n`standing` is `clear`, `grace` (a billed statement is unpaid and inside its grace days — the reminder) or `locked` (past them: `POST /api/reports` is refused with 423 until head office approves a payment that covers it). `reminder` names the oldest unpaid statement.\n\nHead office names the laboratory with `lab_id`; a laboratory reads its own; a laboratory’s staff receive `standing` alone.',
       parameters: [{ name: 'lab_id', in: 'query', schema: { type: 'integer' }, description: 'Head office only: which laboratory.' }],
       responses: {
         ...guarded,
@@ -721,7 +780,7 @@ export const extraPaths: Record<string, unknown> = {
       tags: ['Permissions'],
       summary: 'The matrix for one role',
       description:
-        'Employee permissions only, each row with `label`, `description`, `abilities` and `applies_to`. A laboratory’s own role lists the laboratory side (orders, certificates, customers); a shared role may be held by either kind of employee and lists both sides. Super admin and laboratory return an empty list: they are not limited by permissions.',
+        'Employee permissions only, each row with `label`, `description`, `abilities` and `applies_to`. A laboratory’s own role lists the laboratory side (orders, certificates, customers); a shared role may be held by either kind of employee and lists both sides. Super admin returns an empty list; laboratory lists its side with every box granted. Neither is limited by permissions, and neither can be changed.',
       parameters: [idParam],
       responses: { 200: ok('One row per permission the role can carry.'), 404: err('Role not found.'), ...guarded },
     },
@@ -1079,6 +1138,8 @@ export const extraPaths: Record<string, unknown> = {
           lessons: { type: ['string', 'null'], maxLength: 40, description: 'As the card prints it — "12 Lessons", "Self Paced".' },
         title: { type: ['string', 'null'], maxLength: 150, description: 'The heading on the website card.' },
         subtitle: { type: ['string', 'null'], maxLength: 255, description: 'The line under the title on the website card.' },
+        details: { type: ['string', 'null'], maxLength: 20000, description: 'The course page: the full description.' },
+        syllabus: { type: ['string', 'null'], maxLength: 5000, description: 'The course page: one topic per line.' },
           image: { type: ['string', 'null'], description: 'The card picture, a path in uploads/website.' },
           is_active: bool,
         },
@@ -1111,6 +1172,8 @@ export const extraPaths: Record<string, unknown> = {
         lessons: { type: ['string', 'null'], maxLength: 40, description: 'As the card prints it — "12 Lessons", "Self Paced".' },
         title: { type: ['string', 'null'], maxLength: 150, description: 'The heading on the website card.' },
         subtitle: { type: ['string', 'null'], maxLength: 255, description: 'The line under the title on the website card.' },
+        details: { type: ['string', 'null'], maxLength: 20000, description: 'The course page: the full description.' },
+        syllabus: { type: ['string', 'null'], maxLength: 5000, description: 'The course page: one topic per line.' },
         image: { type: ['string', 'null'], description: 'The card picture, a path in uploads/website.' },
         is_active: bool,
       }),
@@ -1287,7 +1350,7 @@ export const extraPaths: Record<string, unknown> = {
       tags: ['Students'],
       summary: 'Course certificates',
       description:
-        'Not the gemstone certificates in /api/reports. These are numbered IIGL-C-YYYY-NNNN so the two cannot be mistaken for one another across a desk.',
+        'Not the gemstone certificates in /api/reports. These are numbered IIGL-C-YYYY-NNNN-XXXX so the two cannot be mistaken for one another across a desk.',
       parameters: [
         { name: 'page', in: 'query', schema: { type: 'integer' } },
         { name: 'per_page', in: 'query', schema: { type: 'integer', maximum: 200 } },
@@ -1996,7 +2059,11 @@ export const extraPaths: Record<string, unknown> = {
       page_name: { type: 'string' },
       slug: { type: 'string', description: 'Defaults to a slug of the title.' },
       content: { type: 'string' },
-      thumbnail: str,
+      thumbnail: { type: ['string', 'null'], description: 'The card picture, a path in uploads/website.' },
+      excerpt: { type: ['string', 'null'], maxLength: 255, description: 'The line under the title on the card.' },
+      category: { type: ['string', 'null'], maxLength: 60 },
+      author: { type: ['string', 'null'], maxLength: 100 },
+      published_on: { type: ['string', 'null'], format: 'date', description: 'Shown on the card; blank shows the date added.' },
       banner: str,
       meta_title: str,
       meta_description: str,
@@ -2007,7 +2074,11 @@ export const extraPaths: Record<string, unknown> = {
       page_name: { type: 'string' },
       slug: { type: 'string', description: 'The public address. Changing it breaks existing links, so it moves only when sent explicitly.' },
       content: { type: 'string' },
-      thumbnail: str,
+      thumbnail: { type: ['string', 'null'], description: 'The card picture, a path in uploads/website.' },
+      excerpt: { type: ['string', 'null'], maxLength: 255, description: 'The line under the title on the card.' },
+      category: { type: ['string', 'null'], maxLength: 60 },
+      author: { type: ['string', 'null'], maxLength: 100 },
+      published_on: { type: ['string', 'null'], format: 'date', description: 'Shown on the card; blank shows the date added.' },
       banner: str,
       meta_title: str,
       meta_description: str,
@@ -2080,6 +2151,88 @@ export const extraPaths: Record<string, unknown> = {
     },
   ),
 
+  ...crud(
+    'Content',
+    'review',
+    '/api/content/reviews',
+    { kind: REVIEW_KIND, name: { type: 'string' }, trade: str, quote: { type: 'string' }, rating: REVIEW_RATING, status: bool },
+    ['name', 'quote'],
+    { kind: REVIEW_KIND, name: { type: 'string' }, trade: str, quote: { type: 'string' }, rating: REVIEW_RATING, status: bool },
+    {
+      '/api/content/reviews': {
+        get: {
+          tags: ['Content'],
+          summary: 'List every review',
+          description: 'Clients’ for the home page’s Our Reviews and students’ for the Education page’s testimonials, inactive ones included. The public endpoint returns only active ones.',
+          parameters: [{ name: 'kind', in: 'query', schema: REVIEW_KIND, description: 'Only this kind; both when left out.' }],
+          responses: { 200: ok('Reviews.'), ...guarded },
+        },
+      },
+      '/api/content/reviews/{id}': {
+        delete: {
+          tags: ['Content'],
+          summary: 'Delete a review',
+          parameters: [idParam],
+          responses: { 200: ok('Deleted.'), 404: err('Review not found.'), ...guarded },
+        },
+      },
+    },
+  ),
+
+  ...crud(
+    'Content',
+    'gallery picture',
+    '/api/content/education-gallery',
+    { title: str, image: CERTIFICATE_IMAGE, status: bool },
+    ['image'],
+    { title: str, image: CERTIFICATE_IMAGE, status: bool },
+    {
+      '/api/content/education-gallery': {
+        get: {
+          tags: ['Content'],
+          summary: 'List every Course Gallery picture',
+          description: 'The Education page’s Course Gallery, inactive pictures included. The public endpoint returns only active ones.',
+          responses: { 200: ok('Pictures.'), ...guarded },
+        },
+      },
+      '/api/content/education-gallery/{id}': {
+        delete: {
+          tags: ['Content'],
+          summary: 'Delete a Course Gallery picture',
+          parameters: [idParam],
+          responses: { 200: ok('Deleted.'), 404: err('Picture not found.'), ...guarded },
+        },
+      },
+    },
+  ),
+
+  ...crud(
+    'Content',
+    'company certificate',
+    '/api/content/company-certificates',
+    { title: { type: 'string' }, subtitle: str, icon: CERTIFICATE_ICON, image: CERTIFICATE_IMAGE, status: bool },
+    ['image'],
+    { title: { type: 'string' }, subtitle: str, icon: CERTIFICATE_ICON, image: CERTIFICATE_IMAGE, status: bool },
+    {
+      '/api/content/company-certificates': {
+        get: {
+          tags: ['Content'],
+          summary: 'List every company certificate',
+          description: 'For the website’s Our Company Certificates section, inactive ones included. The public endpoint returns only active ones.',
+          responses: { 200: ok('Company certificates.'), ...guarded },
+        },
+      },
+      '/api/content/company-certificates/{id}': {
+        delete: {
+          tags: ['Content'],
+          summary: 'Delete a company certificate',
+          parameters: [idParam],
+          responses: { 200: ok('Deleted.'), 404: err('Certificate not found.'), ...guarded },
+        },
+      },
+    },
+  ),
+
   '/api/content/branch-laboratories': {
     get: {
       tags: ['Content'],
@@ -2115,31 +2268,6 @@ export const extraPaths: Record<string, unknown> = {
       parameters: [idParam],
       requestBody: body({ show_on_site: { type: 'boolean' } }, ['show_on_site']),
       responses: { 200: ok('Saved.'), 400: err('show_on_site must be true or false.'), 404: err('Customer not found.'), ...guarded },
-    },
-  },
-
-  '/api/content/pages': {
-    get: {
-      tags: ['Content'],
-      summary: 'List the static pages',
-      responses: { 200: ok('Every page, with its body, for the editor.'), ...guarded },
-    },
-  },
-
-  '/api/content/pages/{id}': {
-    patch: {
-      tags: ['Content'],
-      summary: 'Edit a static page',
-      parameters: [idParam],
-      requestBody: body({
-        page_name: { type: 'string' },
-        content: { type: 'string' },
-        banner: str,
-        meta_title: str,
-        meta_description: str,
-        meta_keywords: str,
-      }),
-      responses: { 200: ok('Updated.'), 400: err('Nothing to update.'), 404: err('Page not found.'), ...guarded },
     },
   },
 

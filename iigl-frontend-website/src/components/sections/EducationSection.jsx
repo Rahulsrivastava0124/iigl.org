@@ -69,7 +69,7 @@ export default function EducationSection() {
             <div className="mt-8 flex flex-wrap items-center gap-x-10 gap-y-5">
               <a
                 className="inline-flex h-12 min-w-[190px] items-center justify-center gap-8 rounded-lg bg-[#061948] px-6 text-[16px] font-medium leading-none text-white shadow-[0_14px_22px_rgba(6,25,72,0.18)] transition duration-200 hover:bg-[#10285e] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#d58a2b] max-[760px]:min-w-[176px] max-[760px]:text-[14px]"
-                href="#education"
+                href="/education#contact"
               >
                 <span>Enroll Now</span>
                 <ArrowRight className="h-[18px] w-[18px]" strokeWidth={2} />
@@ -77,7 +77,7 @@ export default function EducationSection() {
 
               <a
                 className="inline-flex flex-col text-[14px] font-medium leading-none text-[#061948] transition duration-200 hover:text-[#bd7724]"
-                href="#education"
+                href="/education#courses"
               >
                 <span>Explore Courses</span>
               </a>

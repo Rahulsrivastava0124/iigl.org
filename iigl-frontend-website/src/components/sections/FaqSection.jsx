@@ -53,7 +53,7 @@ const faqs = [
   {
     question: 'Can I verify my grading report?',
     answer:
-      'Yes. Enter the report number in Verify Your Report at the top of this page and the details on file will be shown, so a report can be checked against the laboratory’s own record.',
+      'Yes. Enter the report number, or scan its QR code, on the Verify Report page and the details on file will be shown, so a report can be checked against the laboratory’s own record.',
   },
   {
     question: 'Do you re-grade stones?',

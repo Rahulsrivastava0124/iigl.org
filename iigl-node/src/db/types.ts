@@ -97,15 +97,19 @@ export interface Banners {
 
 export interface Blogs {
   added_by: number;
+  author: string | null;
   banner: string | null;
   canonical: string | null;
+  category: string | null;
   content: string;
   created_at: Date | null;
+  excerpt: string | null;
   id: Generated<number>;
   meta_description: string | null;
   meta_keywords: string | null;
   meta_title: string | null;
   page_name: string;
+  published_on: Date | null;
   slug: string;
   thumbnail: string | null;
   updated_at: Date | null;
@@ -152,6 +156,17 @@ export interface Categories {
   updated_at: Date | null;
 }
 
+export interface CompanyCertificates {
+  created_at: Date | null;
+  icon: Generated<string>;
+  id: Generated<number>;
+  image: string;
+  status: Generated<number>;
+  subtitle: string | null;
+  title: string;
+  updated_at: Date | null;
+}
+
 export interface Countries {
   code: string | null;
   created_at: Date | null;
@@ -184,6 +199,7 @@ export interface Courses {
   code: string | null;
   created_at: Date | null;
   description: string | null;
+  details: string | null;
   duration: string | null;
   fee: Generated<Decimal>;
   gst_id: number | null;
@@ -195,6 +211,7 @@ export interface Courses {
   level: string | null;
   name: string;
   subtitle: string | null;
+  syllabus: string | null;
   title: string | null;
   updated_at: Date | null;
 }
@@ -236,6 +253,15 @@ export interface Districts {
   is_active: Generated<number>;
   name: string;
   state_id: number;
+  updated_at: Date | null;
+}
+
+export interface EducationGallery {
+  created_at: Date | null;
+  id: Generated<number>;
+  image: string;
+  status: Generated<number>;
+  title: string | null;
   updated_at: Date | null;
 }
 
@@ -501,6 +527,18 @@ export interface Reporttypes {
   updated_at: Date | null;
 }
 
+export interface Reviews {
+  created_at: Date | null;
+  id: Generated<number>;
+  kind: Generated<string>;
+  name: string;
+  quote: string;
+  rating: Generated<number>;
+  status: Generated<number>;
+  trade: string | null;
+  updated_at: Date | null;
+}
+
 export interface RolePermissions {
   action_type: string;
   create: number;
@@ -553,6 +591,20 @@ export interface Settings {
   updated_at: Date | null;
   updated_by: number | null;
   value: string | null;
+}
+
+export interface SiteProfiles {
+  banner: string | null;
+  content: string | null;
+  created_at: Date | null;
+  facebook: string | null;
+  gallery: Json | null;
+  id: Generated<number>;
+  instagram: string | null;
+  lab_id: number;
+  updated_at: Date | null;
+  updated_by: number | null;
+  whatsapp: string | null;
 }
 
 export interface StaffMessages {
@@ -808,12 +860,14 @@ export interface DB {
   blogs: Blogs;
   branches: Branches;
   categories: Categories;
+  company_certificates: CompanyCertificates;
   countries: Countries;
   coupon_redemptions: CouponRedemptions;
   courses: Courses;
   customer_category_discounts: CustomerCategoryDiscounts;
   discount_coupons: DiscountCoupons;
   districts: Districts;
+  education_gallery: EducationGallery;
   employements: Employements;
   enquiries: Enquiries;
   enquiry_followups: EnquiryFollowups;
@@ -832,11 +886,13 @@ export interface DB {
   reports: Reports;
   reportsearches: Reportsearches;
   reporttypes: Reporttypes;
+  reviews: Reviews;
   role_permissions: RolePermissions;
   roles: Roles;
   salary_payments: SalaryPayments;
   schema_migrations: SchemaMigrations;
   settings: Settings;
+  site_profiles: SiteProfiles;
   staff_messages: StaffMessages;
   states: States;
   student_certificates: StudentCertificates;

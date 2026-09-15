@@ -14,14 +14,11 @@
 /** The four flags `role_permissions` and `user_permissions` actually store. */
 export type Ability = 'view' | 'create' | 'update' | 'delete';
 
-/**
- * Shown as Add and Edit rather than Create and Update: the screens these govern
- * call the same two operations Add and Edit.
- */
+/** The four boxes, in the order they are read: Create, Read, Update, Delete. */
 export const COLUMNS: { key: Ability; label: string }[] = [
-  { key: 'view', label: 'View' },
-  { key: 'create', label: 'Add' },
-  { key: 'update', label: 'Edit' },
+  { key: 'create', label: 'Create' },
+  { key: 'view', label: 'Read' },
+  { key: 'update', label: 'Update' },
   { key: 'delete', label: 'Delete' },
 ];
 
@@ -51,17 +48,21 @@ export const uses = (row: Permission, ability: Ability) => !row.abilities || row
 /** The boxes a row uses. */
 export const usable = (row: Permission) => ABILITIES.filter((a) => uses(row, a));
 
-/** Plain-English names, for a row the API did not label. */
+/**
+ * A permission by the sub-menu entries it opens, as the sidebar names them.
+ * Several entries share one permission — Registered and Not Registered are both
+ * `customer` — so a row lists all of them rather than pretending each is its own.
+ */
 export const NAMES: Record<string, string> = {
-  product_collection: 'Orders',
-  report: 'Certificates',
-  customer: 'Customers',
-  laboratory: 'Laboratories',
-  visitor_book: 'Enquiry book',
-  website_enquiry: 'Student enquiries',
-  website_home: 'Website — banners, pages, branches, customers',
-  website_report: 'Website — report types',
-  website_blog: 'Website — blog',
+  product_collection: 'In Progress · Delivered · Dues Order',
+  report: 'All Reports List',
+  customer: 'All Customers · Registered · Not Registered',
+  laboratory: 'View Franchise',
+  website_home: 'Banners · Customers · Branches · Reviews · Certificates · Course Gallery · Testimonials',
+  website_report: 'Report Types',
+  website_blog: 'Blog',
+  website_enquiry: 'Enquiry',
+  visitor_book: "Ask Me · Visitor's Diary · Contact Us · Complaints",
 };
 
 export const nameFor = (action: string, row?: Permission) =>
@@ -72,13 +73,15 @@ export const SIDE: Record<StaffKind, string> = {
   head_office: 'Head office staff',
 };
 
-/** The groups, shaped like the menus the permissions open. */
+/** The groups: the sidebar menus, in sidebar order, each over its sub-menu rows. */
 export const MENU: { title: string; actions: string[] }[] = [
-  { title: 'Counter — orders and certificates', actions: ['product_collection', 'report'] },
-  { title: 'Customers', actions: ['customer'] },
-  { title: 'Laboratories', actions: ['laboratory'] },
-  { title: 'Enquiries', actions: ['visitor_book', 'website_enquiry'] },
+  { title: 'Orders', actions: ['product_collection'] },
+  { title: 'Report', actions: ['report'] },
+  { title: 'Customer', actions: ['customer'] },
+  { title: 'Laboratory', actions: ['laboratory'] },
   { title: 'Website Setup', actions: ['website_home', 'website_report', 'website_blog'] },
+  { title: 'Student', actions: ['website_enquiry'] },
+  { title: 'Enquiry', actions: ['visitor_book'] },
 ];
 
 export interface Section {

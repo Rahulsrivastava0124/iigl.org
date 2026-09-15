@@ -1035,16 +1035,6 @@ const document = {
       },
     },
 
-    '/api/public/pages/{pageType}': {
-      get: {
-        tags: ['Public'],
-        summary: 'Website page content',
-        security: [],
-        parameters: [{ name: 'pageType', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: { 200: { description: 'Page content.' }, 404: errorResponse('Page not found.') },
-      },
-    },
-
     '/api/public/blogs': {
       get: {
         tags: ['Public'],
@@ -1080,6 +1070,29 @@ const document = {
         description: 'Active laboratories head office has ticked in Website Setup › Branches: id, fullname, city, state, logo (a public path under /api, or null), and latitude/longitude of the city (looked up with a geocoder and stored; null when the city was not found, and the website then uses the state). Readable from any origin.',
         security: [],
         responses: { 200: { description: 'Laboratories.' } },
+      },
+    },
+
+    '/api/public/site': {
+      get: {
+        tags: ['Public'],
+        summary: "Head office's website settings",
+        description:
+          'Banner, content (HTML), gallery (picture paths in uploads/banner) and WhatsApp, Facebook and Instagram links for the main site and its footer. Empty values when nothing is set. Readable from any origin.',
+        security: [],
+        responses: { 200: { description: 'The settings.' } },
+      },
+    },
+
+    '/api/public/laboratories/{id}': {
+      get: {
+        tags: ['Public'],
+        summary: "A listed branch's page",
+        description:
+          'A laboratory shown on the website and active: its name, city, state and logo, with its own banner, content, gallery and social links. 404 for any other.',
+        security: [],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        responses: { 200: { description: 'The branch page.' }, 404: errorResponse('Branch not found.') },
       },
     },
 
@@ -1170,6 +1183,160 @@ const document = {
           { name: 'type', in: 'query', schema: { type: 'string' }, description: 'Filter by img_type.' },
         ],
         responses: { 200: { description: 'Banners with status 1.' } },
+      },
+    },
+
+    '/api/public/reviews': {
+      get: {
+        tags: ['Public'],
+        summary: 'List active reviews',
+        description: 'The website’s Our Reviews cards, or the Education page’s testimonials: name, trade, quote and rating.',
+        security: [],
+        parameters: [
+          { name: 'kind', in: 'query', schema: { type: 'string', enum: ['client', 'student'] }, description: 'client (the default) for Our Reviews, student for the testimonials.' },
+        ],
+        responses: { 200: { description: 'Reviews with status 1, in the order added.' } },
+      },
+    },
+
+    '/api/public/company-certificates': {
+      get: {
+        tags: ['Public'],
+        summary: 'List active company certificates',
+        description: 'The website’s Our Company Certificates carousel: title, sub title, icon and picture.',
+        security: [],
+        responses: { 200: { description: 'Certificates with status 1, in the order added.' } },
+      },
+    },
+
+    '/api/public/verify/{reportNo}/pdf/{kind}': {
+      get: {
+        tags: ['Public'],
+        summary: 'The original certificate of a verifiable report, as a PDF',
+        description:
+          'The smart card or classic certificate the laboratory printed, rendered from the record. Only a kind the order paid for — the verify answer lists them as `cards`. Rate-limited per address.',
+        security: [],
+        parameters: [
+          { name: 'reportNo', in: 'path', required: true, schema: { type: 'string' } },
+          { name: 'kind', in: 'path', required: true, schema: { type: 'string', enum: ['smart', 'classic'] } },
+        ],
+        responses: {
+          200: { description: 'The PDF.', content: { 'application/pdf': {} } },
+          404: { description: 'No verifiable report, or that certificate was not issued.' },
+          429: { description: 'Too many print requests at once.' },
+        },
+      },
+    },
+
+    '/api/public/verify/{reportNo}/image': {
+      get: {
+        tags: ['Public'],
+        summary: 'The item picture of a verifiable report',
+        description: 'For the website’s Verify Report page. Not found for a withheld report, the same as for a number never issued.',
+        security: [],
+        parameters: [{ name: 'reportNo', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'The picture.' }, 404: { description: 'No picture, or no verifiable report.' } },
+      },
+    },
+
+    '/api/public/education-gallery': {
+      get: {
+        tags: ['Public'],
+        summary: 'List the Course Gallery',
+        description: 'The Education page’s Course Gallery: caption and picture.',
+        security: [],
+        responses: { 200: { description: 'Pictures with status 1, in the order added.' } },
+      },
+    },
+
+    '/api/public/student-certificates/{no}': {
+      get: {
+        tags: ['Public'],
+        summary: 'Verify a course certificate',
+        description: 'By the certificate number alone. Rate-limited per address.',
+        security: [],
+        parameters: [
+          { name: 'no', in: 'path', required: true, schema: { type: 'string' }, description: 'IIGL-C-YYYY-NNNN-XXXX; numbers issued before the random tail verify as they are.' },
+        ],
+        responses: {
+          200: { description: 'Certificate number, student name, course, grade and issue date.' },
+          404: { description: 'No certificate matches that number.' },
+          429: { description: 'Too many lookups from this address.' },
+        },
+      },
+    },
+
+    '/api/public/student-registrations': {
+      post: {
+        tags: ['Public'],
+        summary: 'Register for a course from the website',
+        description:
+          'Saves a pending registration (Student › Registration) with a new IIGL-YYYY-NNNN number and mails the student a confirmation. Documents are not taken; head office attaches them. No session; rate-limited per address.',
+        security: [],
+        requestBody: {
+          content: {
+            'application/x-www-form-urlencoded': {
+              schema: {
+                type: 'object',
+                required: ['course_id', 'name', 'mobile', 'email'],
+                properties: {
+                  course_id: { type: 'integer' },
+                  name: { type: 'string', maxLength: 150 },
+                  father_name: { type: 'string', maxLength: 150 },
+                  dob: { type: 'string', format: 'date' },
+                  gender: { type: 'string' },
+                  mobile: { type: 'string', description: '10 to 15 digits, spaces and dashes ignored.' },
+                  alt_mobile: { type: 'string' },
+                  email: { type: 'string', description: 'The confirmation is mailed here.' },
+                  address: { type: 'string', maxLength: 255 },
+                  city: { type: 'string', maxLength: 100 },
+                  state: { type: 'string', maxLength: 100 },
+                  pincode: { type: 'string', description: 'Six digits.' },
+                  message: { type: 'string', maxLength: 1000, description: 'Kept as the registration’s remark.' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Saved: the registration number, and whether the confirmation mail went.' },
+          400: { description: 'A field is missing or invalid.' },
+          404: { description: 'Course not found or retired.' },
+          409: { description: 'This mobile number already has a pending registration for the course.' },
+          429: { description: 'Too many registrations from this address.' },
+        },
+      },
+    },
+
+    '/api/public/course-enquiries': {
+      post: {
+        tags: ['Public'],
+        summary: 'Register for a course from the website',
+        description: 'Files a new enquiry, source Website, in Student › Enquiry for head office to call back. No session; rate-limited per address.',
+        security: [],
+        requestBody: {
+          content: {
+            'application/x-www-form-urlencoded': {
+              schema: {
+                type: 'object',
+                required: ['name', 'mobile'],
+                properties: {
+                  course_id: { type: 'integer', description: 'The course registered for. Left out for a general question.' },
+                  name: { type: 'string', maxLength: 150 },
+                  mobile: { type: 'string', description: '10 to 15 digits, spaces and dashes ignored.' },
+                  email: { type: 'string' },
+                  message: { type: 'string', maxLength: 1000 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Filed.' },
+          400: { description: 'A field is missing or invalid.' },
+          404: { description: 'Course not found or retired.' },
+          429: { description: 'Too many registrations from this address.' },
+        },
       },
     },
 

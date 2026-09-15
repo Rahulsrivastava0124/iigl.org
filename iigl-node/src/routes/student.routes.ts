@@ -334,7 +334,7 @@ studentRoutes.delete(
  * registrations taken at once cannot be handed the same number — the mistake
  * the gemstone certificate numbering made and had to be fixed for.
  */
-async function nextRegistrationNo(trx: typeof db): Promise<string> {
+export async function nextRegistrationNo(trx: typeof db): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `IIGL-${year}-`;
 

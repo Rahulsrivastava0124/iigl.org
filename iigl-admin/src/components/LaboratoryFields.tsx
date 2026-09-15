@@ -195,7 +195,7 @@ export function labFromRecord(d: LabRecord): LabForm {
 
   // Statement terms: a month input takes YYYY-MM, and an account from before
   // the columns existed reads as the defaults.
-  out.statement_period = ['1', '3', '6', '12'].includes(out.statement_period) ? out.statement_period : '1';
+  out.statement_period = ['0', '1', '3', '6', '12'].includes(out.statement_period) ? out.statement_period : '1';
   out.statement_grace_days = out.statement_grace_days === '' ? '15' : out.statement_grace_days;
   out.statement_from = out.statement_from.slice(0, 7);
 
@@ -272,7 +272,8 @@ export function labPatch(form: LabForm): Record<string, string | number | null |
     commision: form.commision === '' ? null : Number(form.commision),
     commission_type: form.commission_type === 'per_pc' ? 'per_pc' : 'percent',
     registration_fee: form.registration_fee === '' ? null : Number(form.registration_fee),
-    statement_period: Number(form.statement_period) || 1,
+    // 0 is None, so only an empty field falls back to monthly.
+    statement_period: form.statement_period === '' ? 1 : Number(form.statement_period),
     statement_grace_days: form.statement_grace_days === '' ? 15 : Number(form.statement_grace_days),
     statement_from: form.statement_from || null,
     profile_photo: text(form.profile_photo),
@@ -879,8 +880,9 @@ export default function LaboratoryFields({ form, set, extra }: Props) {
           label="Statement Period"
           value={form.statement_period}
           onChange={(e) => set('statement_period', e.target.value)}
-          slotProps={hint('How often this laboratory is billed its commission. A statement is billed the day after its period ends.', true)}
+          slotProps={hint('How often this laboratory is billed its commission. A statement is billed the day after its period ends. None: no cycle — the statement shows the commission up to today, and certificates are never locked.', true)}
         >
+          <MenuItem value="0">None</MenuItem>
           <MenuItem value="1">Monthly</MenuItem>
           <MenuItem value="3">Quarterly</MenuItem>
           <MenuItem value="6">Half-yearly</MenuItem>
@@ -890,6 +892,8 @@ export default function LaboratoryFields({ form, set, extra }: Props) {
       <Grid size={cell}>
         <TextField
           label="Grace Days"
+          // No cycle, nothing falls due: grace days mean nothing under None.
+          disabled={form.statement_period === '0'}
           type="number"
           placeholder="Eg. 15"
           value={form.statement_grace_days}

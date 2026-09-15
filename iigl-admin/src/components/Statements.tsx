@@ -94,9 +94,11 @@ export function StatementsTable({ labId }: { labId?: number }) {
             <b>Outstanding {money(s.outstanding)}</b>
             {s.reminder
               ? ` · Billed on ${s.reminder.billed_on}`
-              : s.current
-                ? ` · Next billed on ${s.current.billed_on}`
-                : ''}
+              : s.period_months === 0
+                ? ` · As of ${s.today}`
+                : s.current
+                  ? ` · Next billed on ${s.current.billed_on}`
+                  : ''}
           </Typography>
         </Box>
       )}

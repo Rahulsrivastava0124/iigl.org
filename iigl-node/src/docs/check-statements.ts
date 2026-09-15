@@ -60,4 +60,20 @@ assert.equal(b.periods[0].commission, 40);
 assert.equal(run({ lines: [line('2026-09-05', 1)], graceDays: 0, today: '2026-10-01' }).standing, 'grace');
 assert.equal(run({ lines: [line('2026-09-05', 1)], graceDays: 0, today: '2026-10-02' }).standing, 'locked');
 
-console.log('statements: 22 checks passed');
+// None: one statement from billing start to today, billed today, never locked.
+b = run({ months: 0, today: '2026-10-20', lines: [line('2026-09-05', 100), line('2026-10-09', 50)], paid: 30 });
+assert.equal(b.periods.length, 1);
+assert.equal(b.periods[0].from, '2026-09-01');
+assert.equal(b.periods[0].to, '2026-10-20');
+assert.equal(b.periods[0].billed_on, '2026-10-20');
+assert.equal(b.periods[0].commission, 150);
+assert.equal(b.outstanding, 120);
+assert.equal(b.periods[0].state, 'due');
+assert.equal(b.current, null);
+assert.equal(b.standing, 'clear');
+assert.equal(b.reminder, null);
+assert.equal(run({ months: 0, today: '2027-06-01', lines: [line('2026-09-05', 100)] }).standing, 'clear', 'unpaid for months, never locked');
+assert.equal(run({ months: 0, today: '2026-10-20', lines: [line('2026-09-05', 100)], paid: 100 }).periods[0].state, 'paid');
+assert.equal(run({ months: 0, startsOn: '2026-12-01', today: '2026-10-20' }).periods.length, 0, 'billing not started yet');
+
+console.log('statements: 35 checks passed');

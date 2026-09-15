@@ -82,6 +82,8 @@ Every file also carries its own rollback in a comment at the bottom.
 | `059-registered-customer-website.sql` | **applied** | `registered_customers.area`, `state`, `logo` and `show_on_site` for the website's Our Registered Customers section. Default 0 — no customer is published until head office ticks it. |
 | `060-registered-customers-shown-by-default.sql` | **applied** | Reverses 059's default: registered customers are listed on the website unless unticked in Website Setup › Customers. Default 1, and every existing customer (one row) switched on. |
 | `061-remove-panel-url-setting.sql` | **applied** | Deletes the `mail.panel_url` settings row: password reset links point back at the panel they were asked from, so the Panel URL setting and `PANEL_URL` are removed. |
+| `062-blog-card-and-course-details.sql` | **applied** | `blogs.excerpt`, `category`, `author`, `published_on` for the article card (its `thumbnail` was already there), and `courses.details`, `syllabus` for the course page. Additive. |
+| `063-site-profiles.sql` | **applied** | New `site_profiles`: one row per website page — each laboratory's branch page and head office's (`lab_id` 0) — with banner, content, gallery and WhatsApp, Facebook and Instagram links. |
 
 ---
 

@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { Avatar, Checkbox, Stack, Table, TableBody, TableCell, TableHead, TableRow, Tooltip } from '@mui/material';
 import { useToast } from './Toast';
-import { Panel, SearchField, StateChip, TableFrame } from './ui';
+import EditIcon from '@mui/icons-material/EditOutlined';
+import { IconAction, Panel, SearchField, StateChip, TableFrame } from './ui';
+import { useAuth } from '../lib/auth';
+import { isSuper } from '../lib/portal';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
@@ -60,6 +63,7 @@ function MapLocation({ lab }: { lab: Lab }) {
  * is listed here, marked Inactive, so a closed branch still ticked is visible.
  */
 export default function BranchLaboratories({ readOnly = false }: { /** Seen, not changed: no Edit on Website Setup. */ readOnly?: boolean } = {}) {
+  const superAdmin = isSuper(useAuth().user);
   const toast = useToast();
   const source = useFetch<{ data: Lab[] }>('/content/branch-laboratories');
   // Ticks changed on screen, ahead of the reload that confirms them.
@@ -111,6 +115,7 @@ export default function BranchLaboratories({ readOnly = false }: { /** Seen, not
               <TableCell>State</TableCell>
               <TableCell>Map</TableCell>
               <TableCell>Status</TableCell>
+              <TableCell />
               <TableCell padding="checkbox" sx={{ whiteSpace: 'nowrap', pr: 2 }}>
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                   <Checkbox
@@ -153,6 +158,10 @@ export default function BranchLaboratories({ readOnly = false }: { /** Seen, not
                 <TableCell>{shown(l) ? <MapLocation lab={l} /> : '—'}</TableCell>
                 <TableCell>
                   <StateChip tone={l.is_active ? 'settled' : 'refused'} label={l.is_active ? 'Active' : 'Inactive'} />
+                </TableCell>
+                <TableCell sx={{ width: 48 }}>
+                  {/* The branch's own page — banner, content, gallery, links. Head office only. */}
+                  {superAdmin && <IconAction label="Edit website page" icon={EditIcon} to={`/site/${l.id}`} />}
                 </TableCell>
                 <TableCell padding="checkbox">
                   <Checkbox

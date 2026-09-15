@@ -1,6 +1,6 @@
 # IIGL API
 
-249 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
+272 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
 
 The interactive version is at `/docs` when the server is running, and the raw
 document at `/openapi.json`.
@@ -114,16 +114,25 @@ Open endpoints: the marketing site and certificate verification.
 | GET | `/api/public/branches` | public | — | — | — | List branch city pages |
 | GET | `/api/public/branches/{slug}` | public | — | — | 404 | Read a branch page |
 | GET | `/api/public/categories` | public | — | — | — | Report categories, for the website cards |
+| GET | `/api/public/company-certificates` | public | — | — | — | List active company certificates |
+| POST | `/api/public/course-enquiries` | public | — | — | 400, 404, 429 | Register for a course from the website |
 | GET | `/api/public/courses` | public | — | — | — | Courses on offer, for the website cards |
 | GET | `/api/public/customers` | public | `state`, `city` | — | — | Registered customers shown on the website |
 | GET | `/api/public/customers/{id}/logo` | public | — | — | 404 | A listed customer's logo |
+| GET | `/api/public/education-gallery` | public | — | — | — | List the Course Gallery |
 | GET | `/api/public/laboratories` | public | — | — | — | List the laboratories shown as branches |
+| GET | `/api/public/laboratories/{id}` | public | — | — | 404 | A listed branch's page |
 | GET | `/api/public/laboratories/{id}/logo` | public | — | — | 404 | A listed laboratory's logo |
-| GET | `/api/public/pages/{pageType}` | public | — | — | 404 | Website page content |
 | GET | `/api/public/report-types` | public | — | — | — | List certificate types |
+| GET | `/api/public/reviews` | public | `kind` | — | — | List active reviews |
+| GET | `/api/public/site` | public | — | — | — | Head office's website settings |
+| GET | `/api/public/student-certificates/{no}` | public | — | — | 404, 429 | Verify a course certificate |
+| POST | `/api/public/student-registrations` | public | — | — | 400, 404, 409, 429 | Register for a course from the website |
 | GET | `/api/public/verify-by-id/{id}` | public | — | — | 404 | Verify a certificate by its id |
 | POST | `/api/public/verify-log` | public | — | fullname, mobile, report_no | — | Record a verification lookup |
 | GET | `/api/public/verify/{reportNo}` | public | — | — | 404 | Verify a certificate |
+| GET | `/api/public/verify/{reportNo}/image` | public | — | — | 404 | The item picture of a verifiable report |
+| GET | `/api/public/verify/{reportNo}/pdf/{kind}` | public | — | — | 404, 429 | The original certificate of a verifiable report, as a PDF |
 | GET | `/health` | public | — | — | — | Liveness probe |
 | GET | `/openapi.json` | public | — | — | — | This document |
 
@@ -295,17 +304,27 @@ The public site: articles, branch pages, certificate types, banners and static p
 | PATCH | `/api/content/banners/{id}` | session | — | path, img_type, name, url, mobile_slider, status | 400, 401, 403, 404 | Update a banner |
 | DELETE | `/api/content/banners/{id}` | session | — | — | 401, 403, 404 | Delete a banner |
 | GET | `/api/content/blogs` | session | — | — | 401, 403 | List every article, with its body |
-| POST | `/api/content/blogs` | session | — | **page_name**, slug, content, thumbnail, banner, meta_title, meta_description, meta_keywords | 400, 401, 403, 409 | Add a article |
-| PATCH | `/api/content/blogs/{id}` | session | — | page_name, slug, content, thumbnail, banner, meta_title, meta_description, meta_keywords | 400, 401, 403, 404 | Update a article |
+| POST | `/api/content/blogs` | session | — | **page_name**, slug, content, thumbnail, excerpt, category, author, published_on, +4 more | 400, 401, 403, 409 | Add a article |
+| PATCH | `/api/content/blogs/{id}` | session | — | page_name, slug, content, thumbnail, excerpt, category, author, published_on, +4 more | 400, 401, 403, 404 | Update a article |
 | GET | `/api/content/branch-laboratories` | session | — | — | 401, 403 | List laboratories with their website visibility |
 | PATCH | `/api/content/branch-laboratories/{id}` | session | — | **show_on_site** | 400, 401, 403, 404 | Show or hide a laboratory on the website |
 | GET | `/api/content/branches` | session | — | — | 401, 403 | List every branch page, whole |
 | POST | `/api/content/branches` | session | — | **city**, state, blurb, lat, lon, pageURL, h1, content, +4 more | 400, 401, 403, 409 | Add a branch page |
 | PATCH | `/api/content/branches/{id}` | session | — | city, state, blurb, lat, lon, pageURL, h1, content, +4 more | 400, 401, 403, 404 | Update a branch page |
-| GET | `/api/content/pages` | session | — | — | 401, 403 | List the static pages |
-| PATCH | `/api/content/pages/{id}` | session | — | page_name, content, banner, meta_title, meta_description, meta_keywords | 400, 401, 403, 404 | Edit a static page |
+| GET | `/api/content/company-certificates` | session | — | — | 401, 403 | List every company certificate |
+| POST | `/api/content/company-certificates` | session | — | title, subtitle, icon, **image**, status | 400, 401, 403, 409 | Add a company certificate |
+| PATCH | `/api/content/company-certificates/{id}` | session | — | title, subtitle, icon, image, status | 400, 401, 403, 404 | Update a company certificate |
+| DELETE | `/api/content/company-certificates/{id}` | session | — | — | 401, 403, 404 | Delete a company certificate |
+| GET | `/api/content/education-gallery` | session | — | — | 401, 403 | List every Course Gallery picture |
+| POST | `/api/content/education-gallery` | session | — | title, **image**, status | 400, 401, 403, 409 | Add a gallery picture |
+| PATCH | `/api/content/education-gallery/{id}` | session | — | title, image, status | 400, 401, 403, 404 | Update a gallery picture |
+| DELETE | `/api/content/education-gallery/{id}` | session | — | — | 401, 403, 404 | Delete a Course Gallery picture |
 | POST | `/api/content/report-types` | session | — | **name**, short_description, description, banner, icon, meta_title, meta_description, meta_keywords | 400, 401, 403, 409 | Add a certificate type |
 | PATCH | `/api/content/report-types/{id}` | session | — | name, short_description, description, banner, icon, meta_title, meta_description, meta_keywords | 400, 401, 403, 404 | Update a certificate type |
+| GET | `/api/content/reviews` | session | `kind` | — | 401, 403 | List every review |
+| POST | `/api/content/reviews` | session | — | kind, **name**, trade, **quote**, rating, status | 400, 401, 403, 409 | Add a review |
+| PATCH | `/api/content/reviews/{id}` | session | — | kind, name, trade, quote, rating, status | 400, 401, 403, 404 | Update a review |
+| DELETE | `/api/content/reviews/{id}` | session | — | — | 401, 403, 404 | Delete a review |
 | POST | `/api/content/roles` | session | — | **role_name** | 401, 403, 409 | Add a role |
 | PATCH | `/api/content/roles/{id}` | session | — | **role_name** | 401, 403, 404 | Rename a role |
 | GET | `/api/content/website-customers` | session | — | — | 401, 403 | List registered customers with their website visibility |
@@ -406,8 +425,8 @@ The course catalogue, the enrolments on it, and the discount that sits on the fe
 | Method | Path | Auth | Query | Body | Fails | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/courses` | session | `page`, `per_page`, `active`, `q` | — | 401, 403 | The course catalogue |
-| POST | `/api/courses` | session | — | **name**, code, duration, fee, gst_id, gst_percent, description, level, +6 more | 400, 401, 403, 409 | Add a course |
-| PATCH | `/api/courses/{id}` | session | — | name, code, duration, fee, description, level, categories, lessons, +4 more | 400, 401, 403, 404 | Update a course |
+| POST | `/api/courses` | session | — | **name**, code, duration, fee, gst_id, gst_percent, description, level, +8 more | 400, 401, 403, 409 | Add a course |
+| PATCH | `/api/courses/{id}` | session | — | name, code, duration, fee, description, level, categories, lessons, +6 more | 400, 401, 403, 404 | Update a course |
 | DELETE | `/api/courses/{id}` | session | — | — | 401, 403, 404, 409 | Delete a course |
 | GET | `/api/courses/enrolments` | session | `page`, `per_page`, `status`, `student_id`, `discounted`, `q` | — | 401, 403 | List enrolments |
 | POST | `/api/courses/enrolments` | session | — | **student_id**, **course_id**, batch, start_date, end_date, fee, fee_paid, status, +1 more | 400, 401, 403, 404, 409 | Enrol a student |
@@ -498,8 +517,17 @@ Commission billed to a laboratory on a period, its grace days, and the lock on c
 | PATCH | `/api/settings` | session | — | company.name, session.hours, mail.smtp_url | 400, 401, 403 | Save settings |
 | POST | `/api/settings/test-smtp` | session | — | url | 400, 401, 403 | Test the mail connection |
 
+## Website
+
+| Method | Path | Auth | Query | Body | Fails | Purpose |
+| --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/site/profile` | session | — | — | 401, 403 | Your own website page |
+| PUT | `/api/site/profile` | session | — | banner, content, gallery, whatsapp, facebook, instagram | 400, 401, 403 | Save your own website page |
+| GET | `/api/site/profile/{labId}` | session | — | — | 401, 403, 404 | A laboratory's branch page |
+| PUT | `/api/site/profile/{labId}` | session | — | banner, content, gallery, whatsapp, facebook, instagram | 400, 401, 403, 404 | Save a laboratory's branch page |
+
 ---
 
 Bold body fields are required.
 
-249 endpoints: 22 public, 227 requiring a session.
+272 endpoints: 31 public, 241 requiring a session.

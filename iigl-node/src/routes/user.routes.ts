@@ -1501,7 +1501,9 @@ userRoutes.patch(
     }
     if (req.body?.statement_period !== undefined) {
       const months = Number(req.body.statement_period);
-      if (![1, 3, 6, 12].includes(months)) throw badRequest('Statement period is 1, 3, 6 or 12 months.');
+      if (![0, 1, 3, 6, 12].includes(months)) {
+        throw badRequest('Statement period is None (0), or 1, 3, 6 or 12 months.');
+      }
       patch.statement_period = months;
     }
     if (req.body?.statement_grace_days !== undefined) {

@@ -30,7 +30,8 @@ import { letterheadHtml } from './letterhead.service.js';
 
 /** Nothing before this is billed, unless a laboratory is given its own start. */
 export const STATEMENTS_BEGIN = '2026-09-01';
-export const STATEMENT_PERIODS = [1, 3, 6, 12] as const;
+/** Months per statement. 0 is None: no cycle, one statement billed as of today. */
+export const STATEMENT_PERIODS = [0, 1, 3, 6, 12] as const;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const STATUS = { PENDING: 0, APPROVED: 1 } as const;
@@ -126,9 +127,20 @@ export function buildStatements(input: {
   const startsOn = monthStart(input.startsOn);
   const { today } = input;
 
+  /*
+    None (0 months): no billing cycle. Everything since billing started is one
+    statement, billed as of today — so it is always up to date, never falls due
+    in the past, and never locks certificate generation.
+  */
+  const none = months === 0;
+
   const windows: { key: string; from: string; to: string }[] = [];
-  for (let from = startsOn; from <= today; from = addMonths(from, months)) {
-    windows.push({ key: from.slice(0, 7), from, to: addDays(addMonths(from, months), -1) });
+  if (none) {
+    if (startsOn <= today) windows.push({ key: startsOn.slice(0, 7), from: startsOn, to: today });
+  } else {
+    for (let from = startsOn; from <= today; from = addMonths(from, months)) {
+      windows.push({ key: from.slice(0, 7), from, to: addDays(addMonths(from, months), -1) });
+    }
   }
 
   const linesByKey = new Map<string, StatementLine[]>();
@@ -144,15 +156,15 @@ export function buildStatements(input: {
 
   let remaining = round2(input.paid);
   const billedOldestFirst: StatementPeriod[] = windows
-    .filter((w) => w.to < today)
+    .filter((w) => none || w.to < today)
     .map((w) => {
       const lines = linesByKey.get(w.key) ?? [];
       const commission = sum(lines, 'commission');
       const applied = Math.min(remaining, commission);
       remaining = round2(remaining - applied);
       const balance = round2(commission - applied);
-      const billed_on = addDays(w.to, 1);
-      const due_on = addDays(billed_on, grace);
+      const billed_on = none ? today : addDays(w.to, 1);
+      const due_on = none ? today : addDays(billed_on, grace);
       return {
         ...w,
         billed_on,
@@ -163,11 +175,11 @@ export function buildStatements(input: {
         commission,
         paid: round2(applied),
         balance,
-        state: balance <= 0 ? 'paid' : today > due_on ? 'overdue' : 'due',
+        state: balance <= 0 ? 'paid' : !none && today > due_on ? 'overdue' : 'due',
       };
     });
 
-  const running = windows.find((w) => w.to >= today);
+  const running = none ? undefined : windows.find((w) => w.to >= today);
   const current = running
     ? {
         key: running.key,
@@ -181,7 +193,8 @@ export function buildStatements(input: {
 
   const billed = round2(billedOldestFirst.reduce((t, p) => t + p.commission, 0));
   const outstanding = round2(billedOldestFirst.reduce((t, p) => t + p.balance, 0));
-  const oldest = billedOldestFirst.find((p) => p.balance > 0);
+  // With no cycle nothing is ever overdue, so there is no reminder and no lock.
+  const oldest = none ? undefined : billedOldestFirst.find((p) => p.balance > 0);
 
   return {
     period_months: months,
@@ -300,7 +313,8 @@ async function compute(lab: LabRow, now = new Date()) {
 
   return buildStatements({
     startsOn,
-    months: Number(lab.statement_period) || 1,
+    // 0 is None, not "unset": only a missing value falls back to monthly.
+    months: lab.statement_period == null ? 1 : Number(lab.statement_period),
     graceDays: Number(lab.statement_grace_days ?? 15),
     today,
     lines,

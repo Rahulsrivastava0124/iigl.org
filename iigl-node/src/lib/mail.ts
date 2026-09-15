@@ -6,8 +6,8 @@ import { setting } from '../services/settings.service.js';
 /**
  * Outgoing mail.
  *
- * Only one message is sent by this application — a password reset — so there is
- * one transport and one function, configured from `SMTP_URL`.
+ * Two messages are sent: a password reset, and the confirmation to a student who
+ * registered on the website. One transport, configured from `SMTP_URL`.
  *
  * When SMTP is not configured, sending refuses — in every environment.
  * Development additionally prints the link so the flow can still be walked
@@ -110,6 +110,74 @@ function expiresAt(at: Date): string {
     minute: '2-digit',
     hour12: true,
   });
+}
+
+/**
+ * To a student who registered on the website: the number to quote, the course,
+ * and that it is pending until head office calls to confirm. The same transport
+ * and the same refusals as the reset mail; the caller decides what a refusal
+ * means, because the registration is already saved by then.
+ */
+export async function sendRegistrationReceived(
+  to: string,
+  r: { name: string; registrationNo: string; course: string },
+): Promise<void> {
+  const transport = await transportFor();
+  if (!transport) {
+    throw new ApiError(503, 'No SMTP server is configured, so the registration mail cannot be sent.', 'mail_unconfigured');
+  }
+
+  const company = await setting('company.name');
+  const navy = '#061948';
+  const row = (label: string, value: string) =>
+    `<tr><td style="padding:4px 18px 4px 0;color:#4a5265">${label}</td><td style="padding:4px 0;font-weight:600;color:${navy}">${escape(value)}</td></tr>`;
+  const html = `<!doctype html>
+<html><body style="margin:0;padding:0;background:#ffffff;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#3c4252">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:520px;margin:0;background:#ffffff">
+    <tr><td style="padding:20px 24px">
+      <p style="margin:0;font-size:18px;font-weight:600;color:${navy}">${escape(company)}</p>
+      <p style="margin:0 0 20px;font-size:13px;color:#4a5265">Course registration</p>
+
+      <p style="margin:0 0 12px;font-size:15px">Hello ${escape(r.name)},</p>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.5">
+        Thank you for registering. Your registration is <strong>pending</strong>: our team will call you to
+        confirm the batch, the fees and admission.
+      </p>
+
+      <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;font-size:14px">
+        ${row('Registration No.', r.registrationNo)}
+        ${row('Course', r.course)}
+        ${row('Status', 'Pending')}
+      </table>
+
+      <p style="margin:0;font-size:13px;color:#4a5265;line-height:1.5">
+        Quote your registration number whenever you contact us. If you did not register, you can ignore this message.
+      </p>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  try {
+    await transport.sendMail({
+      from: await setting('mail.from'),
+      to,
+      subject: `Your ${company} registration ${r.registrationNo} is received`,
+      html,
+      text: [
+        `Hello ${r.name},`,
+        '',
+        'Thank you for registering. Your registration is pending: our team will call you to confirm the batch, the fees and admission.',
+        '',
+        `Registration No.: ${r.registrationNo}`,
+        `Course: ${r.course}`,
+        'Status: Pending',
+        '',
+        'Quote your registration number whenever you contact us. If you did not register, you can ignore this message.',
+      ].join('\n'),
+    });
+  } catch (e) {
+    throw new ApiError(502, `The mail server refused the message: ${(e as Error).message}`, 'mail_failed');
+  }
 }
 
 export async function sendPasswordReset(

@@ -23,6 +23,7 @@
     "check:week-off": "tsx src/docs/check-week-off.ts",
     "check:order-money": "tsx src/docs/check-order-money.ts",
     "check:statements": "tsx src/docs/check-statements.ts",
+    "check:certificate-no": "tsx src/docs/check-certificate-no.ts",
     "check:files": "tsx src/docs/check-file-paths.ts",
     "check:sessions": "tsx src/docs/check-session-portals.ts",
     "check:reset-link": "tsx src/docs/check-reset-link.ts",

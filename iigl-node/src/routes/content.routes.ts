@@ -49,6 +49,9 @@ function patchFrom(body: any, keys: readonly string[]): Record<string, unknown> 
 
 const BLOG_FIELDS = [
   'page_name',
+  'excerpt',
+  'category',
+  'author',
   'content',
   'thumbnail',
   'banner',
@@ -56,6 +59,19 @@ const BLOG_FIELDS = [
   'meta_description',
   'meta_keywords',
 ] as const;
+
+/** The card's short columns, at their stored widths, and the publish date. */
+function checkBlog(body: any): { published_on?: string | null } {
+  for (const [key, label, max] of [['excerpt', 'Short description', 255], ['category', 'Category', 60], ['author', 'Author', 100]] as const) {
+    if ((text(body?.[key]) ?? '').length > max) throw badRequest(`${label} is at most ${max} characters.`);
+  }
+  if (body?.published_on === undefined) return {};
+  const day = text(body.published_on);
+  if (day !== null && (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(Date.parse(`${day}T00:00:00Z`)))) {
+    throw badRequest('Publish date is a date, YYYY-MM-DD.');
+  }
+  return { published_on: day };
+}
 
 /*
   The whole record, for the editor. The public list leaves the body out, and an
@@ -73,6 +89,7 @@ contentRoutes.post(
   headOfficeOr('website_blog', 'create'),
   wrap(async (req, res) => {
     const name = required(req.body?.page_name, 'Title');
+    const { published_on = null } = checkBlog(req.body);
     // Blank means "from the title", not an empty address.
     const slug = slugify(String(text(req.body?.slug) ?? name));
 
@@ -83,6 +100,12 @@ contentRoutes.post(
       .insertInto('blogs')
       .values({
         page_name: name,
+        excerpt: text(req.body?.excerpt),
+        category: text(req.body?.category),
+        author: text(req.body?.author),
+        // Stored as the 'YYYY-MM-DD' text given: MySQL keeps that date as written,
+        // where a Date object would be shifted by the server's timezone.
+        published_on: published_on as never,
         slug,
         content: String(req.body?.content ?? ''),
         thumbnail: text(req.body?.thumbnail),
@@ -109,7 +132,7 @@ contentRoutes.patch(
     const row = await db.selectFrom('blogs').select('id').where('id', '=', id).executeTakeFirst();
     if (!row) throw notFound('Article not found.');
 
-    const patch = patchFrom(req.body, BLOG_FIELDS);
+    const patch: Record<string, unknown> = { ...patchFrom(req.body, BLOG_FIELDS), ...checkBlog(req.body) };
 
     // The slug is the public address. Changing it breaks any existing link, so
     // it moves only when asked for explicitly, never as a side effect of a
@@ -467,46 +490,229 @@ contentRoutes.delete(
   }),
 );
 
-// ----------------------------------------------------------- static pages
+// ------------------------------------------------------- education gallery
 
-const PAGE_FIELDS = [
-  'page_name', 'content', 'banner', 'meta_title', 'meta_description', 'meta_keywords',
-] as const;
+/** A picture in the Education page's Course Gallery, with an optional caption. */
+function galleryFrom(body: any, partial: boolean): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const given = (key: string) => !partial || body?.[key] !== undefined;
+  if (given('title')) {
+    out.title = text(body?.title);
+    if (((out.title as string | null) ?? '').length > 150) throw badRequest('Caption is at most 150 characters.');
+  }
+  if (given('image')) out.image = required(body?.image, 'Picture');
+  if (given('status')) out.status = body?.status === undefined || body.status ? 1 : 0;
+  return out;
+}
 
 contentRoutes.get(
-  '/pages',
+  '/education-gallery',
   headOfficeOr('website_home', 'view'),
   wrap(async (_req, res) => {
-    const rows = await db
-      .selectFrom('websites')
-      // The whole page: the editor is filled from this list, and a list without
-      // the body saved every page back empty.
-      .selectAll()
-      .orderBy('page_type')
-      .execute();
-    res.json({ data: rows });
+    res.json({ data: await db.selectFrom('education_gallery').selectAll().orderBy('id').execute() });
+  }),
+);
+
+contentRoutes.post(
+  '/education-gallery',
+  headOfficeOr('website_home', 'create'),
+  wrap(async (req, res) => {
+    const result = await db
+      .insertInto('education_gallery')
+      .values({ ...galleryFrom(req.body, false), created_at: new Date(), updated_at: new Date() } as never)
+      .executeTakeFirst();
+    res.status(201).json({ data: { id: Number(result.insertId) } });
   }),
 );
 
 contentRoutes.patch(
-  '/pages/:id',
+  '/education-gallery/:id',
   headOfficeOr('website_home', 'update'),
   numericId,
   wrap(async (req, res) => {
     const id = Number(req.params.id);
-    const row = await db.selectFrom('websites').select('id').where('id', '=', id).executeTakeFirst();
-    if (!row) throw notFound('Page not found.');
+    const row = await db.selectFrom('education_gallery').select('id').where('id', '=', id).executeTakeFirst();
+    if (!row) throw notFound('Picture not found.');
+    const patch = galleryFrom(req.body, true);
+    if (Object.keys(patch).length === 0) throw badRequest('Nothing to update.');
+    await db
+      .updateTable('education_gallery')
+      .set({ ...patch, updated_at: new Date() } as never)
+      .where('id', '=', id)
+      .execute();
+    res.json({ ok: true });
+  }),
+);
 
-    const patch: Record<string, unknown> = { updated_at: new Date() };
-    for (const k of PAGE_FIELDS) {
-      if (req.body?.[k] !== undefined) {
-        // page_name and content are NOT NULL in the live schema.
-        patch[k] = k === 'page_name' || k === 'content' ? String(req.body[k] ?? '') : text(req.body[k]);
-      }
-    }
-    if (Object.keys(patch).length === 1) throw badRequest('Nothing to update.');
+contentRoutes.delete(
+  '/education-gallery/:id',
+  headOfficeOr('website_home', 'delete'),
+  numericId,
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    const row = await db.selectFrom('education_gallery').select('id').where('id', '=', id).executeTakeFirst();
+    if (!row) throw notFound('Picture not found.');
+    await db.deleteFrom('education_gallery').where('id', '=', id).execute();
+    res.json({ ok: true });
+  }),
+);
 
-    await db.updateTable('websites').set(patch as never).where('id', '=', id).execute();
+// ---------------------------------------------------- company certificates
+
+/** The icon beside a certificate's title on the website. */
+const CERTIFICATE_ICONS: readonly string[] = ['award', 'building', 'gear', 'handshake', 'shield'];
+
+/** The website's Our Company Certificates cards: the picture, its title, the line under it, an icon. */
+function certificateFrom(body: any, partial: boolean): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const given = (key: string) => !partial || body?.[key] !== undefined;
+  // The picture is the certificate; a title is optional (the column is NOT NULL, so blank is '').
+  if (given('title')) {
+    out.title = text(body?.title) ?? '';
+    if ((out.title as string).length > 150) throw badRequest('Title is at most 150 characters.');
+  }
+  if (given('subtitle')) {
+    out.subtitle = text(body?.subtitle);
+    if (((out.subtitle as string | null) ?? '').length > 150) throw badRequest('Sub title is at most 150 characters.');
+  }
+  if (given('image')) out.image = required(body?.image, 'Certificate image');
+  if (given('icon')) {
+    const icon = text(body?.icon) ?? 'award';
+    if (!CERTIFICATE_ICONS.includes(icon)) throw badRequest(`Icon must be one of: ${CERTIFICATE_ICONS.join(', ')}.`);
+    out.icon = icon;
+  }
+  if (given('status')) out.status = body?.status === undefined || body.status ? 1 : 0;
+  return out;
+}
+
+contentRoutes.get(
+  '/company-certificates',
+  headOfficeOr('website_home', 'view'),
+  wrap(async (_req, res) => {
+    res.json({ data: await db.selectFrom('company_certificates').selectAll().orderBy('id').execute() });
+  }),
+);
+
+contentRoutes.post(
+  '/company-certificates',
+  headOfficeOr('website_home', 'create'),
+  wrap(async (req, res) => {
+    const result = await db
+      .insertInto('company_certificates')
+      .values({ ...certificateFrom(req.body, false), created_at: new Date(), updated_at: new Date() } as never)
+      .executeTakeFirst();
+    res.status(201).json({ data: { id: Number(result.insertId) } });
+  }),
+);
+
+contentRoutes.patch(
+  '/company-certificates/:id',
+  headOfficeOr('website_home', 'update'),
+  numericId,
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    const row = await db.selectFrom('company_certificates').select('id').where('id', '=', id).executeTakeFirst();
+    if (!row) throw notFound('Certificate not found.');
+    const patch = certificateFrom(req.body, true);
+    if (Object.keys(patch).length === 0) throw badRequest('Nothing to update.');
+    await db
+      .updateTable('company_certificates')
+      .set({ ...patch, updated_at: new Date() } as never)
+      .where('id', '=', id)
+      .execute();
+    res.json({ ok: true });
+  }),
+);
+
+contentRoutes.delete(
+  '/company-certificates/:id',
+  headOfficeOr('website_home', 'delete'),
+  numericId,
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    const row = await db.selectFrom('company_certificates').select('id').where('id', '=', id).executeTakeFirst();
+    if (!row) throw notFound('Certificate not found.');
+    await db.deleteFrom('company_certificates').where('id', '=', id).execute();
+    res.json({ ok: true });
+  }),
+);
+
+// ----------------------------------------------------------------- reviews
+
+/** Whose words: a client's, for the home page's Our Reviews, or a student's, for the Education page's testimonials. */
+function reviewKind(v: unknown): string {
+  const kind = text(v) ?? 'client';
+  if (kind !== 'client' && kind !== 'student') throw badRequest('Kind must be client or student.');
+  return kind;
+}
+
+/** The website's Our Reviews cards: who, their trade, what they said, the stars. */
+function reviewFrom(body: any, partial: boolean): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const given = (key: string) => !partial || body?.[key] !== undefined;
+  const capped = <T extends string | null>(v: T, label: string, max: number): T => {
+    if ((v ?? '').length > max) throw badRequest(`${label} is at most ${max} characters.`);
+    return v;
+  };
+  if (given('name')) out.name = capped(required(body?.name, 'Name'), 'Name', 100);
+  if (given('trade')) out.trade = capped(text(body?.trade), 'Profession', 100);
+  if (given('quote')) out.quote = capped(required(body?.quote, 'Review'), 'Review', 1000);
+  if (given('kind')) out.kind = reviewKind(body?.kind);
+  if (given('rating')) {
+    const n = body?.rating == null || body.rating === '' ? 5 : Number(body.rating);
+    if (!Number.isInteger(n) || n < 1 || n > 5) throw badRequest('Rating is a whole number from 1 to 5.');
+    out.rating = n;
+  }
+  if (given('status')) out.status = body?.status === undefined || body.status ? 1 : 0;
+  return out;
+}
+
+contentRoutes.get(
+  '/reviews',
+  headOfficeOr('website_home', 'view'),
+  wrap(async (req, res) => {
+    let q = db.selectFrom('reviews').selectAll().orderBy('id');
+    if (req.query.kind !== undefined) q = q.where('kind', '=', reviewKind(req.query.kind));
+    res.json({ data: await q.execute() });
+  }),
+);
+
+contentRoutes.post(
+  '/reviews',
+  headOfficeOr('website_home', 'create'),
+  wrap(async (req, res) => {
+    const result = await db
+      .insertInto('reviews')
+      .values({ ...reviewFrom(req.body, false), created_at: new Date(), updated_at: new Date() } as never)
+      .executeTakeFirst();
+    res.status(201).json({ data: { id: Number(result.insertId) } });
+  }),
+);
+
+contentRoutes.patch(
+  '/reviews/:id',
+  headOfficeOr('website_home', 'update'),
+  numericId,
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    const row = await db.selectFrom('reviews').select('id').where('id', '=', id).executeTakeFirst();
+    if (!row) throw notFound('Review not found.');
+    const patch = reviewFrom(req.body, true);
+    if (Object.keys(patch).length === 0) throw badRequest('Nothing to update.');
+    await db.updateTable('reviews').set({ ...patch, updated_at: new Date() } as never).where('id', '=', id).execute();
+    res.json({ ok: true });
+  }),
+);
+
+contentRoutes.delete(
+  '/reviews/:id',
+  headOfficeOr('website_home', 'delete'),
+  numericId,
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    const row = await db.selectFrom('reviews').select('id').where('id', '=', id).executeTakeFirst();
+    if (!row) throw notFound('Review not found.');
+    await db.deleteFrom('reviews').where('id', '=', id).execute();
     res.json({ ok: true });
   }),
 );

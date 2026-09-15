@@ -30,6 +30,7 @@ const SECTIONS: Record<string, string> = {
   wallet: 'Account',
   attendance: 'Attendance',
   messages: 'Messages',
+  site: 'Website Page',
   laboratories: 'Laboratory',
   staff: 'Employee Management',
   profile: 'Your profile',
@@ -83,8 +84,11 @@ const VIEWS: Record<string, Record<string, string>> = {
     'tab=types': 'Report Types',
     'tab=customers': 'Customers',
     'tab=branches': 'Branches',
+    'tab=reviews': 'Reviews',
+    'tab=certificates': 'Certificates',
+    'tab=gallery': 'Course Gallery',
+    'tab=testimonials': 'Testimonials',
     'tab=articles': 'Blog',
-    'tab=pages': 'Pages',
   },
 };
 
@@ -107,13 +111,16 @@ const DEFAULT_VIEW: Record<string, string> = {
   staff: 'Employee List',
   customers: 'Registered',
   transactions: 'Commission History',
-  content: 'Pages',
+  content: 'Banners',
   pricing: 'Standard Prices',
   laboratories: 'View Franchise',
 };
 
 /** Child routes whose last segment is a word rather than an id. */
 const LEAVES: Record<string, string> = {
+  // Head office's own website settings, one screen each.
+  'site/social': 'Social Media',
+  'site/gallery': 'Gallery',
   'reports/new': 'Issue a Certificate',
   'orders/new': 'Collect New',
   // The master lists, a page each.

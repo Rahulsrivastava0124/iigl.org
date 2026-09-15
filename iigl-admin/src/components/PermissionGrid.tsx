@@ -72,7 +72,7 @@ export default function PermissionGrid({
             fontWeight: 600,
           }}
         >
-          <span>Permission</span>
+          <span>Menu</span>
           {COLUMNS.map((c) => (
             <Box key={c.key} sx={{ textAlign: 'center' }}>
               {c.label}
@@ -84,7 +84,8 @@ export default function PermissionGrid({
         {sections(rows).map((group) => {
           const count = countOf(group.rows);
           const every = count.total > 0 && count.granted === count.total;
-          const expanded = open[group.title] ?? true;
+          // Closed until opened: seven menus of rows at once is a wall to scroll.
+          const expanded = open[group.title] ?? false;
 
           return (
             <Box key={group.title}>
@@ -152,11 +153,6 @@ export default function PermissionGrid({
                             <Chip key={side} size="small" variant="outlined" label={SIDE[side]} sx={{ height: 20, fontSize: 11 }} />
                           ))}
                       </Stack>
-                      {r.description && (
-                        <Typography color="text.secondary" sx={{ fontSize: 12, lineHeight: 1.45, mt: 0.25 }}>
-                          {r.description}
-                        </Typography>
-                      )}
                     </Box>
 
                     {COLUMNS.map((c) => (

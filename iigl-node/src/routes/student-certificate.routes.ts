@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
@@ -16,8 +17,8 @@ import {
  *
  * Not to be confused with `/api/reports`, the gemstone certificates the
  * laboratory issues. They are different documents for different people, and the
- * numbering says so: a course certificate is `IIGL-C-2026-0001`, twelve digits
- * shorter than a report number and impossible to mistake for one across a desk.
+ * numbering says so: a course certificate is `IIGL-C-2026-0001-7QF4`, which no
+ * report number resembles across a desk.
  *
  * Issued against a **completed enrolment**, not against a student: somebody who
  * takes two courses earns two certificates, and a certificate for a course
@@ -36,7 +37,32 @@ const date = (v: unknown): Date | null => {
   return d;
 };
 
-/** IIGL-C-YYYY-NNNN, counted within the year, read and written in one transaction. */
+/**
+ * The count that follows `last` within the year, and 1 when the year has none.
+ *
+ * `parseInt` stops at the dash before the random tail, so a number issued before
+ * the tail existed (`IIGL-C-2026-0007`) and one issued after
+ * (`IIGL-C-2026-0007-7QF4`) both read as 7. Exported for check:certificate-no,
+ * because a count read wrong hands two students the same certificate number.
+ */
+export const nextCount = (last: string | null | undefined, prefix: string): number =>
+  last ? parseInt(String(last).slice(prefix.length), 10) + 1 : 1;
+
+/**
+ * The tail's alphabet: digits and capitals without I, O, U or L, which are read
+ * off a printed certificate as 1, 0, V and 1.
+ */
+const TAIL = '23456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+/**
+ * IIGL-C-YYYY-NNNN-XXXX, counted within the year and finished with four random
+ * characters, read and written in one transaction.
+ *
+ * The tail is what keeps the public check (`GET /api/public/student-certificates/:no`)
+ * from being walked: the count alone is guessable, and a guess that lands returns
+ * a student's name, course and grade. Certificates numbered before the tail
+ * existed still verify — only the count has to be read past what follows it.
+ */
 async function nextCertificateNo(trx: typeof db): Promise<string> {
   const prefix = `IIGL-C-${new Date().getFullYear()}-`;
 
@@ -47,8 +73,10 @@ async function nextCertificateNo(trx: typeof db): Promise<string> {
     .orderBy('certificate_no', 'desc')
     .executeTakeFirst();
 
-  const n = last ? Number(String(last.certificate_no).slice(prefix.length)) + 1 : 1;
-  return `${prefix}${String(n).padStart(4, '0')}`;
+  // randomInt, not a byte modulo: 256 does not divide by 30, and the remainder
+  // would make the first letters of the alphabet likelier than the last.
+  const tail = Array.from({ length: 4 }, () => TAIL[randomInt(TAIL.length)]).join('');
+  return `${prefix}${String(nextCount(last?.certificate_no, prefix)).padStart(4, '0')}-${tail}`;
 }
 
 function certificateQuery() {

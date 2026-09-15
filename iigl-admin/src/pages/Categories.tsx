@@ -231,6 +231,8 @@ export default function Categories() {
             <FileField
               label="Image"
               bucket="icon"
+              // The website card's picture: landscape, as the uploaded photographs are.
+              ratio="3 / 2"
               value={catForm.icon}
               onChange={(icon) => setCatForm({ ...catForm, icon })}
               helperText="Shown against the category in lists, and as the picture on its card in the website's Our Report Categories."

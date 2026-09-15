@@ -52,6 +52,7 @@ export default function FileField({
   helperText,
   ratio,
   fill,
+  multiple = false,
 }: {
   label: string;
   bucket: Bucket;
@@ -73,6 +74,12 @@ export default function FileField({
    * frame.
    */
   fill?: boolean;
+  /**
+   * Take several files at once, dropped or chosen together. `onChange` is
+   * called once for each file saved, in order — for a list, such as a gallery,
+   * that the caller adds to rather than a single path it replaces.
+   */
+  multiple?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   /*
@@ -112,13 +119,17 @@ export default function FileField({
   };
 
   const send = useCallback(
-    async (file: File) => {
+    async (files: File[]) => {
       setBusy(true);
       setPercent(0);
       setError(null);
       try {
-        const [stored] = await uploadFiles(bucket, [file], setPercent, setShrunk);
-        onChange(stored.path);
+        // A few at a time, as the API takes them; each saved file is handed on
+        // in the order it was chosen.
+        for (let i = 0; i < files.length; i += 10) {
+          const stored = await uploadFiles(bucket, files.slice(i, i + 10), setPercent, setShrunk);
+          for (const one of stored) onChange(one.path);
+        }
       } catch (e) {
         setError(messageOf(e));
       } finally {
@@ -132,7 +143,8 @@ export default function FileField({
   const onDrop = useCallback(
     (accepted: File[], rejected: FileRejection[]) => {
       // One field, one file: the form field holds a single path, and silently
-      // taking the first of five dropped files would be a guess.
+      // taking the first of five dropped files would be a guess. A `multiple`
+      // field takes them all, and still uploads the good ones when some are refused.
       if (rejected.length) {
         const first = rejected[0].errors[0];
         setError(
@@ -142,16 +154,18 @@ export default function FileField({
               ? 'That kind of file is not accepted here.'
               : (first?.message ?? 'That file was not accepted.'),
         );
-        return;
+        if (!multiple || accepted.length === 0) return;
       }
-      if (accepted[0]) void send(accepted[0]);
+      if (multiple) {
+        if (accepted.length) void send(accepted);
+      } else if (accepted[0]) void send([accepted[0]]);
     },
-    [send],
+    [send, multiple],
   );
 
   const { getRootProps, getInputProps, isDragActive, isDragReject } = useDropzone({
     onDrop,
-    multiple: false,
+    multiple,
     // Per file, and larger for a picture: `tooLarge` explains why.
     validator: tooLarge,
     accept: accept === 'image/*' ? { 'image/*': [] } : undefined,
@@ -190,7 +204,9 @@ export default function FileField({
         : 'Drop it here'
       : value
         ? 'Drop a replacement, or click to choose'
-        : 'Drop a file here, or click to choose';
+        : multiple
+          ? 'Drop pictures here, or click to choose several'
+          : 'Drop a file here, or click to choose';
 
   // Stops the click reaching the zone, which would open the file dialog behind
   // whatever the person actually asked for.
@@ -223,7 +239,18 @@ export default function FileField({
   useEffect(() => setBroken(false), [value]);
 
   return (
-    <Box>
+    /*
+      A shaped field is as wide as its picture, never wider than the room it has.
+      Without a width of its own, a field placed in a row beside another shrank
+      to nothing: the frame's 100% had no width to be 100% of.
+    */
+    <Box
+      sx={
+        shaped && !fill
+          ? { width: Math.round(FRAME_HEIGHT * (rw / rh)), maxWidth: '100%' }
+          : undefined
+      }
+    >
       {/*
         The label, with its note as the mark beside it.
 

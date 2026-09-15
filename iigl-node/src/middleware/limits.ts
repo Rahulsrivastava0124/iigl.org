@@ -58,6 +58,13 @@ export const verifyLogLimiter = rateLimit({
   limit: 60,
 });
 
+/** Course registrations from the website, which file an enquiry per call. */
+export const courseEnquiryLimiter = rateLimit({
+  ...tooMany('Too many registrations from this address. Please try again later.'),
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+});
+
 /**
  * Certificate rendering, which starts a headless browser page per request.
  * Authenticated, so this is about protecting the renderer rather than abuse.

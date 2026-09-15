@@ -324,6 +324,13 @@ function cardFields(b: Record<string, unknown>, partial: boolean) {
     if (v && v.length > max) throw badRequest(`${label} is at most ${max} characters.`);
     out[key] = v;
   }
+  // The course page: the full description, and the syllabus one topic per line.
+  for (const [key, label, max] of [['details', 'Course details', 20000], ['syllabus', 'Syllabus', 5000]] as const) {
+    if (partial && b[key] === undefined) continue;
+    const v = text(b[key]);
+    if (v && v.length > max) throw badRequest(`${label} is at most ${max} characters.`);
+    out[key] = v;
+  }
   if (!partial || b.image !== undefined) out.image = text(b.image);
   return out;
 }

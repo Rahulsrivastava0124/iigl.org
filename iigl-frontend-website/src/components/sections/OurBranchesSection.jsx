@@ -42,6 +42,7 @@ function toBranch(lab) {
       ? { lat: Number(lab.latitude), lon: Number(lab.longitude) }
       : stateCentre(state);
   return {
+    id: lab.id,
     page: `lab-${lab.id}`,
     name: (lab.fullname ?? '').trim(),
     city,
@@ -274,6 +275,14 @@ function BranchDetailCard({ branch }) {
           </li>
         ))}
       </ul>
+
+      {/* The branch's own page: its banner, content, gallery and social links. */}
+      <a
+        className="mt-3 inline-flex h-9 w-full items-center justify-center rounded-lg bg-[#061948] px-4 text-[12px] font-semibold uppercase tracking-[0.05em] text-white transition-colors hover:bg-[#10285e] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d58a2b]"
+        href={`/branches/${branch.id}`}
+      >
+        View branch page
+      </a>
     </aside>
   );
 }

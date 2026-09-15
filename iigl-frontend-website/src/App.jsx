@@ -1,6 +1,12 @@
 import AvailableCoursesSection from './components/sections/AvailableCoursesSection.jsx';
+import BranchPage from './components/sections/BranchPage.jsx';
+import CompanyCertificatesSection from './components/sections/CompanyCertificatesSection.jsx';
+import CoursePage from './components/sections/CoursePage.jsx';
+import EducationPage from './components/sections/EducationPage.jsx';
+import VerifyReportPage from './components/sections/VerifyReportPage.jsx';
 import EducationSection from './components/sections/EducationSection.jsx';
 import FaqSection from './components/sections/FaqSection.jsx';
+import GallerySection from './components/sections/GallerySection.jsx';
 import Footer from './components/sections/Footer.jsx';
 import HeroSection from './components/sections/HeroSection.jsx';
 import IiglReportsSection from './components/sections/IiglReportsSection.jsx';
@@ -12,6 +18,16 @@ import ReviewsSection from './components/sections/ReviewsSection.jsx';
 import WhyChooseSection from './components/sections/WhyChooseSection.jsx';
 
 export default function App() {
+  // One page besides the home page: a branch's own, at /branches/<id>.
+  const branchId = window.location.pathname.match(/^\/branches\/(\d+)\/?$/)?.[1];
+  // And a course's own, at /courses/<id>.
+  const courseId = window.location.pathname.match(/^\/courses\/(\d+)\/?$/)?.[1];
+  // And the Education page, at /education.
+  const education = /^\/education\/?$/.test(window.location.pathname);
+  // Verify Report, at /verify-report — and /verify-report/<id>, the address
+  // every printed report's QR code carries.
+  const verify = window.location.pathname.match(/^\/verify-report(?:\/(\d+))?\/?$/);
+
   return (
     <div className="min-h-screen overflow-x-clip bg-white text-[#2c3b64]">
       {/* Paint server for `.icon-gold-outline svg`, which strokes with
@@ -30,6 +46,16 @@ export default function App() {
       </svg>
 
       <Navbar />
+      {branchId ? (
+        <BranchPage id={branchId} />
+      ) : courseId ? (
+        <CoursePage id={courseId} />
+      ) : verify ? (
+        <VerifyReportPage id={verify[1]} />
+      ) : education ? (
+        <EducationPage />
+      ) : (
+        <>
       <HeroSection />
       <WhyChooseSection />
       <ReportCategoriesSection />
@@ -37,9 +63,13 @@ export default function App() {
       <EducationSection />
       <AvailableCoursesSection />
       <ReviewsSection />
+      <CompanyCertificatesSection />
       <RegisteredCustomersSection />
+      <GallerySection />
       <OurBranchesSection />
       <FaqSection />
+        </>
+      )}
       <Footer />
     </div>
   );

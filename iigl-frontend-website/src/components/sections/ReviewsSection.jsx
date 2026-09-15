@@ -1,5 +1,6 @@
 import { ArrowRight, Star } from 'lucide-react';
 import SectionLabel from '../SectionLabel.jsx';
+import { usePublic } from '../../lib/api.js';
 
 /**
  * What clients say.
@@ -14,7 +15,8 @@ import SectionLabel from '../SectionLabel.jsx';
  * picture of somebody who is not them.
  */
 
-const reviews = [
+// Built in, shown until head office publishes its own under Website Setup › Reviews.
+const builtIn = [
   {
     quote:
       'IIGL’s grading report is precise, detailed and easy to understand. It helps me choose the right stone with complete confidence. Truly professional and reliable service!',
@@ -41,6 +43,58 @@ const reviews = [
   },
 ];
 
+// Dummy student testimonials for the Education page, shown until head office
+// publishes its own under Website Setup › Testimonials.
+const students = [
+  {
+    quote: 'The practical lab sessions made every topic click. I can now grade diamonds with real confidence.',
+    name: 'Ananya Sharma',
+    trade: 'Diamond Basics',
+  },
+  {
+    quote: 'Clear teaching, patient instructors and plenty of stones to practise on. Every class was worth it.',
+    name: 'Rohit Verma',
+    trade: 'Gemstone Identification',
+  },
+  {
+    quote: 'The course gave me the skills to start work at a jewellery store straight after my certificate.',
+    name: 'Sneha Kapoor',
+    trade: 'Graduate Gemologist',
+  },
+  {
+    quote: 'Well structured from the basics to advanced grading, with a certificate the traders I work with know.',
+    name: 'Imran Qureshi',
+    trade: 'IIGL Certification Program',
+  },
+];
+
+/** The two places this section is drawn: clients' reviews on the home page, students' on the Education page. */
+const COPY = {
+  client: {
+    id: 'reviews',
+    label: 'Our Reviews',
+    title: 'What Our Clients Say',
+    intro: (
+      <>
+        What’s commonly called a ‘certificate’ is actually a grading report. IIGL issues{' '}
+        <span className="font-medium text-[#bd7724]">grading reports</span> with clarity and confidence.
+      </>
+    ),
+    builtIn,
+  },
+  student: {
+    id: 'testimonials',
+    label: 'Testimonials',
+    title: 'What Our Students Say',
+    intro: (
+      <>
+        Students who started their <span className="font-medium text-[#bd7724]">careers in gemology</span> with IIGL.
+      </>
+    ),
+    builtIn: students,
+  },
+};
+
 const initials = (name) =>
   name
     .split(/\s+/)
@@ -50,28 +104,30 @@ const initials = (name) =>
     .join('')
     .toUpperCase();
 
-export default function ReviewsSection() {
+export default function ReviewsSection({ kind = 'client' }) {
+  const copy = COPY[kind];
+  const live = usePublic(`/reviews?kind=${kind}`);
+  const reviews = live?.length ? live : copy.builtIn;
+
   return (
-    <section id="reviews" className="bg-white px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
+    <section id={copy.id} className="bg-white px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[1390px]">
         <div className="mx-auto max-w-[820px] text-center">
-          <SectionLabel>Our Reviews</SectionLabel>
+          <SectionLabel>{copy.label}</SectionLabel>
 
           <h2 className="m-0 mt-4 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[28px]">
-            What Our Clients Say
+            {copy.title}
           </h2>
 
           <p className="mx-auto mt-3 max-w-[760px] text-[16px] font-normal leading-[1.7] text-[#4a5265]">
-            What’s commonly called a ‘certificate’ is actually a grading report. IIGL issues{' '}
-            <span className="font-medium text-[#bd7724]">grading reports</span> with clarity and
-            confidence.
+            {copy.intro}
           </p>
         </div>
 
         <div className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
           {reviews.map((review) => (
             <article
-              key={review.name}
+              key={review.id ?? review.name}
               className="flex flex-col items-center rounded-xl border border-[#e6e8ee] bg-white px-5 py-7 text-center shadow-[0_15px_38px_rgba(44,59,100,0.08)]"
             >
               <span
@@ -88,11 +144,17 @@ export default function ReviewsSection() {
                 {review.trade}
               </p>
 
-              <div className="mt-5 flex items-center justify-center gap-1" aria-label="Rated 5 out of 5">
+              <div className="mt-5 flex items-center justify-center gap-1" aria-label={`Rated ${review.rating ?? 5} out of 5`}>
                 {Array.from({ length: 5 }, (_, i) => (
                   // Filled, not outlined: a row of five outlines reads as five
-                  // empty stars, which is the opposite of what it says.
-                  <Star key={i} className="h-[18px] w-[18px] text-[#d58a2b]" fill="currentColor" strokeWidth={0} />
+                  // empty stars, which is the opposite of what it says. The
+                  // stars not earned are the same shape in grey.
+                  <Star
+                    key={i}
+                    className={`h-[18px] w-[18px] ${i < (review.rating ?? 5) ? 'text-[#d58a2b]' : 'text-[#e6e8ee]'}`}
+                    fill="currentColor"
+                    strokeWidth={0}
+                  />
                 ))}
               </div>
 
@@ -112,7 +174,7 @@ export default function ReviewsSection() {
           */}
           <a
             className="group inline-flex h-10 w-fit items-center justify-center gap-3 rounded-lg bg-[#061948] px-5 text-[13px] font-medium uppercase leading-none tracking-[0.04em] text-white shadow-[0_12px_20px_rgba(6,25,72,0.14)]"
-            href="#reviews"
+            href={`#${copy.id}`}
           >
             <span>View All Reviews</span>
             <ArrowRight

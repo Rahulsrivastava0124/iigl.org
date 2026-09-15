@@ -145,11 +145,6 @@ export default function UserPermissions({
                 <TableRow key={p.action_type} hover>
                   <TableCell sx={{ whiteSpace: 'normal', minWidth: 260, maxWidth: 440 }}>
                     <Typography sx={{ fontSize: 13.5, fontWeight: 500 }}>{nameFor(p.action_type, p)}</Typography>
-                    {p.description && (
-                      <Typography color="text.secondary" sx={{ fontSize: 12, lineHeight: 1.45, mt: 0.25 }}>
-                        {p.description}
-                      </Typography>
-                    )}
                   </TableCell>
 
                   {user.role_id !== null && (

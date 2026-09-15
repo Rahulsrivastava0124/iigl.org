@@ -23,6 +23,7 @@ import Attributes from './pages/Attributes';
 import AttributeMaster from './pages/AttributeMaster';
 import Pricing from './pages/Pricing';
 import Roles from './pages/Roles';
+import SiteProfile from './pages/SiteProfile';
 import RoleEdit from './pages/RoleEdit';
 import Attendance from './pages/Attendance';
 import Messages from './pages/Messages';
@@ -335,6 +336,41 @@ function Routed() {
             <OwnerOnly>
               <Roles />
             </OwnerOnly>
+          }
+        />
+        {/* A website page's own settings: the account's own (head office's, or a
+            laboratory's branch page), and head office on a laboratory's. */}
+        <Route
+          path="/site"
+          element={
+            <OwnerOnly>
+              <SiteProfile />
+            </OwnerOnly>
+          }
+        />
+        {/* Head office's own: its social links and its gallery, each a screen. */}
+        <Route
+          path="/site/social"
+          element={
+            <AdminOnly>
+              <SiteProfile section="social" />
+            </AdminOnly>
+          }
+        />
+        <Route
+          path="/site/gallery"
+          element={
+            <AdminOnly>
+              <SiteProfile section="gallery" />
+            </AdminOnly>
+          }
+        />
+        <Route
+          path="/site/:labId"
+          element={
+            <AdminOnly>
+              <SiteProfile />
+            </AdminOnly>
           }
         />
         <Route

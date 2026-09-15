@@ -21,6 +21,18 @@ export async function getPublic(path, { signal } = {}) {
 }
 
 /**
+ * POST a public form. Form-encoded rather than JSON, so the browser sends it
+ * as it is instead of first asking the API whether this site may.
+ * Throws with the API's own message on a non-2xx.
+ */
+export async function postPublic(path, fields) {
+  const response = await fetch(apiUrl(path), { method: 'POST', body: new URLSearchParams(fields) });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.message ?? 'Something went wrong. Please try again.');
+  return body;
+}
+
+/**
  * A URL for a stored `public/uploads/…` path, built the way the panel builds
  * it. The website's own folders (website, banner, icon) need no session.
  */

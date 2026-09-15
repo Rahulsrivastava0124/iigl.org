@@ -30,8 +30,9 @@ import { masterRoutes } from './routes/master.routes.js';
 import { settingsRoutes } from './routes/settings.routes.js';
 import { holidayRoutes } from './routes/holiday.routes.js';
 import { statementRoutes } from './routes/statement.routes.js';
+import { siteRoutes } from './routes/site.routes.js';
 import { requireAuth } from './middleware/auth.js';
-import { loginLimiter, resetLimiter, verifyLogLimiter, renderLimiter } from './middleware/limits.js';
+import { loginLimiter, resetLimiter, verifyLogLimiter, renderLimiter, courseEnquiryLimiter } from './middleware/limits.js';
 import { openApiDocument } from './docs/openapi.js';
 
 export function createApp() {
@@ -85,6 +86,9 @@ export function createApp() {
       if (!MUTATING.has(req.method)) return next();
       const origin = req.get('origin');
       if (!origin || env.corsOrigins.includes(origin)) return next();
+      // The website's enquiry and registration forms read no session, so there
+      // is no cookie for another site to ride on; they are rate-limited instead.
+      if (req.path === '/api/public/course-enquiries' || req.path === '/api/public/student-registrations') return next();
       res.status(403).json({ error: 'Origin not allowed.' });
     });
   }
@@ -121,7 +125,12 @@ export function createApp() {
   app.use('/api/auth/forgot-password', resetLimiter);
   app.use('/api/auth/reset-password', resetLimiter);
   app.use('/api/public/verify-log', verifyLogLimiter);
+  app.use('/api/public/course-enquiries', courseEnquiryLimiter);
+  app.use('/api/public/student-registrations', courseEnquiryLimiter);
+  app.use('/api/public/student-certificates', verifyLogLimiter);
   app.use('/api/cards', renderLimiter);
+  // The public original certificate starts the same renderer.
+  app.use('/api/public/verify/:reportNo/pdf', renderLimiter);
 
   app.use('/api/auth', authRoutes);
   app.use('/api/public', publicRoutes);
@@ -200,6 +209,7 @@ export function createApp() {
   app.use('/api/settings', settingsRoutes);
   app.use('/api/holidays', holidayRoutes);
   app.use('/api/statements', statementRoutes);
+  app.use('/api/site', siteRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

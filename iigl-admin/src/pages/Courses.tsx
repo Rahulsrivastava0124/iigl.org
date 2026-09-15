@@ -42,6 +42,7 @@ import { apiUrl, fileUrl } from '../lib/config';
 import GstField, { type GstRate } from '../components/GstField';
 import { useToast } from '../components/Toast';
 import FileField from '../components/FileField';
+import RichTextField from '../components/RichTextField';
 import { hint, money, ConfirmDialog, Dialog, FormPanel, IconAction, DEFAULT_PER_PAGE, Pager, Panel, RowActions, SearchField, StateChip, TableFrame, Tile, TILE_CELL, ToneAction, YesNo } from '../components/ui';
 import type { Tone } from '../components/ui';
 import ViewIcon from '@mui/icons-material/VisibilityOutlined';
@@ -76,6 +77,9 @@ interface Course {
   lessons: string | null;
   title: string | null;
   subtitle: string | null;
+  /** The course page: the full description, and the syllabus one topic per line. */
+  details: string | null;
+  syllabus: string | null;
   /**
    * The sheet this course's certificates are printed on, in
    * `uploads/certificate`. Null means the course cannot be printed yet: the
@@ -174,6 +178,8 @@ const BLANK_COURSE = {
   lessons: '',
   title: '',
   subtitle: '',
+  details: '',
+  syllabus: '',
   certificate_template: null as string | null,
   is_active: true,
 };
@@ -467,6 +473,8 @@ export default function Courses() {
         lessons: form.lessons || null,
         title: form.title || null,
         subtitle: form.subtitle || null,
+        details: form.details || null,
+        syllabus: form.syllabus || null,
         certificate_template: form.certificate_template,
         is_active: form.is_active,
       };
@@ -694,18 +702,7 @@ export default function Courses() {
                   <MenuItem value="1">Yes</MenuItem>
                   <MenuItem value="0">Retired</MenuItem>
                 </TextField>
-                <TextField
-                  label="Description"
-                  value={form.description}
-                  onChange={(e) => set('description', e.target.value)}
-                  multiline
-                  minRows={2}
-                  sx={{ gridColumn: '1 / -1' }}
-                />
-                {/*
-                  The website's Available Courses card. The name, description
-                  and duration above are on it too; these are the rest.
-                */}
+                {/* The website card's heading and the line under it, then the description. */}
                 <TextField
                   label="Title"
                   value={form.title}
@@ -723,6 +720,36 @@ export default function Courses() {
                   slotProps={{
                     htmlInput: { maxLength: 255 },
                     ...hint('The line under the title on the website card.'),
+                  }}
+                />
+                <Box sx={{ gridColumn: '1 / -1' }}>
+                  <RichTextField
+                    label="Description"
+                    value={form.description}
+                    onChange={(html) => set('description', html)}
+                    minHeight={80}
+                  />
+                </Box>
+                {/* The page behind "View Course". */}
+                <Box sx={{ gridColumn: '1 / -1' }}>
+                  <RichTextField
+                    label="Course details"
+                    value={form.details}
+                    onChange={(html) => set('details', html)}
+                    helperText="The full description on the course page: who it is for, what it covers, how it is taught."
+                  />
+                </Box>
+                <TextField
+                  label="Syllabus"
+                  placeholder={'Introduction to gemstones\nThe 4Cs of diamonds\nPractical grading'}
+                  value={form.syllabus}
+                  onChange={(e) => set('syllabus', e.target.value)}
+                  multiline
+                  minRows={4}
+                  sx={{ gridColumn: '1 / -1' }}
+                  slotProps={{
+                    htmlInput: { maxLength: 5000 },
+                    ...hint('One topic per line, in the order it is taught.'),
                   }}
                 />
                 <TextField
@@ -787,7 +814,8 @@ export default function Courses() {
                     ...hint('As the card prints it — "12 Lessons", "Self Paced".'),
                   }}
                 />
-                <Box sx={{ gridColumn: '1 / -1' }}>
+                {/* The two pictures on one line; they wrap under each other on a narrow screen. */}
+                <Box sx={{ gridColumn: '1 / -1', display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'flex-start' }}>
                   <FileField
                     label="Card image"
                     bucket="website"
@@ -797,14 +825,12 @@ export default function Courses() {
                     ratio="16 / 9"
                     helperText="The picture at the top of the course's card on the website."
                   />
-                </Box>
-                {/*
-                  The printed sheet, on the course rather than on a certificate:
-                  everybody finishing this course takes away the same design
-                  with a different name on it. A square frame, the shape the
-                  certificate artwork is drawn to.
-                */}
-                <Box sx={{ gridColumn: '1 / -1' }}>
+                  {/*
+                    The printed sheet, on the course rather than on a certificate:
+                    everybody finishing this course takes away the same design
+                    with a different name on it. A square frame, the shape the
+                    certificate artwork is drawn to.
+                  */}
                   <FileField
                     label="Certificate design"
                     bucket="certificate"
@@ -812,7 +838,8 @@ export default function Courses() {
                     onChange={(certificate_template) =>
                       setForm({ ...form, certificate_template })
                     }
-                    ratio="1 / 1"
+                    // The printed sheet is A4 landscape.
+                    ratio="297 / 210"
                     helperText={
                       'The blank sheet certificates print on. The name, course, grade, number ' +
                       'and date are laid over it. Without one, this course cannot be printed.'
@@ -930,6 +957,8 @@ export default function Courses() {
                                 lessons: c.lessons ?? '',
                                 title: c.title ?? '',
                                 subtitle: c.subtitle ?? '',
+                                details: c.details ?? '',
+                                syllabus: c.syllabus ?? '',
                                 is_active: Boolean(c.is_active),
                               })
                             }

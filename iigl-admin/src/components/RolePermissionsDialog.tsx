@@ -129,11 +129,15 @@ export default function RolePermissionsDialog({
             {note}
           </Typography>
         )}
-        <Typography color="text.secondary" variant="body2" sx={{ mb: 2 }}>
-          {shared
-            ? 'A shared role can be held by a laboratory’s staff and by head office’s. Each person only gets the permissions for their side — a laboratory’s front desk never gets the website, and head office’s staff never take orders.'
-            : 'What anybody in this role may do at your laboratory. A person’s own permissions, set from the employee list, override these for them.'}
-        </Typography>
+        {/* Neither explanation fits a built-in role shown read-only with its own
+            note — the Laboratory role has no staff to override anything. */}
+        {(shared || !readOnly) && (
+          <Typography color="text.secondary" variant="body2" sx={{ mb: 2 }}>
+            {shared
+              ? 'A shared role can be held by a laboratory’s staff and by head office’s. Each person only gets the permissions for their side — a laboratory’s front desk never gets the website, and head office’s staff never take orders.'
+              : 'What anybody in this role may do at your laboratory. A person’s own permissions, set from the employee list, override these for them.'}
+          </Typography>
+        )}
 
         <TextField
           label="Role name"
@@ -179,7 +183,7 @@ export default function RolePermissionsDialog({
             rows={rows}
             onChange={setRows}
             open={open}
-            onToggleGroup={(title) => setOpen({ ...open, [title]: !(open[title] ?? true) })}
+            onToggleGroup={(title) => setOpen({ ...open, [title]: !open[title] })}
             disabled={busy || readOnly}
             showSide={shared}
           />

@@ -85,3 +85,22 @@
     stroke-width: 1.8;
   }
 }
+
+/* A branch or course page's formatted content, from the panel editor. The reset takes
+   every margin and size off, so the editor's paragraphs and headings get theirs back. */
+.rich-content p { margin: 0 0 0.9em; }
+.rich-content h1,
+.rich-content h2,
+.rich-content h3 {
+  margin: 1.2em 0 0.5em;
+  color: #061948;
+  font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  font-weight: 500;
+  line-height: 1.2;
+}
+.rich-content h1 { font-size: 30px; }
+.rich-content h2 { font-size: 24px; }
+.rich-content h3 { font-size: 20px; }
+.rich-content strong, .rich-content b { font-weight: 600; }
+.rich-content ul { margin: 0 0 0.9em; padding-left: 1.25em; list-style: disc; }
+.rich-content ol { margin: 0 0 0.9em; padding-left: 1.25em; list-style: decimal; }

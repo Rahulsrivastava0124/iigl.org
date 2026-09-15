@@ -102,7 +102,7 @@ export const PERMISSION_SCOPE: Record<string, ActionScope> = {
     appliesTo: ['head_office'],
     abilities: ALL,
     description:
-      'Website Setup — banners, pages, and which laboratories and customers the website shows. View opens the tabs; Add a banner or branch page; Edit any of them or tick what shows; Delete a banner.',
+      'Website Setup — banners, and which laboratories and customers the website shows. View opens the tabs; Add a banner or branch page; Edit any of them or tick what shows; Delete a banner.',
   },
   website_report: {
     appliesTo: ['head_office'],
@@ -317,8 +317,19 @@ function scopedNames(kind: StaffKind | 'both'): string[] {
  * by either, so it carries both sides.
  */
 export async function permissionsFor(roleId: number, ownerId: number | null): Promise<DescribedPermission[]> {
-  if (roleId === ROLE.SUPER || roleId === ROLE.LAB) return [];
+  if (roleId === ROLE.SUPER) return [];
   const { byRole, actions } = await load();
+  // A laboratory is not limited by permissions: it holds everything on its
+  // side. Listed ticked, so its role says so instead of looking empty; it is
+  // still refused on the way in (PUT /roles/2/permissions).
+  if (roleId === ROLE.LAB) {
+    const lab = new Set(scopedNames('laboratory'));
+    return described(
+      actions
+        .filter((a) => lab.has(a.name))
+        .map((a) => ({ action_type: a.name, view: true, create: true, update: true, delete: true })),
+    );
+  }
   const own = byRole.get(roleId);
   const names = new Set(scopedNames(ownerId === null ? 'both' : 'laboratory'));
   return described(actions.filter((a) => names.has(a.name)).map((a) => own?.get(a.name) ?? none(a.name)));

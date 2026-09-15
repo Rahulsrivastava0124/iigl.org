@@ -155,6 +155,21 @@ interface Group {
 const ADMIN_GROUPS: Group[] = [
   { label: 'Dashboard', icon: DashboardIcon, items: [{ to: '/', label: 'Dashboard', end: true }] },
   {
+    // Straight after the Dashboard: the money is what head office checks first.
+    label: 'Account',
+    icon: TransactionsIcon,
+    items: [
+      { to: '/wallet', label: 'Wallet' },
+      // What head office does with commission is decide it, which is this
+      // queue. There is no Transaction History beside it: head office's own
+      // movements are the Wallet — the same rows, with the balance they
+      // produced — and a franchise's are its own, read per laboratory on the
+      // laboratory's page. A history that showed either was one screen too
+      // many or somebody else's money.
+      { to: '/transactions?status=0', label: 'Commission Approval' },
+    ],
+  },
+  {
     label: 'Laboratory',
     icon: LabsIcon,
     items: [{ to: '/laboratories', label: 'View Franchise', perm: 'laboratory' }],
@@ -199,42 +214,12 @@ const ADMIN_GROUPS: Group[] = [
     items: [{ to: '/messages', label: 'Messages', end: true, badge: 'messages' }],
   },
   {
-    label: 'Account',
-    icon: TransactionsIcon,
-    items: [
-      { to: '/wallet', label: 'Wallet' },
-      // What head office does with commission is decide it, which is this
-      // queue. There is no Transaction History beside it: head office's own
-      // movements are the Wallet — the same rows, with the balance they
-      // produced — and a franchise's are its own, read per laboratory on the
-      // laboratory's page. A history that showed either was one screen too
-      // many or somebody else's money.
-      { to: '/transactions?status=0', label: 'Commission Approval' },
-    ],
-  },
-  {
     label: 'Customer',
     icon: CustomerIcon,
     items: [
       { to: '/customers?tab=all', label: 'All Customers', adminOnly: true, perm: 'customer' },
       { to: '/customers', label: 'Registered', perm: 'customer' },
       { to: '/customers?tab=unregistered', label: 'Not Registered', perm: 'customer' },
-    ],
-  },
-  {
-    label: 'Website Setup',
-    icon: ContentIcon,
-    adminOnly: true,
-    // In the order the website shows them, top of the home page down: the
-    // banner, the report categories, the branches, then the blog and the
-    // standalone pages linked from the footer.
-    items: [
-      { to: '/content?tab=banners', label: 'Banners', perm: 'website_home' },
-      { to: '/content?tab=types', label: 'Report Types', perm: 'website_report' },
-      { to: '/content?tab=customers', label: 'Customers', perm: 'website_home' },
-      { to: '/content?tab=branches', label: 'Branches', perm: 'website_home' },
-      { to: '/content?tab=articles', label: 'Blog', perm: 'website_blog' },
-      { to: '/content?tab=pages', label: 'Pages', perm: 'website_home' },
     ],
   },
   {
@@ -287,6 +272,29 @@ const ADMIN_GROUPS: Group[] = [
       { to: '/master/countries', label: 'Country' },
       { to: '/master/states', label: 'State' },
       { to: '/master/districts', label: 'District' },
+    ],
+  },
+  {
+    label: 'Website Setup',
+    icon: ContentIcon,
+    adminOnly: true,
+    // In the order the website shows them, top of the home page down: the
+    // banner, the report categories, the branches, then the blog and the
+    // standalone pages linked from the footer.
+    items: [
+      { to: '/content?tab=banners', label: 'Banners', perm: 'website_home' },
+      { to: '/content?tab=types', label: 'Report Types', perm: 'website_report' },
+      { to: '/content?tab=customers', label: 'Customers', perm: 'website_home' },
+      { to: '/content?tab=branches', label: 'Branches', perm: 'website_home' },
+      { to: '/content?tab=reviews', label: 'Reviews', perm: 'website_home' },
+      { to: '/content?tab=certificates', label: 'Certificates', perm: 'website_home' },
+      // The Education page's.
+      { to: '/content?tab=gallery', label: 'Course Gallery', perm: 'website_home' },
+      { to: '/content?tab=testimonials', label: 'Testimonials', perm: 'website_home' },
+      { to: '/content?tab=articles', label: 'Blog', perm: 'website_blog' },
+      // Head office's own: the footer's social links, and its picture gallery.
+      { to: '/site/social', label: 'Social Media' },
+      { to: '/site/gallery', label: 'Gallery' },
     ],
   },
   {
@@ -428,7 +436,12 @@ const FIELD_GROUPS: Group[] = [
     // API sends it nothing else.
     label: 'Settings',
     icon: SettingsIcon,
-    items: [{ to: '/settings?tab=holidays', label: 'Holidays' }],
+    items: [
+      { to: '/settings?tab=holidays', label: 'Holidays' },
+      // The laboratory's own page on the website — banner, content, gallery and
+      // social links. The laboratory account only; its staff do not edit it.
+      { to: '/site', label: 'Website', end: true, labOnly: true },
+    ],
   },
 ];
 

@@ -1,13 +1,19 @@
 import path from 'node:path';
 import { Router, type NextFunction, type Request, type Response } from 'express';
+import { sql } from 'kysely';
 import { db } from '../db/index.js';
 import { env } from '../lib/env.js';
 import { wrap } from '../lib/async.js';
 import { fileRoutes } from './file.routes.js';
 import { locateLaboratory, needsLookup, storedPoint, type Point } from '../services/geocode.service.js';
-import { notFound } from '../lib/errors.js';
+import { badRequest, conflict, notFound } from '../lib/errors.js';
+import { sendRegistrationReceived } from '../lib/mail.js';
+import { nextRegistrationNo } from './student.routes.js';
 import { expandAttributes } from '../services/report.service.js';
+import { cardDataFor, loadChrome } from '../services/card.service.js';
+import { renderCardsPdf, type CardKind } from '../services/pdf.service.js';
 import { numericId, numericParams } from '../middleware/params.js';
+import { HEAD_OFFICE, siteProfile } from './site.routes.js';
 
 export const publicRoutes = Router();
 
@@ -26,24 +32,13 @@ publicRoutes.use((req, res, next) => {
 });
 
 publicRoutes.get(
-  '/pages/:pageType',
-  wrap(async (req, res) => {
-    const row = await db
-      .selectFrom('websites')
-      .selectAll()
-      .where('page_type', '=', String(req.params.pageType))
-      .executeTakeFirst();
-    if (!row) throw notFound('Page not found.');
-    res.json({ data: row });
-  }),
-);
-
-publicRoutes.get(
   '/blogs',
   wrap(async (_req, res) => {
     const rows = await db
       .selectFrom('blogs')
-      .select(['id', 'page_name', 'slug', 'thumbnail', 'banner', 'meta_title', 'meta_description', 'created_at'])
+      .select(['id', 'page_name', 'slug', 'excerpt', 'category', 'author', 'published_on', 'thumbnail', 'banner', 'meta_title', 'meta_description', 'created_at'])
+      // Newest publish date first; an article with none sorts after, newest added first.
+      .orderBy('published_on', 'desc')
       .orderBy('id', 'desc')
       .execute();
     res.json({ data: rows });
@@ -142,6 +137,44 @@ publicRoutes.get(
  * way `/api/files` serves it (legacy disk first, then storage), by handing the
  * request on with its path rewritten.
  */
+/** Head office's own website settings: the footer's social links, its gallery and content. */
+publicRoutes.get(
+  '/site',
+  wrap(async (_req, res) => {
+    res.json({ data: await siteProfile(HEAD_OFFICE) });
+  }),
+);
+
+/**
+ * One listed branch's page: the laboratory as the list shows it, with its own
+ * banner, content, gallery and social links. Only a ticked, active laboratory.
+ */
+publicRoutes.get(
+  '/laboratories/:id',
+  numericId,
+  wrap(async (req, res) => {
+    const lab = await db
+      .selectFrom('users')
+      .select(['id', 'fullname', 'city', 'state', 'company_logo'])
+      .where('id', '=', Number(req.params.id))
+      .where('role_id', '=', 2)
+      .where('show_on_site', '=', 1)
+      .where('is_active', '=', 1)
+      .executeTakeFirst();
+    if (!lab) throw notFound('Branch not found.');
+    res.json({
+      data: {
+        id: lab.id,
+        fullname: lab.fullname,
+        city: lab.city,
+        state: lab.state,
+        logo: lab.company_logo ? `/public/laboratories/${lab.id}/logo` : null,
+        ...(await siteProfile(lab.id)),
+      },
+    });
+  }),
+);
+
 publicRoutes.get(
   '/laboratories/:id/logo',
   numericId,
@@ -280,7 +313,7 @@ publicRoutes.get(
   wrap(async (_req, res) => {
     const rows = await db
       .selectFrom('courses')
-      .select(['id', 'name', 'code', 'description', 'duration', 'lessons', 'level', 'categories', 'image', 'title', 'subtitle'])
+      .select(['id', 'name', 'code', 'description', 'duration', 'lessons', 'level', 'categories', 'image', 'title', 'subtitle', 'details', 'syllabus'])
       .where('is_active', '=', 1)
       .orderBy('name')
       .execute();
@@ -319,6 +352,269 @@ publicRoutes.get(
     let q = db.selectFrom('banners').selectAll().where('status', '=', 1);
     if (req.query.type) q = q.where('img_type', '=', String(req.query.type));
     res.json({ data: await q.execute() });
+  }),
+);
+
+/**
+ * Register for a course from the website: every detail the panel's New
+ * Registration form takes except the documents, saved as a pending registration
+ * (Student › Registration) for head office to confirm, and a confirmation mailed
+ * to the student. No session; rate-limited in app.ts.
+ *
+ * The photograph, ID proof and qualification are not taken here: an upload
+ * anyone on the internet can make is a storage bill and a malware host. Head
+ * office attaches them when the student comes in.
+ */
+const GENDERS = ['female', 'male', 'other'];
+
+publicRoutes.post(
+  '/student-registrations',
+  wrap(async (req, res) => {
+    // Posted as a plain form from the website's own origin, which reads the reply.
+    res.set('Access-Control-Allow-Origin', '*');
+    const b = req.body ?? {};
+    const clean = (v: unknown) => String(v ?? '').trim();
+    const capped = (key: string, label: string, max: number): string | null => {
+      const v = clean(b[key]);
+      if (v.length > max) throw badRequest(`${label} is at most ${max} characters.`);
+      return v || null;
+    };
+    const phone = (key: string, label: string, needed: boolean): string | null => {
+      const v = clean(b[key]).replace(/[\s-]/g, '');
+      if (!v && !needed) return null;
+      if (!/^\+?\d{10,15}$/.test(v)) throw badRequest(`Enter a valid ${label}.`);
+      return v;
+    };
+
+    const name = capped('name', 'Name', 150);
+    if (!name) throw badRequest('Enter your name.');
+    const mobile = phone('mobile', 'mobile number', true) as string;
+    const altMobile = phone('alt_mobile', 'alternate number', false);
+    const email = clean(b.email);
+    if (email.length > 150 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw badRequest('Enter a valid email address — the confirmation is sent there.');
+    }
+    const dob = clean(b.dob) || null;
+    if (
+      dob &&
+      (!/^\d{4}-\d{2}-\d{2}$/.test(dob) ||
+        Number.isNaN(Date.parse(`${dob}T00:00:00Z`)) ||
+        dob >= new Date().toISOString().slice(0, 10))
+    ) {
+      throw badRequest('Date of birth must be a past date.');
+    }
+    const gender = clean(b.gender) || null;
+    if (gender && !GENDERS.includes(gender)) throw badRequest('Gender is female, male or other.');
+    const pincode = clean(b.pincode) || null;
+    if (pincode && !/^\d{6}$/.test(pincode)) throw badRequest('Pincode is six digits.');
+    const fatherName = capped('father_name', 'Father / guardian name', 150);
+    const address = capped('address', 'Address', 255);
+    const city = capped('city', 'City', 100);
+    const state = capped('state', 'State', 100);
+    const message = capped('message', 'Message', 1000);
+
+    const course = await db
+      .selectFrom('courses')
+      .select(['id', 'name', 'title'])
+      .where('id', '=', Number(b.course_id) || 0)
+      .where('is_active', '=', 1)
+      .executeTakeFirst();
+    if (!course) throw notFound('Course not found.');
+    const courseName = String(course.title || course.name || '');
+
+    // A second press, or the same person twice: one pending registration per number per course.
+    const again = await db
+      .selectFrom('students')
+      .select('id')
+      .where('mobile', '=', mobile)
+      .where('course_id', '=', course.id)
+      .where('status', '=', 'pending')
+      .executeTakeFirst();
+    if (again) throw conflict(`This mobile number is already registered for ${courseName}. Our team will call you shortly.`);
+
+    const registrationNo = await db.transaction().execute(async (trx) => {
+      const number = await nextRegistrationNo(trx);
+      await trx
+        .insertInto('students')
+        .values({
+          registration_no: number,
+          name,
+          father_name: fatherName,
+          // The 'YYYY-MM-DD' text as given: a Date would be shifted by the server's timezone.
+          dob: dob as never,
+          gender,
+          mobile,
+          alt_mobile: altMobile,
+          email,
+          address,
+          city,
+          state,
+          pincode,
+          registration_date: new Date(),
+          course_id: course.id,
+          status: 'pending',
+          remark: ['Registered on the website.', message].filter(Boolean).join(' '),
+          created_at: new Date(),
+          updated_at: new Date(),
+        })
+        .execute();
+      return number;
+    });
+
+    // Saved whatever the mail does: a refused mail must not lose the registration.
+    let mailed = true;
+    try {
+      await sendRegistrationReceived(email, { name, registrationNo, course: courseName });
+    } catch (e) {
+      mailed = false;
+      console.warn(`[registration ${registrationNo}] confirmation mail not sent: ${(e as Error).message}`);
+    }
+    res.status(201).json({ data: { registration_no: registrationNo, course: courseName, mailed } });
+  }),
+);
+
+/**
+ * Register for a course, or ask a question, from the website. Filed as a new enquiry in Student ›
+ * Enquiry, source Website, for head office to call back and convert. The
+ * visitor has no session, so this reads none; it is rate-limited in app.ts and
+ * takes only a name, a number, an email and a note.
+ */
+publicRoutes.post(
+  '/course-enquiries',
+  wrap(async (req, res) => {
+    // Posted as a plain form from the website's own origin, which reads the reply.
+    res.set('Access-Control-Allow-Origin', '*');
+    const b = req.body ?? {};
+    const clean = (v: unknown) => String(v ?? '').trim();
+    const name = clean(b.name);
+    const mobile = clean(b.mobile).replace(/[\s-]/g, '');
+    const email = clean(b.email);
+    const message = clean(b.message);
+    if (!name || name.length > 150) throw badRequest('Enter your name, up to 150 characters.');
+    if (!/^\+?\d{10,15}$/.test(mobile)) throw badRequest('Enter a valid mobile number.');
+    if (email && (email.length > 150 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+      throw badRequest('Enter a valid email address, or leave it blank.');
+    }
+    if (message.length > 1000) throw badRequest('The message is at most 1000 characters.');
+
+    // A course page names its course; the Education page's Contact us names none.
+    const course = b.course_id
+      ? await db
+          .selectFrom('courses')
+          .select(['id', 'name', 'title'])
+          .where('id', '=', Number(b.course_id) || 0)
+          .where('is_active', '=', 1)
+          .executeTakeFirst()
+      : null;
+    if (b.course_id && !course) throw notFound('Course not found.');
+
+    await db
+      .insertInto('student_enquiries')
+      .values({
+        name,
+        mobile,
+        email: email || null,
+        course_id: course?.id ?? null,
+        course_interested: course ? String(course.title || course.name || '').slice(0, 150) : null,
+        enquiry_date: new Date(),
+        source: 'Website',
+        status: 'new',
+        remarks: message || null,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })
+      .execute();
+    res.status(201).json({ ok: true });
+  }),
+);
+
+/** The Education page's Course Gallery: the active pictures, in the order added. */
+publicRoutes.get(
+  '/education-gallery',
+  wrap(async (_req, res) => {
+    const rows = await db
+      .selectFrom('education_gallery')
+      .select(['id', 'title', 'image'])
+      .where('status', '=', 1)
+      .orderBy('id')
+      .execute();
+    res.json({ data: rows });
+  }),
+);
+
+/**
+ * Verify a course certificate by its number, as the Education page asks.
+ *
+ * ponytail: the number alone answers with the student's name, and the numbers
+ * run in sequence, so the only thing between this and a list of every student
+ * is the rate limit in app.ts (60 lookups an hour per address). Asking for the
+ * name as printed as well closes it, if that is ever wanted.
+ */
+publicRoutes.get(
+  '/student-certificates/:no',
+  wrap(async (req, res) => {
+    const row = await db
+      .selectFrom('student_certificates as cert')
+      .innerJoin('students as s', 's.id', 'cert.student_id')
+      .leftJoin('student_courses as sc', 'sc.id', 'cert.student_course_id')
+      .leftJoin('courses as c', 'c.id', 'sc.course_id')
+      .select([
+        'cert.certificate_no',
+        'cert.grade',
+        sql<string | null>`DATE_FORMAT(cert.issued_on, '%Y-%m-%d')`.as('issued_on'),
+        's.name as student_name',
+        'c.name as course_name',
+        'c.title as course_title',
+      ])
+      .where('cert.certificate_no', '=', String(req.params.no).trim().toUpperCase())
+      .executeTakeFirst();
+
+    if (!row) {
+      res.status(404).json({
+        error: 'not_found',
+        message: 'No certificate matches that number. Check it exactly as printed on the certificate.',
+      });
+      return;
+    }
+    res.json({
+      data: {
+        certificate_no: row.certificate_no,
+        student_name: row.student_name,
+        course: row.course_title || row.course_name,
+        grade: row.grade,
+        issued_on: row.issued_on,
+      },
+    });
+  }),
+);
+
+/** The website's Our Company Certificates carousel: the active ones, in the order added. */
+publicRoutes.get(
+  '/company-certificates',
+  wrap(async (_req, res) => {
+    const rows = await db
+      .selectFrom('company_certificates')
+      .select(['id', 'title', 'subtitle', 'icon', 'image'])
+      .where('status', '=', 1)
+      .orderBy('id')
+      .execute();
+    res.json({ data: rows });
+  }),
+);
+
+/** The website's Our Reviews cards: the active reviews head office wrote, in the order added. */
+publicRoutes.get(
+  '/reviews',
+  wrap(async (req, res) => {
+    const rows = await db
+      .selectFrom('reviews')
+      .select(['id', 'name', 'trade', 'quote', 'rating'])
+      .where('status', '=', 1)
+      // Clients' by default; ?kind=student for the Education page's testimonials.
+      .where('kind', '=', req.query.kind === 'student' ? 'student' : 'client')
+      .orderBy('id')
+      .execute();
+    res.json({ data: rows });
   }),
 );
 
@@ -371,6 +667,7 @@ publicRoutes.get(
         'carat_weight',
         'size',
         'item_image',
+        'order_detail_id',
         'comments',
         'description',
         'created_at',
@@ -397,23 +694,95 @@ publicRoutes.get(
       return;
     }
 
-    const [subcategory, [attributes]] = await Promise.all([
+    const [subcategory, [attributes], cards] = await Promise.all([
       db
         .selectFrom('subcategories')
         .select(['id', 'name'])
         .where('id', '=', Number(report.subcategory_id))
         .executeTakeFirst(),
       expandAttributes([report.description]),
+      issuedCards(report.order_detail_id),
     ]);
 
-    const { description, ...card } = report;
+    const { description, order_detail_id, ...card } = report;
     res.json({
       data: {
         ...card,
+        // The picture as a public address: the reports folder needs a session.
+        image: report.item_image ? `/public/verify/${encodeURIComponent(report.report_no)}/image` : null,
+        // The original certificates the order paid for, each at /public/verify/<no>/pdf/<kind>.
+        cards,
         subcategory: subcategory?.name ?? null,
         attributes: attributes.filter((a) => a.show_in_smart_card || a.show_in_classic_card),
       },
     });
+  }),
+);
+
+/** The certificates an order paid for — smart, classic or both — as the Laravel verify page read them. */
+async function issuedCards(orderDetailId: string | number | null): Promise<CardKind[]> {
+  const od = await db
+    .selectFrom('order_details')
+    .select(['smart_card', 'classic_card'])
+    .where('id', '=', Number(orderDetailId) || 0)
+    .executeTakeFirst();
+  const kinds: CardKind[] = [];
+  if (Number(od?.smart_card)) kinds.push('smart');
+  if (Number(od?.classic_card)) kinds.push('classic');
+  return kinds;
+}
+
+/**
+ * The original certificate as a PDF, for the Verify Report page: the card the
+ * laboratory printed, rendered from the record the same way the panel prints
+ * it. Only a kind the order paid for, and only for a verifiable report; any
+ * other asks answer not found alike.
+ *
+ * ponytail: rendered on every request (a headless browser page each) and held
+ * back by the render limit in app.ts; cache the PDF per report if traffic grows.
+ */
+publicRoutes.get(
+  '/verify/:reportNo/pdf/:kind',
+  wrap(async (req, res) => {
+    const kind = String(req.params.kind) as CardKind;
+    const report = await db
+      .selectFrom('reports')
+      .select(['id', 'order_detail_id'])
+      .where('report_no', '=', String(req.params.reportNo))
+      .where('hidden_on_site', '=', 0)
+      .executeTakeFirst();
+    if (!report || !(await issuedCards(report.order_detail_id)).includes(kind)) {
+      throw notFound('Certificate not found.');
+    }
+
+    const [cards, chrome] = await Promise.all([cardDataFor([Number(report.id)]), loadChrome()]);
+    const pdf = await renderCardsPdf(kind, cards, chrome);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${cards[0].report_no}-${kind}.pdf"`);
+    res.setHeader('Content-Length', String(pdf.length));
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    // Shown inside the website's Verify Report page, which is another origin:
+    // helmet's SAMEORIGIN would blank the frame. A PDF view has no action to hijack.
+    res.removeHeader('X-Frame-Options');
+    res.end(pdf);
+  }),
+);
+
+/**
+ * A verifiable report's item picture, for the website's Verify Report page.
+ * Only for a report /verify would show — withheld ones answer not found, the
+ * same as a number never issued.
+ */
+publicRoutes.get(
+  '/verify/:reportNo/image',
+  wrap(async (req, res, next) => {
+    const report = await db
+      .selectFrom('reports')
+      .select('item_image')
+      .where('report_no', '=', String(req.params.reportNo))
+      .where('hidden_on_site', '=', 0)
+      .executeTakeFirst();
+    sendUpload(report?.item_image, req, res, next);
   }),
 );
 
