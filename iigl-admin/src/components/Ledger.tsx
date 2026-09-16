@@ -1,4 +1,4 @@
-import { Grid, Stack, Table, TableBody, TableCell, TableHead, TableRow, Tooltip } from '@mui/material';
+import { Grid, Stack, Table, TableBody, TableCell, TableFooter, TableHead, TableRow, Tooltip } from '@mui/material';
 import ApproveIcon from '@mui/icons-material/CheckCircleOutlined';
 import DeclineIcon from '@mui/icons-material/CancelOutlined';
 import BalanceIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
@@ -57,6 +57,11 @@ export interface LedgerPage {
   credit_total: number;
   /** Approved money out, within the period. */
   debit_total: number;
+  /** Whether a status, payment type or search narrowed the rows listed. */
+  filtered: boolean;
+  /** What the rows listed come to. The period's own totals while unfiltered. */
+  listed_credit: number;
+  listed_debit: number;
   /** Where the account stood before the period began. Zero with no period. */
   opening_balance: number;
   /** Where it stood at the end of the period. */
@@ -70,6 +75,23 @@ export interface LedgerPage {
 
 /** The panel's one card width. */
 const CELL = TILE_CELL;
+
+/**
+ * The two figures a screen prints: the period's, or the filtered rows'.
+ *
+ * A status, a payment type or a search narrows the rows, and the period's own
+ * totals then answer a question nobody asked — three declined rows headed with
+ * the month's credit. The API totals both, so the screen prints whichever it
+ * is showing, and the tiles and the footer rule print the same one.
+ *
+ * The balance is not among them: the rows a filter left out moved it too, so
+ * it stays the period's closing balance whatever is listed.
+ */
+const shown = (account: LedgerPage | undefined) => ({
+  filtered: account?.filtered ?? false,
+  credit: (account?.filtered ? account.listed_credit : account?.credit_total) ?? 0,
+  debit: (account?.filtered ? account.listed_debit : account?.debit_total) ?? 0,
+});
 
 /**
  * The four figures that describe the account.
@@ -104,33 +126,25 @@ export function LedgerTotals({
   const incoming = account?.pending_in ?? 0;
   const outgoing = account?.pending_out ?? 0;
   const pending = incoming > 0 ? incoming : outgoing;
+  const total = shown(account);
 
   return (
     <Grid container spacing={2} sx={{ mb: 2 }}>
       <Grid size={CELL}>
-        {/*
-          Green while there is money in it, red once it goes below zero. Below
-          zero is somebody being owed — an expense float spent past what was
-          handed over — and that is the one balance here that needs acting on.
-        */}
         <Tile
-          label={period ? 'Closing balance' : 'Balance'}
-          value={money(account?.balance ?? 0)}
-          note={period ? `opened at ${money(account?.opening_balance ?? 0)}` : undefined}
-          fill={(account?.balance ?? 0) < 0 ? 'refused' : 'settled'}
-          icon={BalanceIcon}
-        />
-      </Grid>
-      <Grid size={CELL}>
-        <Tile
-          label="Total credit"
-          value={money(account?.credit_total ?? 0)}
+          label={total.filtered ? 'Credit listed' : 'Total credit'}
+          value={money(total.credit)}
           fill="settled"
           icon={ReceivedIcon}
         />
       </Grid>
       <Grid size={CELL}>
-        <Tile label="Total debit" value={money(account?.debit_total ?? 0)} fill="brand" icon={SentIcon} />
+        <Tile
+          label={total.filtered ? 'Debit listed' : 'Total debit'}
+          value={money(total.debit)}
+          fill="brand"
+          icon={SentIcon}
+        />
       </Grid>
       <Grid size={CELL}>
         {/*
@@ -149,6 +163,20 @@ export function LedgerTotals({
           icon={AwaitingIcon}
         />
       </Grid>
+      <Grid size={CELL}>
+        {/*
+          Green while there is money in it, red once it goes below zero. Below
+          zero is somebody being owed — an expense float spent past what was
+          handed over — and that is the one balance here that needs acting on.
+        */}
+        <Tile
+          label={period ? 'Closing balance' : 'Balance'}
+          value={money(account?.balance ?? 0)}
+          note={period ? `opened at ${money(account?.opening_balance ?? 0)}` : undefined}
+          fill={(account?.balance ?? 0) < 0 ? 'refused' : 'settled'}
+          icon={BalanceIcon}
+        />
+      </Grid>
     </Grid>
   );
 }
@@ -156,6 +184,7 @@ export function LedgerTotals({
 /** The statement itself. `footer` is the pager, when the caller pages it. */
 export function LedgerTable({
   entries,
+  account,
   loading,
   error,
   title = 'Ledger',
@@ -168,6 +197,11 @@ export function LedgerTable({
   deciding,
 }: {
   entries: LedgerEntry[];
+  /**
+   * The account the rows came from, for the totals rule under them. Left out
+   * on a table that is only a list of movements and owes nobody a total.
+   */
+  account?: LedgerPage;
   loading: boolean;
   error: string | null;
   title?: string;
@@ -200,6 +234,7 @@ export function LedgerTable({
   /** The row a decision is in flight for; its buttons stop taking clicks. */
   deciding?: number | null;
 }) {
+  const total = shown(account);
   const table = (
     <>
       <TableFrame
@@ -334,6 +369,52 @@ export function LedgerTable({
               </TableRow>
             ))}
           </TableBody>
+          {/*
+            What it all came to, on the columns it came to.
+
+            These three figures were a strip on the panel's footer rule, laid
+            out by a Stack: right of the pager, under nothing in particular,
+            and the one place on the screen where a credit was not under
+            Credit. In the table they are cells, so they cannot drift — the
+            column widths are the same widths.
+
+            The pager moves the rows; it never moves these. They are the
+            period's, or the filter's, never the page's.
+          */}
+          {account && (
+            <TableFooter>
+              {/* The rule is on the row, so every cell carries it and the line
+                  runs the width of the table rather than under nine of ten
+                  columns. The size too: a footer cell is 0.75rem by default,
+                  which put the totals in smaller type than the rows above. */}
+              <TableRow
+                sx={{ '& td': { fontSize: '0.875rem', borderTop: 2, borderColor: 'divider' } }}
+              >
+                <TableCell colSpan={6} sx={{ color: 'text.secondary' }}>
+                  {total.filtered
+                    ? 'Totals of the rows listed, and closing balance'
+                    : 'Totals and closing balance'}
+                </TableCell>
+                {(
+                  [
+                    [total.credit, 'success.main'],
+                    [total.debit, 'error.main'],
+                    [account.balance, 'text.primary'],
+                  ] as const
+                ).map(([figure, color], i) => (
+                  <TableCell
+                    key={i}
+                    align="right"
+                    className="tabular"
+                    sx={{ fontWeight: 700, color }}
+                  >
+                    {money(figure)}
+                  </TableCell>
+                ))}
+                {onDecide && <TableCell />}
+              </TableRow>
+            </TableFooter>
+          )}
         </Table>
       </TableFrame>
     </>

@@ -541,17 +541,27 @@ export function Panel({
           spacing={1.5}
           sx={{
             alignItems: 'center',
-            justifyContent: 'space-between',
+            // No pager (a short list): the count keeps the left edge rather
+            // than drifting to the right on its own.
+            justifyContent: footer ? 'space-between' : 'flex-start',
             px: 2,
             py: 1.25,
             borderTop: 1,
             borderColor: 'divider',
           }}
         >
+          {/*
+            Rows first, then what the list came to.
+
+            The chooser is a control and belongs where controls are looked for,
+            at the left edge under the table; the count is a statement about
+            what is above it and reads perfectly well from the other end of the
+            same rule.
+          */}
+          {footer}
           <Typography variant="body2" color="text.secondary" className="tabular">
             {count}
           </Typography>
-          {footer}
         </Stack>
       )}
     </Paper>

@@ -281,7 +281,10 @@ export default function Wallet() {
         }}
       >
         {tabs}
-        {withFilters && statement}
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
+          {outgoings}
+          {withFilters && statement}
+        </Stack>
       </Stack>
       {withFilters && (
         <Box sx={{ px: 2, pb: 1.25, mb: 1, borderBottom: 1, borderColor: 'divider' }}>{filters}</Box>
@@ -304,13 +307,16 @@ export default function Wallet() {
   const total = account?.total ?? 0;
 
   /*
-    What an employee does with the money they hold: spend some of it on the
-    laboratory's behalf, or hand it in. A transfer waits for the employer's
-    approval; an expense does not, because it is spent from the float the
-    employer already handed over.
+    Money going out of this wallet: spent, or handed in.
 
-    Staff only. Head office and a laboratory have no employer to hand money to
-    or to approve an expense — a laboratory pays head office through Commission.
+    An expense is anybody's — a laboratory and head office spend their own
+    money, a staff member spends the float their employer handed over — and none
+    of them waits for an approval, because in each case the money has already
+    gone.
+
+    Handing in is the staff member's alone: head office and a laboratory have
+    nobody to hand money to, and a laboratory pays head office through
+    Commission.
   */
   const toast = useToast();
 
@@ -379,19 +385,37 @@ export default function Wallet() {
     }
   };
 
+  /*
+    What this wallet can do, on the same row as the heading: record money spent,
+    and — a staff member's only — hand what they hold to their laboratory. They
+    sat on a strip of their own above the totals, which spent a band of the
+    screen on two buttons.
+  */
+  const outgoings = (
+    <>
+      <Button
+        variant="outlined"
+        startIcon={<ExpenseIcon />}
+        onClick={() => open('expense')}
+        sx={{ whiteSpace: 'nowrap', height: 40 }}
+      >
+        Add Expense
+      </Button>
+      {isStaff && (
+        <Button
+          variant="outlined"
+          startIcon={<SendIcon />}
+          onClick={() => open('transfer')}
+          sx={{ whiteSpace: 'nowrap', height: 40 }}
+        >
+          Send to Laboratory
+        </Button>
+      )}
+    </>
+  );
+
   return (
     <>
-      {isStaff && (
-        <Stack direction="row" spacing={1} sx={{ mb: 2, justifyContent: 'flex-end' }}>
-          <Button variant="outlined" startIcon={<ExpenseIcon />} onClick={() => open('expense')}>
-            Add Expense
-          </Button>
-          <Button variant="contained" startIcon={<SendIcon />} onClick={() => open('transfer')}>
-            Send to Laboratory
-          </Button>
-        </Stack>
-      )}
-
       {/* The statements tab has periods of its own; the totals describe the
           account, so they follow its filter only while the account is shown. */}
       <LedgerTotals account={account} period={period} />
@@ -405,7 +429,6 @@ export default function Wallet() {
       */}
       {staff ? (
         <Panel
-          count={ledger.loading ? 'Loading…' : `${total.toLocaleString()} movements`}
           footer={
             <Pager
               meta={{
@@ -438,6 +461,7 @@ export default function Wallet() {
           )}
           <LedgerTable
             entries={entries}
+            account={account}
             loading={ledger.loading}
             error={ledger.error}
             bare
@@ -447,13 +471,6 @@ export default function Wallet() {
         </Panel>
       ) : isLab(user) ? (
         <Panel
-          count={
-            tab === 'account'
-              ? ledger.loading
-                ? 'Loading…'
-                : `${total.toLocaleString()} movements`
-              : undefined
-          }
           /* The pager belongs to the ledger. The statements table carries its
              own, and a footer holding both would page whichever was hidden. */
           footer={
@@ -488,6 +505,7 @@ export default function Wallet() {
           {tab === 'account' && (
             <LedgerTable
               entries={entries}
+              account={account}
               loading={ledger.loading}
               error={ledger.error}
               bare
@@ -500,14 +518,19 @@ export default function Wallet() {
       ) : (
         <LedgerTable
           entries={entries}
+          account={account}
           loading={ledger.loading}
           error={ledger.error}
           onDecide={decide}
           deciding={deciding}
-          actions={statement}
+          actions={
+            <>
+              {outgoings}
+              {statement}
+            </>
+          }
           filters={filters}
           title={isSuper(user) ? 'Wallet' : 'Your account'}
-          count={ledger.loading ? 'Loading…' : `${total.toLocaleString()} movements`}
           footer={
             <Pager
               meta={{

@@ -575,9 +575,12 @@ const document = {
               },
             },
           },
-          credit_total: { type: 'number' },
-          debit_total: { type: 'number' },
-          balance: { type: 'number' },
+          credit_total: { type: 'number', description: 'Approved money in over the whole period, whatever the filters.' },
+          debit_total: { type: 'number', description: 'Approved money out over the whole period, whatever the filters.' },
+          filtered: { type: 'boolean', description: 'Whether a status, payment type or search narrowed the rows listed.' },
+          listed_credit: { type: 'number', description: 'Approved money in among the rows listed. Equals credit_total when filtered is false.' },
+          listed_debit: { type: 'number', description: 'Approved money out among the rows listed.' },
+          balance: { type: 'number', description: 'Where the account stands at the end of the period. Not a total of the rows listed: the rows a filter left out moved it too.' },
           pending_out: { type: 'number', description: 'Sent but not yet approved.' },
           pending_in: { type: 'number', description: 'Received but not yet approved.' },
           modes: {
@@ -2032,7 +2035,7 @@ const document = {
         tags: ['Transactions'],
         summary: 'Record an expense',
         description:
-          'Money an employee spent out of what they hold — fuel, a courier, stationery. Staff only; head office and laboratories are refused. Recorded **approved**, with no approval step: it comes out of the employee\u2019s expense float, which the employer handed over for exactly this, and a float spent past zero goes negative on the staff list rather than being refused.\n\nThe employer is stored as `received_by`, which here means **approver, not recipient** — that is what lets it use the same receiver-only decision, queue and notification as a transfer. Every balance leaves these rows out of the approver\u2019s credit: the ledger, `/api/transactions/wallet` and the dashboard. It comes off the employee\u2019s expense wallet at once.\n\nNo ceiling at the float: somebody who paid a courier from their own pocket is owed it, and the balance goes negative to say so.',
+          'Money spent — fuel, a courier, stationery. Recorded **approved**, with no approval step, whoever records it.\n\nAn employee’s comes out of the expense float their employer handed over for exactly this, and that employer is stored as `received_by`, which here means **approver, not recipient** — that is what lets it use the same receiver-only decision, queue and notification as a transfer. Every balance leaves these rows out of the approver’s credit: the ledger, `/api/transactions/wallet` and the dashboard. It comes off the employee’s expense wallet at once.\n\nA laboratory and head office spend their own money: nobody approves it and nobody receives it, so `received_by` is 0 and the row simply leaves the wallet it was spent from.\n\nNo ceiling at the float: somebody who paid a courier from their own pocket is owed it, and the balance goes negative to say so.',
         requestBody: {
           required: true,
           content: {
@@ -2052,10 +2055,9 @@ const document = {
           },
         },
         responses: {
-          201: { description: 'Recorded, pending the employer\u2019s approval.' },
-          400: errorResponse('No amount, no description, or no employer to approve it.'),
+          201: { description: 'Recorded.' },
+          400: errorResponse('No amount, no description, or a staff account with no employer to spend a float from.'),
           ...guarded,
-          403: errorResponse('Head office and laboratories do not record expenses.'),
         },
       },
     },

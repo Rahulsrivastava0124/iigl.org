@@ -259,15 +259,20 @@ transactionRoutes.get(
 /**
  * Record an expense: money an employee spent out of what they hold.
  *
- * Staff only. **Approved as it is recorded** — no approval step.
+ * **Approved as it is recorded** — no approval step, whoever records it.
  *
- * It used to wait for the employer, when an expense came out of the same pot as
- * the customers' money and an employee writing that off unseen was the risk.
- * It now comes out of the expense float only, which is money the employer chose
- * to hand over for exactly this, so the check is the float itself: the
- * employer sees every expense against it and a negative balance on the staff
- * list. The employer is still stored as `received_by` — it names whose float
- * this is, and every balance already leaves these rows out of its credit.
+ * A staff member's used to wait for the employer, when an expense came out of
+ * the same pot as the customers' money and an employee writing that off unseen
+ * was the risk. It now comes out of the expense float only, which is money the
+ * employer chose to hand over for exactly this, so the check is the float
+ * itself: the employer sees every expense against it and a negative balance on
+ * the staff list. That employer is stored as `received_by` — it names whose
+ * float this is, and every balance already leaves these rows out of its credit.
+ *
+ * A laboratory and head office spend their own money. There is nobody above
+ * them to approve it and nobody receiving it, so the row carries no receiver at
+ * all — `received_by` 0, the same "nobody" the counter collections use for
+ * their sender — and it simply leaves the wallet it was spent from.
  *
  * No ceiling at the wallet balance. Somebody who paid a courier out of their own
  * pocket is owed it, and refusing the entry would push that off the books rather
@@ -276,9 +281,8 @@ transactionRoutes.get(
 transactionRoutes.post(
   '/expense',
   wrap(async (req, res) => {
-    if (req.user.roleId === ROLE.SUPER || req.user.roleId === ROLE.LAB) {
-      throw forbidden('An expense is recorded by staff, against their employer.');
-    }
+    // Their own money, with no employer behind it.
+    const ownMoney = req.user.roleId === ROLE.SUPER || req.user.roleId === ROLE.LAB;
 
     const value = Number(req.body?.amount);
     if (!Number.isFinite(value) || value <= 0) throw badRequest('Enter an amount greater than zero.');
@@ -287,10 +291,10 @@ transactionRoutes.post(
     if (!remark) throw badRequest('Say what the money was spent on.');
     if (remark.length > 255) throw badRequest('Keep the description under 255 characters.');
 
-    const approver = req.user.labId;
-    if (!approver) {
+    if (!ownMoney && !req.user.labId) {
       throw badRequest('Your account is not linked to an employer, so there is no float to spend from.');
     }
+    const approver = ownMoney ? 0 : Number(req.user.labId);
 
     const optional = (v: unknown) => {
       const t = String(v ?? '').trim();
@@ -308,7 +312,7 @@ transactionRoutes.post(
         // A photograph of the bill, where there is one.
         attachment: optional(req.body?.attachment),
         send_by: req.user.id,
-        received_by: Number(approver),
+        received_by: approver,
         status: STATUS.APPROVED,
         seen_by_sender: 1,
         seen_by_receiver: 0,

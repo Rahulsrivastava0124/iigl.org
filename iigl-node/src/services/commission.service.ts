@@ -490,6 +490,18 @@ export interface LedgerPage {
   credit_total: number;
   /** Approved money out, within the period. */
   debit_total: number;
+  /** Whether a status, payment type or search narrowed the rows listed. */
+  filtered: boolean;
+  /**
+   * The approved credit and debit among the rows listed.
+   *
+   * The same as the period's totals while nothing is filtered. Filtered, they
+   * are what the rows on screen add up to — which the period's totals are not,
+   * and a screen showing three declined rows should not head them with the
+   * month's credit.
+   */
+  listed_credit: number;
+  listed_debit: number;
   /** Where the account stood before the period began. Zero with no period. */
   opening_balance: number;
   /** Where it stood at the end of the period: opening, plus credit, less debit. */
@@ -742,6 +754,18 @@ export async function ledgerFor(
     broken.
   */
   const words = (filter.q ?? '').trim().toLowerCase().replace(/^#/, '').split(/\s+/).filter(Boolean);
+  /*
+    The rows a filter leaves, and what they come to.
+
+    The period's own totals describe the account and are what an unfiltered
+    screen wants. Filtered, they answer a question nobody asked: a screen
+    showing three declined rows should not head them with the month's credit.
+    So the listed rows are totalled as well — approved ones only, as the period
+    totals are — and the screen prints whichever of the two it is showing.
+  */
+  const filtered = wantStatus !== null || wantMode !== null || words.length > 0;
+  let listedCredit = 0;
+  let listedDebit = 0;
   const listed: number[] = [];
   rows.forEach((row, i) => {
     if (wantStatus !== null && Number(row.status) !== wantStatus) return;
@@ -751,6 +775,11 @@ export async function ledgerFor(
     if (words.length) {
       const hay = `${row.transaction_no ?? ''} ${row.id} ${row.remark ?? row.transaction_type ?? ''}`.toLowerCase();
       if (!words.every((w) => hay.includes(w))) return;
+    }
+    if (Number(row.status) === STATUS.APPROVED) {
+      const amount = Number(row.amount) || 0;
+      if (Number(row.received_by) === userId) listedCredit += amount;
+      else listedDebit += amount;
     }
     listed.push(i);
   });
@@ -875,6 +904,11 @@ export async function ledgerFor(
     entries,
     credit_total: round2(creditTotal),
     debit_total: round2(debitTotal),
+    /** Whether a status, payment type or search narrowed the rows. */
+    filtered,
+    /** The approved credit and debit among the rows listed, for when it did. */
+    listed_credit: round2(listedCredit),
+    listed_debit: round2(listedDebit),
     opening_balance: round2(opening),
     balance: round2(balance),
     pending_out: round2(pendingOut),
