@@ -12,8 +12,36 @@ export const PAY_MODE_LABEL: Record<string, string> = {
   card: 'Card',
   bank: 'Bank transfer',
   cheque: 'Cheque',
+  // Paid through Cashfree. The filter's one "Online" matches every method.
+  online: 'Online',
 };
 
-/** The label for a stored payment mode, matched without case; `—` when there is none. */
-export const payModeLabel = (m: string | null | undefined) =>
-  m ? (PAY_MODE_LABEL[m.trim().toLowerCase()] ?? m) : '—';
+/** How Cashfree names a method, as the panel says it. */
+const ONLINE_METHOD: Record<string, string> = {
+  upi: 'UPI',
+  debit_card: 'Debit card',
+  credit_card: 'Credit card',
+  net_banking: 'Netbanking',
+  wallet: 'Wallet',
+  pay_later: 'Pay later',
+  cardless_emi: 'Cardless EMI',
+  credit_card_emi: 'Credit card EMI',
+  debit_card_emi: 'Debit card EMI',
+  bank_transfer: 'Bank transfer',
+  upi_credit_card: 'UPI (credit card)',
+};
+
+/**
+ * The label for a stored payment mode, matched without case; `—` when there is
+ * none. A gateway payment is stored `online_<method>` and reads "Online (UPI)".
+ */
+export const payModeLabel = (m: string | null | undefined) => {
+  if (!m) return '—';
+  const key = m.trim().toLowerCase();
+  if (key.startsWith('online_')) {
+    const method = key.slice('online_'.length);
+    const name = ONLINE_METHOD[method] ?? method.replace(/_/g, ' ').replace(/^w/, (c) => c.toUpperCase());
+    return `Online (${name})`;
+  }
+  return PAY_MODE_LABEL[key] ?? m;
+};

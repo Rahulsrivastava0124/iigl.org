@@ -41,6 +41,8 @@ export const TRANSACTION_TYPE = {
     an employee's expense reads as money their laboratory took in.
   */
   EXPENSE: 'expense',
+  /** A student's course fee, received by head office. `student_course_id` names the enrolment. */
+  COURSE_FEE: 'course_fee',
 } as const;
 
 /**
@@ -58,7 +60,7 @@ export const notAnExpense = (eb: any) =>
     eb('transaction_type', '!=', TRANSACTION_TYPE.EXPENSE),
   ]);
 
-const STATUS = { PENDING: 0, APPROVED: 1, DECLINED: 2 } as const;
+export const STATUS = { PENDING: 0, APPROVED: 1, DECLINED: 2 } as const;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -449,6 +451,8 @@ export interface LedgerEntry {
    */
   counterparty_name: string | null;
   order_id: number | null;
+  /** The enrolment a course fee was paid on; null for everything else. */
+  student_course_id: number | null;
   pay_mode: string;
   transaction_no: string | null;
   remark: string | null;
@@ -586,7 +590,7 @@ export async function ledgerFor(
   // costs one scan rather than one response the size of the account.
   const every = await db
     .selectFrom('transactions')
-    .select(['id', 'amount', 'send_by', 'received_by', 'status', 'transaction_type', 'order_id', 'pay_mode', 'transaction_no', 'remark', 'created_at'])
+    .select(['id', 'amount', 'send_by', 'received_by', 'status', 'transaction_type', 'order_id', 'student_course_id', 'pay_mode', 'transaction_no', 'remark', 'created_at'])
     .where(mine)
     .orderBy('id')
     .execute();
@@ -710,7 +714,9 @@ export async function ledgerFor(
   const listed: number[] = [];
   rows.forEach((row, i) => {
     if (wantStatus !== null && Number(row.status) !== wantStatus) return;
-    if (wantMode && String(row.pay_mode ?? '').trim().toLowerCase() !== wantMode) return;
+    // "online" is every gateway payment, whatever its method (online_upi, online_debit_card…).
+    const mode = String(row.pay_mode ?? '').trim().toLowerCase();
+    if (wantMode && !(mode === wantMode || (wantMode === 'online' && mode.startsWith('online_')))) return;
     if (term) {
       const ref = String(row.transaction_no ?? '').toLowerCase();
       if (!ref.includes(term) && String(row.id) !== term) return;
@@ -748,6 +754,7 @@ export async function ledgerFor(
       // rather than one per row.
       counterparty_name: null,
       order_id: row.order_id === null ? null : Number(row.order_id),
+      student_course_id: row.student_course_id === null ? null : Number(row.student_course_id),
       pay_mode: row.pay_mode,
       transaction_no: row.transaction_no,
       remark: row.remark,
@@ -771,6 +778,26 @@ export async function ledgerFor(
       .execute();
     const byId = new Map(named.map((u) => [Number(u.id), String(u.fullname)]));
     for (const e of entries) e.counterparty_name = byId.get(e.counterparty) ?? null;
+  }
+
+  /*
+    The student, for a course fee: a student has no account, so `send_by` is 0
+    and the enrolment on the row is what names them.
+  */
+  const enrolmentIds = [
+    ...new Set(entries.filter((e) => !e.counterparty_name && e.student_course_id).map((e) => Number(e.student_course_id))),
+  ];
+  if (enrolmentIds.length) {
+    const students = await db
+      .selectFrom('student_courses as sc')
+      .innerJoin('students as s', 's.id', 'sc.student_id')
+      .select(['sc.id', 's.name'])
+      .where('sc.id', 'in', enrolmentIds)
+      .execute();
+    const byEnrolment = new Map(students.map((r) => [Number(r.id), String(r.name)]));
+    for (const e of entries) {
+      if (!e.counterparty_name && e.student_course_id) e.counterparty_name = byEnrolment.get(Number(e.student_course_id)) ?? null;
+    }
   }
 
   /*

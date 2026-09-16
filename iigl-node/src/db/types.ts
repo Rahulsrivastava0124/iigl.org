@@ -428,6 +428,32 @@ export interface PasswordResets {
   user_id: number | null;
 }
 
+export interface PaymentOrders {
+  amount: Decimal;
+  cf_order_id: string | null;
+  cf_payment_id: string | null;
+  created_at: Date | null;
+  created_by: number | null;
+  currency: Generated<string>;
+  customer_email: string | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  fulfilled_at: Date | null;
+  id: Generated<number>;
+  mode: Generated<string>;
+  order_id: string;
+  paid_at: Date | null;
+  payer_id: number | null;
+  payload: Json | null;
+  payment_method: string | null;
+  payment_session_id: string | null;
+  purpose: string;
+  reference_id: number | null;
+  result: Json | null;
+  status: Generated<string>;
+  updated_at: Date | null;
+}
+
 export interface PermissionActions {
   added_by: number | null;
   created_at: Date | null;
@@ -749,6 +775,7 @@ export interface Transactions {
   seen_by_sender: number;
   send_by: number;
   status: number;
+  student_course_id: number | null;
   transaction_no: string | null;
   transaction_type: string | null;
   updated_at: Date | null;
@@ -880,6 +907,7 @@ export interface DB {
   order_details: OrderDetails;
   orders: Orders;
   password_resets: PasswordResets;
+  payment_orders: PaymentOrders;
   permission_actions: PermissionActions;
   prices: Prices;
   registered_customers: RegisteredCustomers;

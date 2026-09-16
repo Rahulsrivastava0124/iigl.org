@@ -84,6 +84,10 @@ Every file also carries its own rollback in a comment at the bottom.
 | `061-remove-panel-url-setting.sql` | **applied** | Deletes the `mail.panel_url` settings row: password reset links point back at the panel they were asked from, so the Panel URL setting and `PANEL_URL` are removed. |
 | `062-blog-card-and-course-details.sql` | **applied** | `blogs.excerpt`, `category`, `author`, `published_on` for the article card (its `thumbnail` was already there), and `courses.details`, `syllabus` for the course page. Additive. |
 | `063-site-profiles.sql` | **applied** | New `site_profiles`: one row per website page — each laboratory's branch page and head office's (`lab_id` 0) — with banner, content, gallery and WhatsApp, Facebook and Instagram links. |
+| `067-payment-orders.sql` | **applied** | New `payment_orders`: one row per Cashfree payment attempt — commission paid online, or a course fee at student registration — with its mode (sandbox or production), status, what it pays for (`payload`) and `fulfilled_at`, so a paid order makes its remittance or registration exactly once. Additive. |
+| `068-online-pay-mode-method.sql` | **applied** | Commission paid through Cashfree now records how it was paid: pay mode `online_<method>` (`online_upi`, `online_debit_card`…), shown as "Online (Debit card)". Brings the one already paid into line, matched through its payment order. |
+| `069-course-fee-in-wallet.sql` | **applied** | `transactions.student_course_id`: every course fee taken — at the desk or online — is now also an approved `course_fee` transaction received by head office (account 1), so it shows in head office's Wallet, named by the student. Adds one row per enrolment for the fees already paid before (two: 9,500 and 4,000), with no pay mode, since none was recorded. |
+| `070-course-fee-remark.sql` | **applied** | Drops "(paid before fees were recorded in the wallet)" from the two fees 069 carried in; the remark reads "Course fee — <course>." |
 
 ---
 

@@ -15,11 +15,12 @@ import {
   Typography,
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
-import FileField from '../components/FileField';
 import { useToast } from '../components/Toast';
 import { useFetch, useDebounced } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
+import { payWithCashfree, type PaymentConfig, type StartedPayment } from '../lib/cashfree';
+import { payModeLabel } from '../lib/payModes';
 import {
   Dialog,
   hint,
@@ -130,7 +131,7 @@ export default function Transactions() {
 
   const [paying, setPaying] = useState(false);
   /**
-   * Paying commission: the amount, a reference, and the proof.
+   * Paying commission: cash handed over, or paid online through Cashfree.
    *
    * The dialog asks for what is being transferred and nothing else. It used to
    * ask for the pieces certified, or the takings the share was reckoned on, and
@@ -139,22 +140,23 @@ export default function Transactions() {
    * the figure it is sending, and often it is an old balance or a round number
    * agreed on the phone that no single collection explains.
    *
-   * Nothing moves on the strength of what is typed here. The row is raised
-   * pending, and head office approves or declines it.
+   * Cash is raised pending, and head office approves or declines it when the
+   * money arrives. Online is recorded approved once Cashfree confirms it.
    */
   const [payMode, setPayMode] = useState('cash');
   const [payAmount, setPayAmount] = useState('');
-  const [reference, setReference] = useState('');
-  const [proof, setProof] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
   /*
-    Cash has no reference and no screenshot — it was counted, and the receipt is
-    the transaction row itself. Every other method leaves a trace somewhere,
-    which is the thing head office approves the payment against, so the two
-    fields appear once the method says there is one.
+    Two ways only. Cash is counted, and its receipt is the transaction row
+    itself. Online goes through Cashfree, which is its own record of the money —
+    so neither asks for a reference or a screenshot.
   */
-  const traceable = payMode !== 'cash';
+  const online = payMode === 'online';
+  // Whether Cashfree is set up, and whether it is test mode.
+  const gateway = useFetch<{ data: PaymentConfig }>('/payments/config');
+  const gatewayOn = Boolean(gateway.data?.data.enabled);
+  const testMode = gateway.data?.data.mode !== 'production';
 
   const amount = Math.round((Number(payAmount) || 0) * 100) / 100;
 
@@ -163,8 +165,6 @@ export default function Transactions() {
     const due = position?.due ?? 0;
     setPayMode('cash');
     setPayAmount(due > 0 ? String(due) : '');
-    setReference('');
-    setProof(null);
     setPaying(true);
   };
 
@@ -177,8 +177,6 @@ export default function Transactions() {
     if (!payParam || !canPay) return;
     setPayMode('cash');
     setPayAmount(payParam);
-    setReference('');
-    setProof(null);
     setPaying(true);
     const next = new URLSearchParams(params);
     next.delete('pay');
@@ -189,19 +187,36 @@ export default function Transactions() {
   const payCommission = async () => {
     setSending(true);
     try {
+      /*
+        Online: Cashfree takes the money in its own window, and the API records
+        the remittance — approved, since the gateway has confirmed it — only
+        once Cashfree says the order is paid.
+      */
+      if (online) {
+        const started = await api.post<{ data: StartedPayment }>('/payments/commission', { amount });
+        const outcome = await payWithCashfree(started.data);
+        if (outcome.status === 'paid') {
+          toast.ok(`${money(outcome.amount)} paid online${testMode ? ' (test mode)' : ''}. Recorded as approved.`);
+          setPaying(false);
+          setPayMode('cash');
+          setPayAmount('');
+          reload();
+          summary.reload();
+        } else {
+          toast.error('The payment was not completed. Nothing was charged or recorded.');
+        }
+        return;
+      }
       await api.post('/transactions/commission', {
         amount,
         pay_mode: payMode,
-        // Cash carries neither, whatever was typed before the method changed.
-        transaction_no: traceable && reference.trim() !== '' ? reference.trim() : null,
-        attachment: traceable ? proof : null,
+        transaction_no: null,
+        attachment: null,
       });
       toast.ok('Commission sent. It waits on head office to approve it.');
       setPaying(false);
       setPayMode('cash');
       setPayAmount('');
-      setReference('');
-      setProof(null);
       reload();
       summary.reload();
     } catch (err) {
@@ -444,7 +459,7 @@ export default function Transactions() {
                     <TableCell sx={{ whiteSpace: 'normal', minWidth: 130 }}>
                       {t.received_by_name ?? `#${t.received_by}`}
                     </TableCell>
-                    <TableCell>{t.pay_mode}</TableCell>
+                    <TableCell>{payModeLabel(t.pay_mode)}</TableCell>
                     <TableCell className="mono">{t.transaction_no ?? '—'}</TableCell>
                     <TableCell>
                       <StatusChip status={t.status} />
@@ -487,15 +502,10 @@ export default function Transactions() {
           title="Pay commission"
           onClose={() => setPaying(false)}
           onSubmit={payCommission}
-          submitLabel="Send"
+          submitLabel={online ? 'Pay online' : 'Send'}
           busy={sending}
           disabled={amount <= 0}
         >
-          {/*
-            The method first, because it decides what the rest of the dialog
-            asks for: cash was counted and has nothing to show, everything else
-            leaves a reference and a screenshot behind.
-          */}
           <Grid container spacing={2}>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
@@ -505,9 +515,10 @@ export default function Transactions() {
                 onChange={(e) => setPayMode(e.target.value)}
               >
                 <MenuItem value="cash">Cash</MenuItem>
-                <MenuItem value="upi">UPI</MenuItem>
-                <MenuItem value="card">Card</MenuItem>
-                <MenuItem value="bank">Bank transfer</MenuItem>
+                {/* Cashfree: cards, UPI, netbanking, in its own window. */}
+                <MenuItem value="online" disabled={!gatewayOn}>
+                  Pay online (Cashfree){gatewayOn ? '' : ' — not set up'}
+                </MenuItem>
               </TextField>
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
@@ -524,44 +535,19 @@ export default function Transactions() {
               />
             </Grid>
 
-            {traceable && (
-              <>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label="Reference number"
-                    value={reference}
-                    onChange={(e) => setReference(e.target.value)}
-                    slotProps={hint('The transaction, cheque or UPI reference.')}
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  {/*
-                    Unshaped, so it is the height of a field rather than a
-                    picture frame: this sits in a row of inputs, and a 4:3 zone
-                    filled the dialog with empty dashes.
-                  */}
-                  <FileField
-                    label="Payment proof"
-                    bucket="screenshot"
-                    accept="image/*,application/pdf"
-                    value={proof}
-                    onChange={setProof}
-                    helperText="The screenshot or receipt head office approves this against."
-                  />
-                </Grid>
-              </>
+            {/* Online says nothing here: the Cashfree window is the next thing seen. */}
+            {!online && (
+              <Grid size={12}>
+                <Typography
+                  variant="body2"
+                  sx={{ fontWeight: 600, color: amount > 0 ? 'text.primary' : 'error.main' }}
+                >
+                  {amount > 0
+                    ? `Sending ${money(amount)} to head office. It waits there for approval.`
+                    : 'Enter an amount above zero: nothing to send until then.'}
+                </Typography>
+              </Grid>
             )}
-
-            <Grid size={12}>
-              <Typography
-                variant="body2"
-                sx={{ fontWeight: 600, color: amount > 0 ? 'text.primary' : 'error.main' }}
-              >
-                {amount > 0
-                  ? `Sending ${money(amount)} to head office. It waits there for approval.`
-                  : 'Enter an amount above zero: nothing to send until then.'}
-              </Typography>
-            </Grid>
           </Grid>
         </Dialog>
       )}

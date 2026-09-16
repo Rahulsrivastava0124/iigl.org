@@ -415,7 +415,8 @@ orderRoutes.get(
  */
 orderRoutes.post(
   '/:id/settle',
-  requirePermission('product_collection', 'update'),
+  // Counter work: whoever may take an order (Add) may take its payment and hand it over.
+  requirePermission('product_collection', ['create', 'update']),
   numericId,
   wrap(async (req, res) => {
     const order = await live(db.selectFrom('orders'))
@@ -441,7 +442,8 @@ orderRoutes.post(
 /** Hand the order over. The money is settled separately, and may be owing. */
 orderRoutes.post(
   '/:id/deliver',
-  requirePermission('product_collection', 'update'),
+  // Counter work: whoever may take an order (Add) may take its payment and hand it over.
+  requirePermission('product_collection', ['create', 'update']),
   numericId,
   wrap(async (req, res) => {
     const order = await live(db.selectFrom('orders'))

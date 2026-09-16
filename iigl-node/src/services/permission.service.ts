@@ -66,7 +66,7 @@ export const PERMISSION_SCOPE: Record<string, ActionScope> = {
     appliesTo: ['laboratory'],
     abilities: ALL,
     description:
-      'Orders. View and Add together show the whole laboratory’s orders — without both, only the orders they took or were given. Add takes a new order; Edit records payments, delivery and changes; Delete removes an order or an item.',
+      'Orders. View and Add together show the whole laboratory’s orders — without both, only the orders they took or were given. Add takes a new order, its payment and its delivery; Edit also changes an order after it is taken; Delete removes an order or an item.',
   },
   report: {
     appliesTo: ['laboratory'],
@@ -426,14 +426,15 @@ const wording: Record<Ability, string> = { view: 'see', create: 'add', update: '
  * the permission. The ability defaults to the request method — GET view, POST
  * add, PATCH/PUT edit, DELETE delete — and can be given where a POST is an edit.
  */
-export function requirePermission(action: string, ability?: Ability): RequestHandler {
+export function requirePermission(action: string, ability?: Ability | Ability[]): RequestHandler {
   return (req, _res, next) => {
-    const wanted = abilityFor(req.method, ability);
-    can(req.user, action, wanted)
-      .then((ok) =>
-        ok
+    // Several abilities: any one of them is enough (taking payment is Add or Edit).
+    const wanted = Array.isArray(ability) ? ability : [abilityFor(req.method, ability)];
+    Promise.all(wanted.map((a) => can(req.user, action, a)))
+      .then((answers) =>
+        answers.some(Boolean)
           ? next()
-          : next(forbidden(`You do not have permission to ${wording[wanted]} ${labelOf(action)}. Ask your employer to grant it.`)),
+          : next(forbidden(`You do not have permission to ${wording[wanted[wanted.length - 1]]} ${labelOf(action)}. Ask your employer to grant it.`)),
       )
       .catch(next);
   };

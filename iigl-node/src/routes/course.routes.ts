@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
+import { courseGstPercent, gstOn, recordCourseFee } from '../services/registration.service.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { paged, readPage } from '../lib/paginate.js';
 import { requireAdmin } from '../middleware/auth.js';
@@ -151,26 +152,7 @@ courseRoutes.get(
   }),
 );
 
-/**
- * The GST rate a course is quoted at, as a percent, or 0 where it names none.
- *
- * Resolved from whichever way the rate was given — a row of the master list or
- * a percent typed on the course itself.
- */
-async function courseGstPercent(course: { gst_id?: number | null; gst_percent?: string | null }) {
-  if (course.gst_id) {
-    const rate = await db
-      .selectFrom('gst_rates')
-      .select('percent')
-      .where('id', '=', Number(course.gst_id))
-      .executeTakeFirst();
-    return rate ? Number(rate.percent) : 0;
-  }
-  return course.gst_percent == null ? 0 : Number(course.gst_percent);
-}
-
-/** GST on an amount, to the paisa. */
-const gstOn = (amount: number, percent: number) => Math.round(amount * (percent / 100) * 100) / 100;
+// The GST rate and the tax on an amount: shared with registration, which quotes the same fee.
 
 /**
  * Who is on one course, and what it has brought in.
@@ -628,6 +610,17 @@ courseRoutes.post(
       })
       .executeTakeFirstOrThrow();
 
+    // A fee already paid when enrolling is money received: into the Wallet.
+    const paidOnEnrolment = money(b.fee_paid, 'Fee paid');
+    if (paidOnEnrolment > 0) {
+      await recordCourseFee(db, {
+        enrolmentId: Number(result.insertId),
+        amount: paidOnEnrolment,
+        payMode: 'cash',
+        remark: 'Course fee paid on enrolment.',
+      });
+    }
+
     // Registering somebody and then enrolling them makes them an active
     // student; leaving the registration "pending" behind an enrolment would be
     // a status nobody maintains by hand.
@@ -688,7 +681,21 @@ courseRoutes.patch(
     if (Object.keys(patch).length === 0) throw badRequest('Nothing to update.');
     patch.updated_at = new Date();
 
-    await db.updateTable('student_courses').set(patch).where('id', '=', enrolmentId).execute();
+    // Fee paid typed over directly: the difference is money in (or back out),
+    // so the Wallet is corrected by it in the same transaction.
+    const paidChange =
+      patch.fee_paid !== undefined ? Number(patch.fee_paid) - Number(existing.fee_paid ?? 0) : 0;
+    await db.transaction().execute(async (trx) => {
+      await trx.updateTable('student_courses').set(patch).where('id', '=', enrolmentId).execute();
+      if (Math.abs(paidChange) >= 0.01) {
+        await recordCourseFee(trx as unknown as typeof db, {
+          enrolmentId,
+          amount: paidChange,
+          payMode: 'cash',
+          remark: paidChange > 0 ? 'Course fee paid — corrected on the enrolment.' : 'Course fee paid corrected down on the enrolment.',
+        });
+      }
+    });
     res.json({ ok: true });
   }),
 );
@@ -807,11 +814,20 @@ courseRoutes.post(
     const next = Number(row.fee_paid) + paid;
     if (next > payable) throw badRequest('That is more than the fee still due.');
 
-    await db
-      .updateTable('student_courses')
-      .set({ fee_paid: String(next), updated_at: new Date() })
-      .where('id', '=', enrolmentId)
-      .execute();
+    // The enrolment and head office's Wallet move together, or neither does.
+    await db.transaction().execute(async (trx) => {
+      await trx
+        .updateTable('student_courses')
+        .set({ fee_paid: String(next), updated_at: new Date() })
+        .where('id', '=', enrolmentId)
+        .execute();
+      await recordCourseFee(trx as unknown as typeof db, {
+        enrolmentId,
+        amount: paid,
+        payMode: 'cash',
+        remark: 'Course fee taken at the desk.',
+      });
+    });
 
     res.json({ data: { fee_paid: next, due: Math.round((payable - next) * 100) / 100 } });
   }),

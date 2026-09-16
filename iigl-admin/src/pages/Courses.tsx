@@ -38,6 +38,7 @@ import CertificateIcon from '@mui/icons-material/WorkspacePremiumOutlined';
 import { useDebounced, useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
+import { payWithCashfree, type PaymentConfig, type StartedPayment } from '../lib/cashfree';
 import { apiUrl, fileUrl } from '../lib/config';
 import GstField, { type GstRate } from '../components/GstField';
 import { useToast } from '../components/Toast';
@@ -318,6 +319,7 @@ export default function Courses() {
   };
 
   const closeFee = () => {
+    setFeeMode('cash');
     setPaying(null);
     setCut({ type: 'percent', value: '', reason: '' });
     setCode('');
@@ -439,6 +441,10 @@ export default function Courses() {
     }
   };
   const [amount, setAmount] = useState('');
+  /** How the fee is being paid: counted at the desk, or through Cashfree. */
+  const [feeMode, setFeeMode] = useState<'cash' | 'online'>('cash');
+  const gateway = useFetch<{ data: PaymentConfig }>('/payments/config');
+  const gatewayOn = Boolean(gateway.data?.data.enabled);
   const [busy, setBusy] = useState(false);
 
   const go = (next: { tab?: string; status?: string | null; page?: number }) => {
@@ -542,6 +548,32 @@ export default function Courses() {
     if (!paying) return;
     setBusy(true);
     try {
+      /*
+        Online: the student pays in Cashfree's window, and the API adds it to
+        what they have paid only once Cashfree confirms the money.
+      */
+      if (feeMode === 'online') {
+        const started = await api.post<{ data: StartedPayment }>('/payments/enrolment-fee', {
+          enrolment_id: paying.id,
+          amount: Number(amount),
+        });
+        const outcome = await payWithCashfree(started.data);
+        if (outcome.status === 'paid') {
+          const left = Number(outcome.result?.due ?? 0);
+          toast.ok(
+            left > 0
+              ? `Received ${money(outcome.amount)} online. ${money(left)} still due.`
+              : `Received ${money(outcome.amount)} online. Fees settled in full.`,
+          );
+          setPaying(null);
+          setAmount('');
+          setFeeMode('cash');
+          enrolments.reload();
+        } else {
+          toast.error('The payment was not completed. Nothing was charged or recorded.');
+        }
+        return;
+      }
       const res = await api.post<{ data: { due: number } }>(
         `/courses/enrolments/${paying.id}/payment`,
         { amount: Number(amount) },
@@ -1215,7 +1247,7 @@ export default function Courses() {
           }
           onClose={closeFee}
           onSubmit={takePayment}
-          submitLabel="Take payment"
+          submitLabel={feeMode === 'online' ? 'Pay online' : 'Take payment'}
           busy={busy}
           disabled={!amount || Number(amount) <= 0 || due(open) <= 0}
         >
@@ -1273,6 +1305,20 @@ export default function Courses() {
               </Stack>
             </Box>
 
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ alignItems: 'flex-start' }}>
+            <TextField
+              select
+              label="Payment method"
+              value={feeMode}
+              onChange={(e) => setFeeMode(e.target.value as 'cash' | 'online')}
+              sx={{ minWidth: 220 }}
+            >
+              <MenuItem value="cash">Cash</MenuItem>
+              {/* Cashfree: cards, UPI, netbanking, in its own window. */}
+              <MenuItem value="online" disabled={!gatewayOn}>
+                Pay online (Cashfree){gatewayOn ? '' : ' — not set up'}
+              </MenuItem>
+            </TextField>
             <TextField
               label="Amount"
               type="number"
@@ -1287,6 +1333,7 @@ export default function Courses() {
               fullWidth
               autoFocus
             />
+            </Stack>
 
             {/*
               The discount lives in this dialog rather than behind a row action

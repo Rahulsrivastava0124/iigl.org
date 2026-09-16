@@ -1133,13 +1133,81 @@ const document = {
       },
     },
 
+    '/api/public/payments/config': {
+      get: {
+        tags: ['Payments'],
+        summary: 'Whether online payment is available',
+        security: [],
+        description: '`enabled` is false until the Cashfree keys are set. `mode` is `sandbox` (test — nothing real is charged) or `production`.',
+        responses: { 200: { description: '{ enabled, mode, gateway }' } },
+      },
+    },
+
+    '/api/public/student-registrations/pay': {
+      post: {
+        tags: ['Payments'],
+        summary: 'Register for a course and pay its fee online',
+        security: [],
+        description:
+          'The same details as POST /api/public/student-registrations. The course is priced on the server (fee plus GST) and a Cashfree order is made for it; the answer carries `payment_session_id` for the Cashfree checkout and `order_id` to confirm. **Nothing is registered until the payment is confirmed.** Refused when the course has no fee, when the number is already registered on the course, or when online payment is not set up. Rate-limited with registrations.',
+        requestBody: { required: true, content: { 'application/json': { schema: {
+            type: 'object',
+            required: ['name', 'mobile', 'email', 'course_id'],
+            properties: {
+              course_id: { type: 'integer' },
+              name: { type: 'string' },
+              mobile: { type: 'string', description: '10–15 digits.' },
+              email: { type: 'string', format: 'email' },
+              father_name: { type: 'string' },
+              dob: { type: 'string', format: 'date' },
+              gender: { type: 'string', enum: ['female', 'male', 'other'] },
+              alt_mobile: { type: 'string' },
+              address: { type: 'string' },
+              city: { type: 'string' },
+              state: { type: 'string' },
+              pincode: { type: 'string', pattern: '^\\d{6}$' },
+              message: { type: 'string' },
+            },
+          } }, 'application/x-www-form-urlencoded': { schema: { type: 'object' } } } },
+        responses: {
+          201: { description: '{ order_id, payment_session_id, amount, mode, course, fee, gst_amount }' },
+          400: errorResponse('Invalid details, no fee, or online payment not set up.'),
+          404: errorResponse('Course not found.'),
+          409: errorResponse('Already registered for this course.'),
+        },
+      },
+    },
+
+    '/api/public/payments/{orderId}/confirm': {
+      post: {
+        tags: ['Payments'],
+        summary: 'Check a website registration payment',
+        security: [],
+        description:
+          'Reads the order back from Cashfree. Once it is PAID the student is registered (active), enrolled with the fee recorded as paid, and mailed — exactly once, however often this is called — and `result` carries `registration_no`. `status` is created, paid, failed or expired. Only for payments the website started.',
+        parameters: [{ name: 'orderId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: '{ order_id, purpose, status, amount, mode, result }' }, 404: errorResponse('Payment not found.') },
+      },
+    },
+
+    '/api/public/payments/webhook': {
+      post: {
+        tags: ['Payments'],
+        summary: 'Cashfree payment webhook',
+        security: [],
+        description:
+          'Set as CASHFREE_NOTIFY_URL. Verified by `x-webhook-signature` — base64 HMAC-SHA256 of `x-webhook-timestamp` plus the raw body, keyed with the secret — and then used only as a prompt to read the order back from Cashfree, the same as confirm.',
+        responses: { 200: { description: 'Handled.' }, 401: errorResponse('Signature does not match.') },
+      },
+    },
+
     '/api/public/courses': {
       get: {
         tags: ['Public'],
         summary: 'Courses on offer, for the website cards',
         security: [],
         description:
-          'Every course still offered, by name: its title, sub title, description, duration, lessons, level badge, categories (an array of strings) and card picture (a path in uploads/website). Nothing about fees or enrolments.',
+          'Every course still offered, by name: its title, sub title, description, duration, lessons, level badge, categories (an array of strings), card picture (a path in uploads/website), and what registering costs: `fee`, `gst_percent` and `fee_total` (fee plus GST). Nothing about enrolments.',
         responses: { 200: { description: 'Offered courses.' } },
       },
     },

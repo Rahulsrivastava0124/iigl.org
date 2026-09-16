@@ -313,7 +313,7 @@ export default function CoursePage({ id }) {
           >
             <X className="h-5 w-5" strokeWidth={2} />
           </button>
-          <RegistrationForm courseId={course.id} course={title} />
+          <RegistrationForm courseId={course.id} course={title} fee={course.fee} feeTotal={course.fee_total} />
         </div>
       </dialog>
     </main>

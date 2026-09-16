@@ -16,7 +16,15 @@ const money = (v) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDig
 const v = (x) => (x == null || x === '' ? '' : String(x));
 const day = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '');
 const statusLabel = (s) => ({ 0: 'Pending', 1: 'Approved', 2: 'Declined' }[Number(s)] ?? '');
-const modeLabel = (m) => ({ cash: 'Cash', upi: 'UPI', card: 'Card', bank: 'Bank transfer', cheque: 'Cheque' }[String(m ?? '').trim().toLowerCase()] ?? v(m));
+const ONLINE = { upi: 'UPI', debit_card: 'Debit card', credit_card: 'Credit card', net_banking: 'Netbanking', wallet: 'Wallet', pay_later: 'Pay later', cardless_emi: 'Cardless EMI', credit_card_emi: 'Credit card EMI', debit_card_emi: 'Debit card EMI', bank_transfer: 'Bank transfer' };
+const modeLabel = (m) => {
+  const key = String(m ?? '').trim().toLowerCase();
+  if (key.startsWith('online_')) {
+    const method = key.slice(7);
+    return `Online (${ONLINE[method] ?? method.replace(/_/g, ' ')})`;
+  }
+  return { cash: 'Cash', upi: 'UPI', card: 'Card', bank: 'Bank transfer', cheque: 'Cheque', online: 'Online' }[key] ?? v(m);
+};
 const periodText = from && to ? `${from} to ${to}` : from ? `From ${from}` : to ? `Up to ${to}` : 'All movements';
 %>
 <!doctype html>

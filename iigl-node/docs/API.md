@@ -1,6 +1,6 @@
 # IIGL API
 
-272 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
+281 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
 
 The interactive version is at `/docs` when the server is running, and the raw
 document at `/openapi.json`.
@@ -509,6 +509,20 @@ Commission billed to a laboratory on a period, its grace days, and the lock on c
 | GET | `/api/messages/employer` | session | — | — | 401, 403 | Who this account writes to |
 | GET | `/api/messages/recipients` | session | — | — | 401, 403 | Everybody this account may write to |
 
+## Payments
+
+| Method | Path | Auth | Query | Body | Fails | Purpose |
+| --- | --- | --- | --- | --- | --- | --- |
+| POST | `/api/payments/{orderId}/confirm` | session | — | — | 401, 403, 404 | Check a payment with Cashfree and fulfil it |
+| POST | `/api/payments/commission` | session | — | **amount**, remark | 400, 401, 403 | Pay commission to head office online |
+| GET | `/api/payments/config` | session | — | — | 401, 403 | Whether online payment is available |
+| POST | `/api/payments/enrolment-fee` | session | — | **enrolment_id**, **amount** | 400, 401, 403, 404 | Take a course fee payment online |
+| POST | `/api/payments/student-registration` | session | — | **course_id**, **name**, **mobile**, **email** | 400, 401, 403, 409 | Register a student and take the course fee online |
+| POST | `/api/public/payments/{orderId}/confirm` | public | — | — | 404 | Check a website registration payment |
+| GET | `/api/public/payments/config` | public | — | — | — | Whether online payment is available |
+| POST | `/api/public/payments/webhook` | public | — | — | 401 | Cashfree payment webhook |
+| POST | `/api/public/student-registrations/pay` | public | — | **course_id**, **name**, **mobile**, **email**, father_name, dob, gender, alt_mobile, +5 more | 400, 404, 409 | Register for a course and pay its fee online |
+
 ## Settings
 
 | Method | Path | Auth | Query | Body | Fails | Purpose |
@@ -530,4 +544,4 @@ Commission billed to a laboratory on a period, its grace days, and the lock on c
 
 Bold body fields are required.
 
-272 endpoints: 31 public, 241 requiring a session.
+281 endpoints: 35 public, 246 requiring a session.

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
+  Alert,
   Box,
   Button,
   Grid,
@@ -14,11 +15,13 @@ import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
 import { DateField, Panel } from '../components/ui';
+import { payWithCashfree, TEST_MODE_NOTE, type PaymentConfig, type StartedPayment } from '../lib/cashfree';
 import FileField from '../components/FileField';
 
 interface Course {
   id: number;
   name: string;
+  fee?: string | number;
 }
 
 type Status = 'pending' | 'registered' | 'active';
@@ -80,6 +83,44 @@ export default function StudentCreate() {
   });
 
   const [busy, setBusy] = useState(false);
+
+  // Online payment: whether Cashfree is set up, and whether it is test mode.
+  const gateway = useFetch<{ data: PaymentConfig }>('/payments/config');
+  const gatewayOn = Boolean(gateway.data?.data.enabled);
+  const testMode = gateway.data?.data.mode !== 'production';
+  const chosen = courseList.find((c) => String(c.id) === String(form.course_id));
+
+  /**
+   * Register and take the course fee online. The fee (plus GST) is priced by
+   * the API; the student and the enrolment are written only once Cashfree
+   * confirms the payment, and arrive active with the fee recorded as paid.
+   */
+  const registerAndPay = async () => {
+    if (!form.name.trim() || !form.mobile.trim() || !form.email.trim() || !form.course_id) {
+      toast.error('Name, mobile, email and a course are needed to take the fee online.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const started = await api.post<{ data: StartedPayment & { course: string } }>('/payments/student-registration', {
+        ...form,
+        course_id: Number(form.course_id),
+        ...docs,
+      });
+      const outcome = await payWithCashfree(started.data);
+      if (outcome.status === 'paid') {
+        const no = String(outcome.result?.registration_no ?? '');
+        toast.ok(`${form.name} registered as ${no} and enrolled — fee paid online${testMode ? ' (test mode)' : ''}.`);
+        navigate('/students');
+      } else {
+        toast.error('The payment was not completed. The student has not been registered.');
+      }
+    } catch (err) {
+      toast.error(messageOf(err));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const set = (key: keyof typeof form, value: string) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -291,6 +332,12 @@ export default function StudentCreate() {
           </Grid>
         </Grid>
 
+        {gatewayOn && testMode && (
+          <Alert severity="warning" sx={{ mt: 3 }}>
+            {TEST_MODE_NOTE}
+          </Alert>
+        )}
+
         <Stack
           direction="row"
           spacing={2}
@@ -299,6 +346,14 @@ export default function StudentCreate() {
           <Button variant="outlined" onClick={() => navigate('/students')}>
             Cancel
           </Button>
+          {/* Takes the course fee in Cashfree's window; registers only once it is paid. */}
+          {gatewayOn && (
+            <Button variant="outlined" color="success" disabled={busy || !form.course_id} onClick={registerAndPay}>
+              {chosen?.fee !== undefined && Number(chosen.fee) > 0
+                ? `Register & pay ₹${Number(chosen.fee).toLocaleString('en-IN')}+GST online`
+                : 'Register & pay online'}
+            </Button>
+          )}
           <Button variant="contained" type="submit" disabled={busy}>
             {busy ? 'Registering…' : 'Register Student'}
           </Button>

@@ -2291,6 +2291,60 @@ export const extraPaths: Record<string, unknown> = {
     },
   },
 
+  // --------------------------------------------------------------- payments
+  '/api/payments/config': {
+    get: {
+      tags: ['Payments'],
+      summary: 'Whether online payment is available',
+      description: '`enabled` is false until the Cashfree keys are set; `mode` is sandbox (test) or production.',
+      responses: { 200: ok('{ enabled, mode, gateway }'), ...guarded },
+    },
+  },
+
+  '/api/payments/commission': {
+    post: {
+      tags: ['Payments'],
+      summary: 'Pay commission to head office online',
+      description:
+        'A laboratory account only. Makes a Cashfree order for the amount and returns `payment_session_id` for the checkout. Once confirmed paid, an **approved** commission remittance is recorded (pay mode online, the Cashfree payment id as its reference) — the gateway has already confirmed the money.',
+      requestBody: body({ amount: { type: 'number', minimum: 1 }, remark: str }, ['amount']),
+      responses: { 201: ok('{ order_id, payment_session_id, amount, mode }'), 400: err('Invalid amount, or online payment not set up.'), ...guarded },
+    },
+  },
+
+  '/api/payments/student-registration': {
+    post: {
+      tags: ['Payments'],
+      summary: 'Register a student and take the course fee online',
+      description:
+        'Head office only. The registration details (and optional photo, id_proof, qualification_doc upload paths) with `course_id`; priced on the server as fee plus GST. Nothing is registered until the payment is confirmed.',
+      requestBody: body({ course_id: int, name: { type: 'string' }, mobile: { type: 'string' }, email: { type: 'string' } }, ['course_id', 'name', 'mobile', 'email']),
+      responses: { 201: ok('{ order_id, payment_session_id, amount, mode, course, fee, gst_amount }'), 400: err('Invalid details, no fee, or online payment not set up.'), 409: err('Already registered for this course.'), ...guarded },
+    },
+  },
+
+  '/api/payments/enrolment-fee': {
+    post: {
+      tags: ['Payments'],
+      summary: 'Take a course fee payment online',
+      description:
+        'Head office only. A Cashfree order for part or all of what is still due on an enrolment (never more). Once confirmed paid, the amount is added to the enrolment’s fee paid, as a cash payment is, with the Cashfree reference noted.',
+      requestBody: body({ enrolment_id: int, amount: { type: 'number', minimum: 1 } }, ['enrolment_id', 'amount']),
+      responses: { 201: ok('{ order_id, payment_session_id, amount, mode }'), 400: err('Invalid amount, more than is due, or online payment not set up.'), 404: err('Enrolment not found.'), ...guarded },
+    },
+  },
+
+  '/api/payments/{orderId}/confirm': {
+    post: {
+      tags: ['Payments'],
+      summary: 'Check a payment with Cashfree and fulfil it',
+      description:
+        'Head office, or the account that started it. Reads the order back from Cashfree; once PAID, makes what it pays for exactly once (the commission remittance, or the student and enrolment) and returns it in `result`.',
+      parameters: [{ name: 'orderId', in: 'path', required: true, schema: { type: 'string' } }],
+      responses: { 200: ok('{ order_id, purpose, status, amount, mode, result }'), 404: err('Payment not found.'), ...guarded },
+    },
+  },
+
   // ---------------------------------------------------------- permissions
   '/api/users/me/permissions': {
     get: {

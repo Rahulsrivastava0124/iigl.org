@@ -8,7 +8,9 @@ import { fileRoutes } from './file.routes.js';
 import { locateLaboratory, needsLookup, storedPoint, type Point } from '../services/geocode.service.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { sendRegistrationReceived } from '../lib/mail.js';
-import { nextRegistrationNo } from './student.routes.js';
+import { assertNotRegistered, courseForRegistration, courseGstPercent, gstOn, insertRegistration, readRegistration } from '../services/registration.service.js';
+import { assertPublicPayment, confirmPayment, paymentConfig, startRegistrationPayment } from '../services/payment.service.js';
+import { verifyWebhook } from '../lib/cashfree.js';
 import { expandAttributes } from '../services/report.service.js';
 import { cardDataFor, loadChrome } from '../services/card.service.js';
 import { renderCardsPdf, type CardKind } from '../services/pdf.service.js';
@@ -305,19 +307,28 @@ publicRoutes.get(
 
 /**
  * The courses on offer, as the website's Available Courses cards show them:
- * name, description, duration, lessons, level, categories and picture. Retired
- * courses are left out, and nothing about fees or enrolments is exposed.
+ * name, description, duration, lessons, level, categories and picture — and the
+ * fee a student pays to register (`fee`, `gst_percent`, `fee_total` = fee plus
+ * GST), which the registration form quotes before taking it online. Retired
+ * courses are left out; nothing about enrolments is exposed.
  */
 publicRoutes.get(
   '/courses',
   wrap(async (_req, res) => {
     const rows = await db
       .selectFrom('courses')
-      .select(['id', 'name', 'code', 'description', 'duration', 'lessons', 'level', 'categories', 'image', 'title', 'subtitle', 'details', 'syllabus'])
+      .select(['id', 'name', 'code', 'description', 'duration', 'lessons', 'level', 'categories', 'image', 'title', 'subtitle', 'details', 'syllabus', 'fee', 'gst_id', 'gst_percent'])
       .where('is_active', '=', 1)
       .orderBy('name')
       .execute();
-    res.json({ data: rows });
+    const data = await Promise.all(
+      rows.map(async ({ gst_id, gst_percent, fee, ...r }) => {
+        const percent = await courseGstPercent({ gst_id, gst_percent });
+        const base = Number(fee ?? 0);
+        return { ...r, fee: base, gst_percent: percent, fee_total: Math.round((base + gstOn(base, percent)) * 100) / 100 };
+      }),
+    );
+    res.json({ data });
   }),
 );
 
@@ -365,111 +376,93 @@ publicRoutes.get(
  * anyone on the internet can make is a storage bill and a malware host. Head
  * office attaches them when the student comes in.
  */
-const GENDERS = ['female', 'male', 'other'];
-
 publicRoutes.post(
   '/student-registrations',
   wrap(async (req, res) => {
     // Posted as a plain form from the website's own origin, which reads the reply.
     res.set('Access-Control-Allow-Origin', '*');
-    const b = req.body ?? {};
-    const clean = (v: unknown) => String(v ?? '').trim();
-    const capped = (key: string, label: string, max: number): string | null => {
-      const v = clean(b[key]);
-      if (v.length > max) throw badRequest(`${label} is at most ${max} characters.`);
-      return v || null;
-    };
-    const phone = (key: string, label: string, needed: boolean): string | null => {
-      const v = clean(b[key]).replace(/[\s-]/g, '');
-      if (!v && !needed) return null;
-      if (!/^\+?\d{10,15}$/.test(v)) throw badRequest(`Enter a valid ${label}.`);
-      return v;
-    };
+    const details = readRegistration(req.body ?? {});
+    const course = await courseForRegistration(details.course_id);
+    await assertNotRegistered(details.mobile, course);
 
-    const name = capped('name', 'Name', 150);
-    if (!name) throw badRequest('Enter your name.');
-    const mobile = phone('mobile', 'mobile number', true) as string;
-    const altMobile = phone('alt_mobile', 'alternate number', false);
-    const email = clean(b.email);
-    if (email.length > 150 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      throw badRequest('Enter a valid email address — the confirmation is sent there.');
-    }
-    const dob = clean(b.dob) || null;
-    if (
-      dob &&
-      (!/^\d{4}-\d{2}-\d{2}$/.test(dob) ||
-        Number.isNaN(Date.parse(`${dob}T00:00:00Z`)) ||
-        dob >= new Date().toISOString().slice(0, 10))
-    ) {
-      throw badRequest('Date of birth must be a past date.');
-    }
-    const gender = clean(b.gender) || null;
-    if (gender && !GENDERS.includes(gender)) throw badRequest('Gender is female, male or other.');
-    const pincode = clean(b.pincode) || null;
-    if (pincode && !/^\d{6}$/.test(pincode)) throw badRequest('Pincode is six digits.');
-    const fatherName = capped('father_name', 'Father / guardian name', 150);
-    const address = capped('address', 'Address', 255);
-    const city = capped('city', 'City', 100);
-    const state = capped('state', 'State', 100);
-    const message = capped('message', 'Message', 1000);
-
-    const course = await db
-      .selectFrom('courses')
-      .select(['id', 'name', 'title'])
-      .where('id', '=', Number(b.course_id) || 0)
-      .where('is_active', '=', 1)
-      .executeTakeFirst();
-    if (!course) throw notFound('Course not found.');
-    const courseName = String(course.title || course.name || '');
-
-    // A second press, or the same person twice: one pending registration per number per course.
-    const again = await db
-      .selectFrom('students')
-      .select('id')
-      .where('mobile', '=', mobile)
-      .where('course_id', '=', course.id)
-      .where('status', '=', 'pending')
-      .executeTakeFirst();
-    if (again) throw conflict(`This mobile number is already registered for ${courseName}. Our team will call you shortly.`);
-
-    const registrationNo = await db.transaction().execute(async (trx) => {
-      const number = await nextRegistrationNo(trx);
-      await trx
-        .insertInto('students')
-        .values({
-          registration_no: number,
-          name,
-          father_name: fatherName,
-          // The 'YYYY-MM-DD' text as given: a Date would be shifted by the server's timezone.
-          dob: dob as never,
-          gender,
-          mobile,
-          alt_mobile: altMobile,
-          email,
-          address,
-          city,
-          state,
-          pincode,
-          registration_date: new Date(),
-          course_id: course.id,
-          status: 'pending',
-          remark: ['Registered on the website.', message].filter(Boolean).join(' '),
-          created_at: new Date(),
-          updated_at: new Date(),
-        })
-        .execute();
-      return number;
-    });
+    const { registrationNo } = await db.transaction().execute((trx) =>
+      insertRegistration(trx as typeof db, details, course, { remark: 'Registered on the website.', addedBy: null }),
+    );
 
     // Saved whatever the mail does: a refused mail must not lose the registration.
     let mailed = true;
     try {
-      await sendRegistrationReceived(email, { name, registrationNo, course: courseName });
+      await sendRegistrationReceived(details.email, { name: details.name, registrationNo, course: course.name });
     } catch (e) {
       mailed = false;
       console.warn(`[registration ${registrationNo}] confirmation mail not sent: ${(e as Error).message}`);
     }
-    res.status(201).json({ data: { registration_no: registrationNo, course: courseName, mailed } });
+    res.status(201).json({ data: { registration_no: registrationNo, course: course.name, mailed } });
+  }),
+);
+
+// ------------------------------------------------------------ online payment
+
+/** Whether the website may offer to pay online, and whether it is test mode. */
+publicRoutes.get('/payments/config', (_req, res) => {
+  res.json({ data: paymentConfig() });
+});
+
+/**
+ * Register for a course and pay its fee online. Takes the same details as
+ * `/student-registrations`, prices the course (fee plus GST) on the server, and
+ * returns the Cashfree session the website opens its checkout with. Nothing is
+ * registered until the payment is confirmed. Rate-limited with registrations.
+ */
+publicRoutes.post(
+  '/student-registrations/pay',
+  wrap(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.status(201).json({ data: await startRegistrationPayment(req.body ?? {}, null) });
+  }),
+);
+
+/**
+ * Where a website registration payment stands, checked with Cashfree. Once it
+ * is paid the student is registered and enrolled, and the answer carries the
+ * registration number. Only for payments the website itself started.
+ */
+publicRoutes.post(
+  '/payments/:orderId/confirm',
+  wrap(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    const orderId = String(req.params.orderId);
+    await assertPublicPayment(orderId);
+    const outcome = await confirmPayment(orderId);
+    // The student's own registration, nothing about who else paid.
+    res.json({ data: outcome });
+  }),
+);
+
+/**
+ * Cashfree's server-to-server notice that a payment settled. Only believed
+ * when its signature checks out against the raw body; even then it is used
+ * only as a prompt to read the order back from Cashfree, the same as the
+ * browser's confirm. Always answers 200 once verified, so Cashfree does not
+ * keep retrying a payment that is already handled.
+ */
+publicRoutes.post(
+  '/payments/webhook',
+  wrap(async (req, res) => {
+    const raw = (req as typeof req & { rawBody?: string }).rawBody ?? '';
+    if (!verifyWebhook(raw, req.get('x-webhook-timestamp'), req.get('x-webhook-signature'))) {
+      res.status(401).json({ error: 'invalid_signature', message: 'Signature does not match.' });
+      return;
+    }
+    const orderId = req.body?.data?.order?.order_id;
+    if (typeof orderId === 'string' && orderId) {
+      try {
+        await confirmPayment(orderId);
+      } catch (e) {
+        console.warn(`[payment webhook ${orderId}] ${(e as Error).message}`);
+      }
+    }
+    res.json({ ok: true });
   }),
 );
 

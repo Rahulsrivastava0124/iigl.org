@@ -103,4 +103,26 @@ export const env = {
     bucket: process.env.R2_BUCKET_NAME ?? '',
     publicUrl: (process.env.R2_PUBLIC_URL ?? '').replace(/\/+$/, ''),
   },
+  /**
+   * The Cashfree payment gateway. Without an app id and secret it is off, and
+   * every screen that offers online payment says so instead of offering it.
+   *
+   * `CASHFREE_ENV` is `sandbox` unless set to `production` — test keys
+   * (from the Cashfree dashboard's Test mode) only work against sandbox, and
+   * nothing real moves there.
+   *
+   * `CASHFREE_NOTIFY_URL` is where Cashfree calls back when a payment settles:
+   * this API's `/api/public/payments/webhook`, on a public https address. It is
+   * optional — the payer's own browser also asks the API to check the order
+   * the moment the checkout closes — but it catches payments whose browser
+   * went away before that.
+   */
+  cashfree: {
+    appId: process.env.CASHFREE_APP_ID ?? '',
+    // Cashfree's dashboard calls it the Secret Key, its API the client secret: either name works.
+    secretKey: process.env.CASHFREE_SECRET_KEY ?? process.env.CASHFREE_CLIENT_SECRET ?? '',
+    mode: (process.env.CASHFREE_ENV === 'production' ? 'production' : 'sandbox') as 'sandbox' | 'production',
+    apiVersion: process.env.CASHFREE_API_VERSION ?? '2023-08-01',
+    notifyUrl: (process.env.CASHFREE_NOTIFY_URL ?? '').trim(),
+  },
 };

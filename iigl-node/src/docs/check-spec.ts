@@ -28,6 +28,7 @@ import { messageRoutes } from '../routes/message.routes.js';
 import { roleRoutes } from '../routes/role.routes.js';
 import { studentRoutes } from '../routes/student.routes.js';
 import { courseRoutes } from '../routes/course.routes.js';
+import { paymentRoutes } from '../routes/payment.routes.js';
 import { studentCertificateRoutes } from '../routes/student-certificate.routes.js';
 import { enquiryRoutes } from '../routes/enquiry.routes.js';
 import { couponRoutes } from '../routes/coupon.routes.js';
@@ -57,6 +58,7 @@ const MOUNTS: Array<[string, Router]> = [
   ['/api/roles', roleRoutes],
   ['/api/students', studentRoutes],
   ['/api/courses', courseRoutes],
+  ['/api/payments', paymentRoutes],
   ['/api/student-certificates', studentCertificateRoutes],
   ['/api/enquiries', enquiryRoutes],
   ['/api/coupons', couponRoutes],

@@ -22,6 +22,7 @@ import { messageRoutes } from './routes/message.routes.js';
 import { roleRoutes } from './routes/role.routes.js';
 import { studentRoutes } from './routes/student.routes.js';
 import { courseRoutes } from './routes/course.routes.js';
+import { paymentRoutes } from './routes/payment.routes.js';
 import { studentCertificateRoutes } from './routes/student-certificate.routes.js';
 import { enquiryRoutes } from './routes/enquiry.routes.js';
 import { couponRoutes } from './routes/coupon.routes.js';
@@ -93,7 +94,18 @@ export function createApp() {
     });
   }
 
-  app.use(express.json({ limit: '2mb' }));
+  // The raw body is kept for Cashfree's webhook alone: its signature is over
+  // the bytes as they arrived, which the parsed object cannot reproduce.
+  app.use(
+    express.json({
+      limit: '2mb',
+      verify: (req, _res, buf) => {
+        if ((req as { url?: string }).url?.startsWith('/api/public/payments/webhook')) {
+          (req as { rawBody?: string }).rawBody = buf.toString('utf8');
+        }
+      },
+    }),
+  );
   app.use(express.urlencoded({ extended: true }));
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
@@ -127,6 +139,8 @@ export function createApp() {
   app.use('/api/public/verify-log', verifyLogLimiter);
   app.use('/api/public/course-enquiries', courseEnquiryLimiter);
   app.use('/api/public/student-registrations', courseEnquiryLimiter);
+  // Confirming a website payment asks Cashfree; the webhook beside it is not limited.
+  app.use('/api/public/payments/:orderId/confirm', verifyLogLimiter);
   app.use('/api/public/student-certificates', verifyLogLimiter);
   app.use('/api/cards', renderLimiter);
   // The public original certificate starts the same renderer.
@@ -203,6 +217,7 @@ export function createApp() {
   app.use('/api/roles', roleRoutes);
   app.use('/api/students', studentRoutes);
   app.use('/api/courses', courseRoutes);
+  app.use('/api/payments', paymentRoutes);
   app.use('/api/student-certificates', studentCertificateRoutes);
   app.use('/api/enquiries', enquiryRoutes);
   app.use('/api/master', masterRoutes);
