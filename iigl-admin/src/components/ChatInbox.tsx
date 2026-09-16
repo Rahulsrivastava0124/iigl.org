@@ -460,6 +460,19 @@ export default function ChatInbox({
             const mine = m.from_user === me;
             const newDay = i === 0 || dayLabel(thread[i - 1].created_at) !== dayLabel(m.created_at);
             const waiting = m.kind === 'request' && !m.resolved_at;
+            // The sender's picture heads each run of their messages; the rest keep its space.
+            const firstOfRun = newDay || thread[i - 1].from_user !== m.from_user;
+            const avatar = firstOfRun ? (
+              <Avatar
+                src={fileUrl(m.from_photo) ?? undefined}
+                alt=""
+                sx={{ width: 32, height: 32, fontSize: 12, bgcolor: mine ? BRAND.navySoft : BRAND.navy, flexShrink: 0 }}
+              >
+                {initials(m.from_name ?? (mine ? (user?.fullname ?? '') : (active?.name ?? '')))}
+              </Avatar>
+            ) : (
+              <Box sx={{ width: 32, flexShrink: 0 }} />
+            );
             return (
               <Box key={m.id}>
                 {newDay && (
@@ -467,7 +480,16 @@ export default function ChatInbox({
                     <Chip size="small" label={dayLabel(m.created_at)} sx={{ bgcolor: '#fff' }} />
                   </Box>
                 )}
-                <Box sx={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start', mb: 0.75 }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    flexDirection: mine ? 'row-reverse' : 'row',
+                    alignItems: 'flex-start',
+                    gap: 1,
+                    mb: 0.75,
+                  }}
+                >
+                  {avatar}
                   <Box
                     sx={{
                       maxWidth: '72%',

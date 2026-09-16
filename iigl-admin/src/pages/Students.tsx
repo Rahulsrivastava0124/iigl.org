@@ -1,12 +1,8 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import {
-  Avatar,
-  Box,
   Button,
   Grid,
-  Link,
-  Stack,
   MenuItem,
   Tab,
   Table,
@@ -21,7 +17,6 @@ import {
 import AddIcon from '@mui/icons-material/AddOutlined';
 import EditIcon from '@mui/icons-material/EditOutlined';
 import ViewIcon from '@mui/icons-material/VisibilityOutlined';
-import CertificateIcon from '@mui/icons-material/WorkspacePremiumOutlined';
 import EnrolIcon from '@mui/icons-material/SchoolOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import { useDebounced, useFetch } from '../lib/useFetch';
@@ -43,7 +38,6 @@ import {
 } from '../components/ui';
 import type { Tone } from '../components/ui';
 import type { Paged } from '../lib/api';
-import { fileUrl } from '../lib/config';
 
 type Status = 'pending' | 'registered' | 'active';
 
@@ -114,8 +108,6 @@ export default function Students() {
   const [enrolling, setEnrolling] = useState<Student | null>(null);
   const [enrol, setEnrol] = useState({ course_id: '', batch: '', start_date: '', end_date: '' });
   const [deleting, setDeleting] = useState<Student | null>(null);
-  /** The registration open in the read-only view. */
-  const [viewing, setViewing] = useState<Student | null>(null);
   const [busy, setBusy] = useState(false);
 
   const go = (next: { status?: string; page?: number }) => {
@@ -254,19 +246,12 @@ export default function Students() {
                       <IconAction
                         label="View registration"
                         icon={ViewIcon}
-                        onClick={() => setViewing(s)}
+                        to={`/students/${s.id}`}
                       />
                       <IconAction
                         label="Edit registration"
                         icon={EditIcon}
                         to={`/students/${s.id}/edit`}
-                      />
-                      {/* Their certificates, and any finished course still
-                          waiting for one — the screen they are issued from. */}
-                      <IconAction
-                        label="Certificates"
-                        icon={CertificateIcon}
-                        to={`/student-certificates?student_id=${s.id}`}
                       />
                       <IconAction
                         label="Delete registration"
@@ -342,14 +327,6 @@ export default function Students() {
         </Dialog>
       )}
 
-      {viewing && (
-        <RegistrationView
-          student={viewing}
-          course={courseName(viewing.course_id)}
-          onClose={() => setViewing(null)}
-        />
-      )}
-
       <ConfirmDialog
         open={Boolean(deleting)}
         title="Delete Registration"
@@ -366,226 +343,5 @@ export default function Students() {
         busy={busy}
       />
     </>
-  );
-}
-
-interface Enrolment {
-  id: number;
-  course_name: string | null;
-  batch: string | null;
-  start_date: string | null;
-  end_date: string | null;
-  status: string;
-  fee: string | number | null;
-  final_fee: string | number | null;
-  fee_paid: string | number | null;
-  certificate_id: number | null;
-}
-
-interface IssuedCertificate {
-  id: number;
-  certificate_no: string;
-  course_name: string | null;
-  grade: string | null;
-  issued_on: string | null;
-}
-
-/**
- * One registration, read rather than edited: who they are, the papers they
- * brought, every course they have been enrolled on and every certificate they
- * have been issued. Edit and Certificates are one press away in the footer, so
- * whoever opened this to check something can go straight on to fixing it.
- */
-function RegistrationView({
-  student: s,
-  course,
-  onClose,
-}: {
-  student: Student;
-  course: string;
-  onClose: () => void;
-}) {
-  const enrolments = useFetch<Paged<Enrolment>>(`/courses/enrolments?student_id=${s.id}&per_page=50`);
-  const certificates = useFetch<Paged<IssuedCertificate>>(
-    `/student-certificates?student_id=${s.id}&per_page=50`,
-  );
-  const enrolRows = enrolments.data?.data ?? [];
-  const certRows = certificates.data?.data ?? [];
-
-  const fact = (label: string, value: ReactNode) => (
-    <Box sx={{ minWidth: 0 }}>
-      <Typography variant="overline" color="text.secondary" sx={{ display: 'block' }}>
-        {label}
-      </Typography>
-      <Typography sx={{ fontSize: 13.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-        {value || '—'}
-      </Typography>
-    </Box>
-  );
-
-  const place = [s.address, s.city, s.state, s.pincode].filter(Boolean).join(', ');
-  const documents = [
-    { label: 'Photo', path: s.photo },
-    { label: 'ID proof', path: s.id_proof },
-    { label: 'Qualification', path: s.qualification_doc },
-  ].filter((d) => d.path);
-
-  return (
-    <Dialog
-      title={`${s.name} · ${s.registration_no}`}
-      onClose={onClose}
-      onSubmit={onClose}
-      submitLabel="Done"
-      maxWidth="md"
-      /* In the title bar: they act on the record rather than closing the
-         dialog, so they sit with its name, away from Cancel and Done. */
-      actions={
-        <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<EditIcon fontSize="small" />}
-            component={RouterLink}
-            to={`/students/${s.id}/edit`}
-          >
-            Edit
-          </Button>
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<CertificateIcon fontSize="small" />}
-            component={RouterLink}
-            to={`/student-certificates?student_id=${s.id}`}
-          >
-            Certificates
-          </Button>
-        </Stack>
-      }
-    >
-      <Stack spacing={2.5}>
-        <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-          <Avatar src={fileUrl(s.photo) ?? undefined} sx={{ width: 64, height: 64, bgcolor: 'primary.main' }}>
-            {s.name.charAt(0).toUpperCase()}
-          </Avatar>
-          <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ fontWeight: 600, fontSize: 16 }}>{s.name}</Typography>
-            <Typography variant="body2" color="text.secondary" className="mono">
-              {s.registration_no}
-            </Typography>
-          </Box>
-          <Box sx={{ ml: 'auto' }}>
-            <StateChip {...(STATE[s.status] ?? { tone: 'plain', label: s.status })} />
-          </Box>
-        </Stack>
-
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, minmax(0, 1fr))' },
-            gap: 2,
-          }}
-        >
-          {fact("Father's name", s.father_name)}
-          {fact('Date of birth', s.dob?.slice(0, 10))}
-          {fact('Gender', s.gender)}
-          {fact('Mobile', s.mobile)}
-          {fact('Alternate mobile', s.alt_mobile)}
-          {fact('Email', s.email)}
-          {fact('Course', course)}
-          {fact('Registered', s.registration_date?.slice(0, 10))}
-          {fact('Address', place)}
-        </Box>
-
-        {s.remark && fact('Remark', s.remark)}
-
-        {documents.length > 0 && (
-          <Box>
-            <Typography sx={{ fontSize: 13.5, fontWeight: 600, mb: 0.5 }}>Documents</Typography>
-            <Stack direction="row" spacing={2}>
-              {documents.map((d) => (
-                <Link key={d.label} href={fileUrl(d.path) ?? undefined} target="_blank" rel="noopener">
-                  {d.label}
-                </Link>
-              ))}
-            </Stack>
-          </Box>
-        )}
-
-        <Box>
-          <Typography sx={{ fontSize: 13.5, fontWeight: 600, mb: 0.5 }}>Enrolments</Typography>
-          <TableFrame
-            loading={enrolments.loading}
-            error={enrolments.error}
-            empty={enrolRows.length === 0}
-            emptyText="Not enrolled on a course yet."
-          >
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Course</TableCell>
-                  <TableCell>Dates</TableCell>
-                  <TableCell>Fee</TableCell>
-                  <TableCell>Paid</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Certificate</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {enrolRows.map((e) => (
-                  <TableRow key={e.id} hover>
-                    <TableCell sx={{ whiteSpace: 'normal', minWidth: 140 }}>
-                      {e.course_name ?? '—'}
-                      {e.batch && (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                          {e.batch}
-                        </Typography>
-                      )}
-                    </TableCell>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      {e.start_date?.slice(0, 10) ?? '—'} – {e.end_date?.slice(0, 10) ?? '—'}
-                    </TableCell>
-                    <TableCell>{money(Number(e.final_fee ?? e.fee ?? 0))}</TableCell>
-                    <TableCell>{money(Number(e.fee_paid ?? 0))}</TableCell>
-                    <TableCell sx={{ textTransform: 'capitalize' }}>{e.status}</TableCell>
-                    <TableCell>{e.certificate_id ? 'Issued' : '—'}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableFrame>
-        </Box>
-
-        <Box>
-          <Typography sx={{ fontSize: 13.5, fontWeight: 600, mb: 0.5 }}>Certificates</Typography>
-          <TableFrame
-            loading={certificates.loading}
-            error={certificates.error}
-            empty={certRows.length === 0}
-            emptyText="No certificate issued yet. One is issued when an enrolment is completed."
-          >
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Certificate no</TableCell>
-                  <TableCell>Course</TableCell>
-                  <TableCell>Grade</TableCell>
-                  <TableCell>Issued</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {certRows.map((c) => (
-                  <TableRow key={c.id} hover>
-                    <TableCell className="mono">{c.certificate_no}</TableCell>
-                    <TableCell>{c.course_name ?? '—'}</TableCell>
-                    <TableCell>{c.grade ?? '—'}</TableCell>
-                    <TableCell>{c.issued_on?.slice(0, 10) ?? '—'}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableFrame>
-        </Box>
-      </Stack>
-    </Dialog>
   );
 }

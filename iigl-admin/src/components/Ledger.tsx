@@ -48,6 +48,8 @@ export interface LedgerPage {
   balance: number;
   pending_out: number;
   pending_in: number;
+  /** The payment modes stored on the period's rows, lower-cased. */
+  modes?: string[];
   total: number;
 }
 

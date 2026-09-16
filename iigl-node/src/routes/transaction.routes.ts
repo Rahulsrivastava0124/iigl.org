@@ -635,10 +635,10 @@ transactionRoutes.get(
 transactionRoutes.get(
   '/ledger',
   wrap(async (req, res) => {
-    const { target, scope, from, to, status, q, mode } = readLedgerQuery(req);
+    const { target, scope, from, to, status, q, mode, remark } = readLedgerQuery(req);
     const p = readPage(req, 100, 500);
     res.json({
-      data: await ledgerFor(target, p.limit, p.offset, scope, { from, to }, { status, q, mode }),
+      data: await ledgerFor(target, p.limit, p.offset, scope, { from, to }, { status, q, mode, remark }),
     });
   }),
 );
@@ -654,9 +654,9 @@ transactionRoutes.get(
   '/ledger/statement',
   wrap(async (req, res) => {
     // The same filters the list was given, so the sheet is the list on screen.
-    const { target, scope, from, to, status, q, mode } = readLedgerQuery(req);
+    const { target, scope, from, to, status, q, mode, remark } = readLedgerQuery(req);
     const issuedBy = req.user.fullname ?? 'IIGL';
-    const filter = { status, q, mode };
+    const filter = { status, q, mode, remark };
 
     if (req.query.format === 'html') {
       res.type('html').send(await accountStatementHtml(target, scope, { from, to }, issuedBy, filter));
@@ -720,7 +720,9 @@ function readLedgerQuery(req: Parameters<Parameters<typeof transactionRoutes.get
   const q = String(req.query.q ?? '').trim().slice(0, 64) || null;
   // How it was paid: cash, upi, card, bank, cheque. Free text rather than a
   // fixed list, because the older rows carry whatever was typed at the time.
-  const mode = String(req.query.mode ?? '').trim().slice(0, 20) || null;
+  const mode = String(req.query.mode ?? '').trim().slice(0, 40) || null;
+  // Words to look for in the remark.
+  const remark = String(req.query.remark ?? '').trim().slice(0, 100) || null;
 
-  return { target, scope, from, to, status, q, mode };
+  return { target, scope, from, to, status, q, mode, remark };
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Box, Button, Grid, MenuItem, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
 import ExpenseIcon from '@mui/icons-material/ReceiptOutlined';
 import SendIcon from '@mui/icons-material/SendOutlined';
@@ -15,7 +15,7 @@ import { StatementsTable } from '../components/Statements';
 import { useToast } from '../components/Toast';
 import FileField from '../components/FileField';
 import { LedgerTable, LedgerTotals, type LedgerPage } from '../components/Ledger';
-import { PAY_MODE_LABEL } from '../lib/payModes';
+import { payModeLabel } from '../lib/payModes';
 
 /**
  * The wallet: this account's money, and every movement that made it.
@@ -113,6 +113,40 @@ export default function Wallet() {
   const [mode, setMode] = useState('');
   const [refFilter, setRefFilter] = useState('');
   const refTerm = useDebounced(refFilter);
+  /** Words to find in the remark. */
+  const [remarkFilter, setRemarkFilter] = useState('');
+  const remarkTerm = useDebounced(remarkFilter);
+
+  /*
+    The payment types this wallet actually has, not every mode the system knows:
+    an account that has only seen cash and Cashfree was offered cheques and bank
+    transfers that could only ever list nothing. The API names them for the
+    period; they are kept while the next page loads so the list does not empty.
+
+    Gateway payments are stored per method (online_upi, online_debit_card). With
+    more than one, "Online — all methods" comes first and each method follows.
+  */
+  const [modes, setModes] = useState<string[]>([]);
+  const isOnline = (m: string) => m === 'online' || m.startsWith('online_');
+  const onlineKinds = modes.filter(isOnline);
+  const modeOptions: [string, string][] = [
+    ...modes
+      .filter((m) => !isOnline(m))
+      .sort((a, b) => (a === 'cash' ? -1 : b === 'cash' ? 1 : a.localeCompare(b)))
+      .map((m): [string, string] => [m, payModeLabel(m)]),
+    ...(onlineKinds.length === 0
+      ? []
+      : onlineKinds.length === 1
+        ? [['online', payModeLabel(onlineKinds[0])] as [string, string]]
+        : [
+            ['online', 'Online — all methods'] as [string, string],
+            ...onlineKinds.filter((m) => m !== 'online').map((m): [string, string] => [m, payModeLabel(m)]),
+          ]),
+  ];
+  // A choice still in force stays selectable even when the period no longer has it.
+  if (mode !== '' && !modeOptions.some(([value]) => value === mode)) {
+    modeOptions.push([mode, mode === 'online' ? 'Online' : payModeLabel(mode)]);
+  }
 
   const filters = (
     <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
@@ -146,7 +180,7 @@ export default function Wallet() {
         slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
       >
         <MenuItem value="">All</MenuItem>
-        {Object.entries(PAY_MODE_LABEL).map(([value, label]) => (
+        {modeOptions.map(([value, label]) => (
           <MenuItem key={value} value={value}>
             {label}
           </MenuItem>
@@ -161,7 +195,16 @@ export default function Wallet() {
         }}
         width={150}
       />
-      {(period || status !== '' || mode !== '' || refFilter !== '') && (
+      <SearchField
+        placeholder="Remark"
+        value={remarkFilter}
+        onChange={(v) => {
+          setRemarkFilter(v);
+          setPage(1);
+        }}
+        width={170}
+      />
+      {(period || status !== '' || mode !== '' || refFilter !== '' || remarkFilter !== '') && (
         <Button
           size="small"
           onClick={() => {
@@ -169,6 +212,7 @@ export default function Wallet() {
             setStatus('');
             setMode('');
             setRefFilter('');
+            setRemarkFilter('');
           }}
         >
           Clear
@@ -194,6 +238,7 @@ export default function Wallet() {
           if (status !== '') q.set('status', status);
           if (mode !== '') q.set('mode', mode);
           if (refTerm.trim()) q.set('q', refTerm.trim());
+          if (remarkTerm.trim()) q.set('remark', remarkTerm.trim());
           const qs = q.toString();
           window.open(apiUrl(`/transactions/ledger/statement${qs ? `?${qs}` : ''}`), '_blank', 'noopener');
         }}
@@ -211,9 +256,13 @@ export default function Wallet() {
       `${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}` +
       `${status !== '' ? `&status=${status}` : ''}` +
       `${mode !== '' ? `&mode=${mode}` : ''}` +
-      `${refTerm.trim() ? `&q=${encodeURIComponent(refTerm.trim())}` : ''}`,
+      `${refTerm.trim() ? `&q=${encodeURIComponent(refTerm.trim())}` : ''}` +
+      `${remarkTerm.trim() ? `&remark=${encodeURIComponent(remarkTerm.trim())}` : ''}`,
   );
   const account = ledger.data?.data;
+  useEffect(() => {
+    if (account?.modes) setModes(account.modes);
+  }, [account]);
   const entries = account?.entries ?? [];
   const total = account?.total ?? 0;
 

@@ -159,14 +159,9 @@ const ADMIN_GROUPS: Group[] = [
     label: 'Account',
     icon: TransactionsIcon,
     items: [
+      // Head office's movements, and the commission waiting on it, are the
+      // Wallet: a pending remittance is approved or declined on its row there.
       { to: '/wallet', label: 'Wallet' },
-      // What head office does with commission is decide it, which is this
-      // queue. There is no Transaction History beside it: head office's own
-      // movements are the Wallet — the same rows, with the balance they
-      // produced — and a franchise's are its own, read per laboratory on the
-      // laboratory's page. A history that showed either was one screen too
-      // many or somebody else's money.
-      { to: '/transactions?status=0', label: 'Commission Approval' },
     ],
   },
   {
@@ -238,7 +233,6 @@ const ADMIN_GROUPS: Group[] = [
       { to: '/students', label: 'Registration' },
       { to: '/courses?tab=enrolments', label: 'Enrolments' },
       { to: '/courses', label: 'Course' },
-      { to: '/student-certificates', label: 'Certificates' },
       // A coupon is money off a course fee. The reduction itself is applied on
       // the enrolment, under Student › Enrolments, which is where the fee is —
       // there is no separate Discount screen any more.

@@ -200,8 +200,8 @@ Remittances, approvals, dues collection and wallet balance.
 | POST | `/api/transactions/expense` | session | — | **amount**, **remark**, pay_mode, transaction_no, attachment | 400, 401, 403 | Record an expense |
 | GET | `/api/transactions/expense-wallet` | session | — | — | 401, 403 | Your expense wallet |
 | POST | `/api/transactions/float` | session | — | **user_id**, **amount**, **pay_mode**, transaction_no, remark | 400, 401, 403 | Send an employee an expense float |
-| GET | `/api/transactions/ledger` | session | `user_id`, `scope`, `from`, `to`, `status`, `q`, `mode` | — | 401, 403 | Running account |
-| GET | `/api/transactions/ledger/statement` | session | `user_id`, `scope`, `from`, `to`, `status`, `q`, `mode`, `format` | — | 400, 401, 403 | Download an account statement |
+| GET | `/api/transactions/ledger` | session | `user_id`, `scope`, `from`, `to`, `status`, `q`, `mode`, `remark` | — | 401, 403 | Running account |
+| GET | `/api/transactions/ledger/statement` | session | `user_id`, `scope`, `from`, `to`, `status`, `q`, `mode`, `remark`, `format` | — | 400, 401, 403 | Download an account statement |
 | GET | `/api/transactions/wallet` | session | — | — | 401, 403 | Your balance |
 
 ## Users

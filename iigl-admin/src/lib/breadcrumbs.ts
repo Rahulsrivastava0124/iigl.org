@@ -47,7 +47,6 @@ const SECTIONS: Record<string, string> = {
   students: 'Registration',
   courses: 'Course',
   coupons: 'Discount Coupons',
-  'student-certificates': 'Certificates',
   enquiries: 'Enquiry',
 };
 
@@ -77,7 +76,7 @@ const VIEWS: Record<string, Record<string, string>> = {
   categories: { 'tab=sub': 'Sub Categories' },
   attributes: { 'tab=values': 'Attribute Values' },
   pricing: { 'scope=laboratory': 'Laboratory Prices' },
-  transactions: { 'status=0': 'Commission Approval', 'type=commision': 'Commission History' },
+  transactions: { 'type=commision': 'Commission History' },
   customers: { 'tab=all': 'All Customers', 'tab=unregistered': 'Not Registered' },
   content: {
     'tab=banners': 'Banners',
@@ -137,6 +136,7 @@ const RECORD_PATH: Record<string, (id: string) => string> = {
   orders: (id) => `/orders/${id}`,
   reports: (id) => `/reports/${id}`,
   staff: (id) => `/users/${id}`,
+  students: (id) => `/students/${id}`,
 };
 
 export function useBreadcrumbs(portal: string): Crumb[] {
@@ -151,13 +151,13 @@ export function useBreadcrumbs(portal: string): Crumb[] {
   // Resolved unconditionally: a hook cannot live inside a branch. When the
   // route is not a record, the path is null and useFetch does nothing.
   const recordPath = id && RECORD_PATH[section] ? RECORD_PATH[section](id) : null;
-  const record = useFetch<{ data: { order_no?: string; report_no?: string; fullname?: string } }>(
+  const record = useFetch<{ data: { order_no?: string; report_no?: string; fullname?: string; name?: string } }>(
     recordPath,
   );
   // A person is named, like an order is numbered. `#96` in the trail says
   // nothing about whose page you are on.
   const recordName =
-    record.data?.data.order_no ?? record.data?.data.report_no ?? record.data?.data.fullname ?? `#${id}`;
+    record.data?.data.order_no ?? record.data?.data.report_no ?? record.data?.data.fullname ?? record.data?.data.name ?? `#${id}`;
 
   // The dashboard is the root. "Super Admin › Dashboard" says the same thing
   // twice, so the trail stops at one crumb.

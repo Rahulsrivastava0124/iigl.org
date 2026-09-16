@@ -168,7 +168,7 @@ export default function NotificationBell() {
             {rows.map((t) => (
               <ListItemButton
                 key={t.id}
-                onClick={() => go('/transactions?status=0')}
+                onClick={() => go('/wallet')}
                 sx={{ alignItems: 'flex-start', gap: 1.25, py: 1.25 }}
               >
                 <Glyph {...transactionLook(t)} />
@@ -207,7 +207,7 @@ export default function NotificationBell() {
           <>
             <Divider />
             <Box sx={{ p: 1, textAlign: 'right' }}>
-              <Button size="small" onClick={() => go('/transactions?status=0')}>
+              <Button size="small" onClick={() => go('/wallet')}>
                 {(pending.data?.meta.total ?? 0) > rows.length
                   ? `See all ${pending.data?.meta.total}`
                   : 'Open the queue'}

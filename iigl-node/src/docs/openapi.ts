@@ -580,6 +580,11 @@ const document = {
           balance: { type: 'number' },
           pending_out: { type: 'number', description: 'Sent but not yet approved.' },
           pending_in: { type: 'number', description: 'Received but not yet approved.' },
+          modes: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'The payment modes stored on the period’s rows, lower-cased — what the payment type filter offers.',
+          },
         },
       },
 
@@ -2356,6 +2361,7 @@ const document = {
           { name: 'status', in: 'query', schema: { type: 'integer', enum: [0, 1, 2] } },
           { name: 'q', in: 'query', schema: { type: 'string' } },
           { name: 'mode', in: 'query', schema: { type: 'string' } },
+          { name: 'remark', in: 'query', schema: { type: 'string' }, description: 'Words that must all appear in the remark.' },
           { name: 'format', in: 'query', schema: { type: 'string', enum: ['html'] }, description: 'Return the markup instead of a PDF.' },
         ],
         responses: {
@@ -2420,8 +2426,15 @@ const document = {
           {
             name: 'mode',
             in: 'query',
-            schema: { type: 'string', examples: ['cash', 'upi', 'card', 'bank', 'cheque'] },
-            description: 'List only movements paid this way, matched without case. Narrows the rows shown only.',
+            schema: { type: 'string', examples: ['cash', 'online', 'online_upi'] },
+            description:
+              'List only movements paid this way, matched without case. `online` matches every Cashfree payment (`online_<method>`). Narrows the rows shown only.',
+          },
+          {
+            name: 'remark',
+            in: 'query',
+            schema: { type: 'string' },
+            description: 'Words to find in the remark, in any order and without case; every word must appear. Narrows the rows shown only.',
           },
         ],
         responses: {

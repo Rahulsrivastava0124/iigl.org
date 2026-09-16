@@ -476,6 +476,8 @@ export interface LedgerPage {
   balance: number;
   pending_out: number;
   pending_in: number;
+  /** Every payment mode stored on the period's rows, lower-cased, e.g. `cash`, `online_upi`. */
+  modes: string[];
   total: number;
   offset: number;
   limit: number;
@@ -577,7 +579,7 @@ export async function ledgerFor(
    * balance and every total is still the account's over the whole period, so a
    * row found by its reference shows where the account really stood after it.
    */
-  filter: { status?: number | null; q?: string | null; mode?: string | null } = {},
+  filter: { status?: number | null; q?: string | null; mode?: string | null; remark?: string | null } = {},
 ): Promise<LedgerPage> {
   // What I sent, and what I received — but not an expense I was only asked to
   // approve, which is not money that reached me and must not credit my balance.
@@ -711,6 +713,9 @@ export async function ledgerFor(
   // chosen from a list, so `Cash` and `cash` are the same way of paying.
   const wantMode = (filter.mode ?? '').trim().toLowerCase() || null;
   const term = (filter.q ?? '').trim().toLowerCase().replace(/^#/, '');
+  // Words to find in the remark, in any order: "course fee rahul" finds
+  // "Course fee — First Course, rahul kumar".
+  const remarkWords = (filter.remark ?? '').toLowerCase().split(/\s+/).filter(Boolean);
   const listed: number[] = [];
   rows.forEach((row, i) => {
     if (wantStatus !== null && Number(row.status) !== wantStatus) return;
@@ -720,6 +725,10 @@ export async function ledgerFor(
     if (term) {
       const ref = String(row.transaction_no ?? '').toLowerCase();
       if (!ref.includes(term) && String(row.id) !== term) return;
+    }
+    if (remarkWords.length) {
+      const remark = String(row.remark ?? '').toLowerCase();
+      if (!remarkWords.every((w) => remark.includes(w))) return;
     }
     listed.push(i);
   });
@@ -848,6 +857,13 @@ export async function ledgerFor(
     balance: round2(balance),
     pending_out: round2(pendingOut),
     pending_in: round2(pendingIn),
+    /*
+      The ways of paying that occur in this wallet over the period, for the
+      filter: a list of every mode the system has ever known offered cheques and
+      bank transfers to an account that has only ever seen cash and Cashfree.
+      Taken before the status and mode filters, so choosing one keeps the rest.
+    */
+    modes: [...new Set(rows.map((r) => String(r.pay_mode ?? '').trim().toLowerCase()).filter(Boolean))].sort(),
     total: listed.length,
     offset: from,
     limit: to - from,

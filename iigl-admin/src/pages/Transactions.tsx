@@ -73,8 +73,8 @@ export default function Transactions() {
   const { user } = useAuth();
 
   /*
-    The menu points here three ways: every movement, the commission remittances
-    on their own, and the queue awaiting a decision. The URL says which — `type`
+    The menu points here for a laboratory's commission remittances; head office
+    decides commission on its Wallet and is sent there. The URL says which — `type`
     is passed to the API rather than filtered here, because a page of 25 out of
     the whole history would otherwise be filtered down to whatever commission
     happened to be on it.
@@ -364,9 +364,7 @@ export default function Transactions() {
             setPage(1);
           }} />}
         title={
-          status === '0'
-            ? 'Commission approval'
-            : commissionOnly
+          commissionOnly
               ? 'Commission paid'
               : 'Transaction history'
         }
@@ -502,7 +500,13 @@ export default function Transactions() {
           title="Pay commission"
           onClose={() => setPaying(false)}
           onSubmit={payCommission}
-          submitLabel={online ? 'Pay online' : 'Send'}
+          submitLabel={
+            amount > 0
+              ? `${online ? 'Pay' : 'Send'} ${money(amount)}${online ? ' online' : ''}`
+              : online
+                ? 'Pay online'
+                : 'Send'
+          }
           busy={sending}
           disabled={amount <= 0}
         >

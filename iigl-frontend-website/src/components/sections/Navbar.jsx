@@ -9,7 +9,7 @@ const navItems = [
   { label: "ABOUT", dropdown: true },
   { label: "BRANCH", href: "/#branches", branches: true, active: path.startsWith("/branches/") },
   { label: "EDUCATION", href: "/education", active: path.startsWith("/education") },
-  { label: "BLOG" },
+  { label: "BLOG", href: "/blog", active: path.startsWith("/blog") },
 ];
 
 export default function Navbar() {

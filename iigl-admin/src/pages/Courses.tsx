@@ -31,7 +31,6 @@ import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import StartIcon from '@mui/icons-material/PlayCircleOutlined';
 import DoneIcon from '@mui/icons-material/CheckCircleOutlined';
 import PaymentIcon from '@mui/icons-material/PaymentsOutlined';
-import BackIcon from '@mui/icons-material/UndoOutlined';
 import CloseIcon from '@mui/icons-material/CloseOutlined';
 import PrintIcon from '@mui/icons-material/PrintOutlined';
 import CertificateIcon from '@mui/icons-material/WorkspacePremiumOutlined';
@@ -40,6 +39,7 @@ import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
 import { payWithCashfree, type PaymentConfig, type StartedPayment } from '../lib/cashfree';
 import { apiUrl, fileUrl } from '../lib/config';
+import CertificateDialog, { downloadCertificate } from '../components/CertificateDialog';
 import GstField, { type GstRate } from '../components/GstField';
 import { useToast } from '../components/Toast';
 import FileField from '../components/FileField';
@@ -235,6 +235,8 @@ export default function Courses() {
   const [paying, setPaying] = useState<Enrolment | null>(null);
   const [deletingCourse, setDeletingCourse] = useState<Course | null>(null);
   const [deletingEnrolment, setDeletingEnrolment] = useState<Enrolment | null>(null);
+  /** A finished enrolment having its certificate issued, from the row. */
+  const [certifying, setCertifying] = useState<Enrolment | null>(null);
 
   /**
    * The discount on one enrolment, and the coupon that can decide it.
@@ -1114,17 +1116,26 @@ export default function Courses() {
                             row. The undo and the delete are marked to move
                             behind the overflow, which `RowActions` does.
                           */}
+                          {/*
+                            Not issued yet: the button opens the certificate
+                            form. Issued: it downloads the certificate — the
+                            signed file when one was attached, otherwise the
+                            sheet printed on the course's artwork.
+                          */}
                           <IconAction
                             label={
-                              e.certificate_file
+                              e.certificate_id
                                 ? `Download certificate ${e.certificate_no ?? ''}`.trim()
-                                : e.certificate_id
-                                  ? 'Issued, but no file was attached to it'
-                                  : 'No certificate has been issued for this enrolment yet'
+                                : 'Issue certificate'
                             }
                             icon={CertificateIcon}
-                            disabled={!e.certificate_file}
-                            onClick={() => openCertificate(e)}
+                            onClick={() =>
+                              e.certificate_id
+                                ? e.certificate_file
+                                  ? openCertificate(e)
+                                  : downloadCertificate(e.certificate_id)
+                                : setCertifying(e)
+                            }
                           />
                           <IconAction
                             label="Print fee statement"
@@ -1132,10 +1143,9 @@ export default function Courses() {
                             onClick={() => printReceipt(e)}
                           />
                           <IconAction
-                            label="Undo — back to ongoing"
-                            icon={BackIcon}
-                            overflow
-                            onClick={() => moveEnrolment(e, 'ongoing')}
+                            label="View student"
+                            icon={ViewIcon}
+                            to={`/students/${e.student_id}`}
                           />
                           <IconAction
                             label="Remove enrolment"
@@ -1175,25 +1185,11 @@ export default function Courses() {
                             }
                           />
                         )}
-                        {/*
-                          And back again. A course marked completed by mistake,
-                          or started before the money arrived, needed a database
-                          edit to undo — the status only ever moved forwards.
-                        */}
-                        {e.status !== 'upcoming' && (
-                          <IconAction
-                            label={
-                              e.status === 'completed'
-                                ? 'Undo — back to ongoing'
-                                : 'Undo — back to upcoming'
-                            }
-                            icon={BackIcon}
-                            overflow
-                            onClick={() =>
-                              moveEnrolment(e, e.status === 'completed' ? 'ongoing' : 'upcoming')
-                            }
-                          />
-                        )}
+                        <IconAction
+                          label="View student"
+                          icon={ViewIcon}
+                          to={`/students/${e.student_id}`}
+                        />
                         {/*
                           Once the fee is settled the money dialog has nothing
                           left to do — the balance is nil and the API refuses a
@@ -1247,7 +1243,15 @@ export default function Courses() {
           }
           onClose={closeFee}
           onSubmit={takePayment}
-          submitLabel={feeMode === 'online' ? 'Pay online' : 'Take payment'}
+          submitLabel={
+            Number(amount) > 0
+              ? feeMode === 'online'
+                ? `Pay ${money(Number(amount))} online`
+                : `Take ${money(Number(amount))}`
+              : feeMode === 'online'
+                ? 'Pay online'
+                : 'Take payment'
+          }
           busy={busy}
           disabled={!amount || Number(amount) <= 0 || due(open) <= 0}
         >
@@ -1509,6 +1513,14 @@ export default function Courses() {
         confirmIcon={DeleteIcon}
         busy={busy}
       />
+
+      {certifying && (
+        <CertificateDialog
+          enrolment={certifying}
+          onClose={() => setCertifying(null)}
+          onSaved={enrolments.reload}
+        />
+      )}
 
       <ConfirmDialog
         open={Boolean(deletingEnrolment)}

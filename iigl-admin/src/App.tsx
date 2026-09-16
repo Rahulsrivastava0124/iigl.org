@@ -41,9 +41,9 @@ import RegisteredCustomerForm from './pages/RegisteredCustomerForm';
 import Students from './pages/Students';
 import StudentCreate from './pages/StudentCreate';
 import StudentEdit from './pages/StudentEdit';
+import StudentView from './pages/StudentView';
 import StudentEnquiries from './pages/StudentEnquiries';
 import Courses from './pages/Courses';
-import StudentCertificates from './pages/StudentCertificates';
 import Enquiries from './pages/Enquiries';
 import LaboratoryView from './pages/LaboratoryView';
 import Master from './pages/Master';
@@ -54,6 +54,17 @@ import Settings from './pages/Settings';
  * The API applies the same rule on every request, so this is about not showing
  * someone a screen they cannot use rather than about keeping them out.
  */
+/**
+ * The transactions screen, for everybody but head office. Its commission
+ * approval queue is gone: a pending remittance is decided on its row in the
+ * Wallet, so an old link to the queue lands there.
+ */
+function LabTransactions() {
+  const { user } = useAuth();
+  if (isSuper(user)) return <Navigate to="/wallet" replace />;
+  return <Transactions />;
+}
+
 function AdminOnly({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   if (!isSuper(user)) return <Navigate to="/" replace />;
@@ -159,7 +170,9 @@ function Routed() {
             issuing wizard in a second mode: the order and the item are settled
             by then, and only the stone can still change. */}
         <Route path="/reports/:id/edit" element={<ReportEdit />} />
-        <Route path="/transactions" element={<Transactions />} />
+        {/* A laboratory's commission. Head office decides commission on its
+            Wallet, so it is sent there rather than to an approval queue. */}
+        <Route path="/transactions" element={<LabTransactions />} />
         {/* Both roles have a wallet, and the dashboard's "My wallet" tile sends
             a laboratory here. The endpoint behind it scopes to whoever asks. */}
         <Route path="/wallet" element={<Wallet />} />
@@ -230,6 +243,14 @@ function Routed() {
           }
         />
         <Route
+          path="/students/:id"
+          element={
+            <AdminOnly>
+              <StudentView />
+            </AdminOnly>
+          }
+        />
+        <Route
           path="/students/:id/edit"
           element={
             <AdminOnly>
@@ -242,14 +263,6 @@ function Routed() {
           element={
             <AdminOnly>
               <Courses />
-            </AdminOnly>
-          }
-        />
-        <Route
-          path="/student-certificates"
-          element={
-            <AdminOnly>
-              <StudentCertificates />
             </AdminOnly>
           }
         />

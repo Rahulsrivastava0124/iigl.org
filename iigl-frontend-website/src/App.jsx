@@ -1,4 +1,5 @@
 import AvailableCoursesSection from './components/sections/AvailableCoursesSection.jsx';
+import BlogPage, { BlogArticlePage } from './components/sections/BlogPage.jsx';
 import BranchPage from './components/sections/BranchPage.jsx';
 import CompanyCertificatesSection from './components/sections/CompanyCertificatesSection.jsx';
 import CoursePage from './components/sections/CoursePage.jsx';
@@ -27,6 +28,8 @@ export default function App() {
   // Verify Report, at /verify-report — and /verify-report/<id>, the address
   // every printed report's QR code carries.
   const verify = window.location.pathname.match(/^\/verify-report(?:\/(\d+))?\/?$/);
+  // The blog, at /blog, and one article at /blog/<slug>.
+  const blog = window.location.pathname.match(/^\/blog(?:\/([^/]+))?\/?$/);
 
   return (
     <div className="min-h-screen overflow-x-clip bg-white text-[#2c3b64]">
@@ -52,6 +55,8 @@ export default function App() {
         <CoursePage id={courseId} />
       ) : verify ? (
         <VerifyReportPage id={verify[1]} />
+      ) : blog ? (
+        blog[1] ? <BlogArticlePage slug={blog[1]} /> : <BlogPage />
       ) : education ? (
         <EducationPage />
       ) : (
