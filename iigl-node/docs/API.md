@@ -1,6 +1,6 @@
 # IIGL API
 
-281 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
+282 endpoints. Generated from the OpenAPI document by `npm run docs` — do not edit by hand.
 
 The interactive version is at `/docs` when the server is running, and the raw
 document at `/openapi.json`.
@@ -126,6 +126,7 @@ Open endpoints: the marketing site and certificate verification.
 | GET | `/api/public/report-types` | public | — | — | — | List certificate types |
 | GET | `/api/public/reviews` | public | `kind` | — | — | List active reviews |
 | GET | `/api/public/site` | public | — | — | — | Head office's website settings |
+| GET | `/api/public/stats` | public | — | — | — | The home page tally |
 | GET | `/api/public/student-certificates/{no}` | public | — | — | 404, 429 | Verify a course certificate |
 | POST | `/api/public/student-registrations` | public | — | — | 400, 404, 409, 429 | Register for a course from the website |
 | GET | `/api/public/verify-by-id/{id}` | public | — | — | 404 | Verify a certificate by its id |
@@ -200,8 +201,8 @@ Remittances, approvals, dues collection and wallet balance.
 | POST | `/api/transactions/expense` | session | — | **amount**, **remark**, pay_mode, transaction_no, attachment | 400, 401, 403 | Record an expense |
 | GET | `/api/transactions/expense-wallet` | session | — | — | 401, 403 | Your expense wallet |
 | POST | `/api/transactions/float` | session | — | **user_id**, **amount**, **pay_mode**, transaction_no, remark | 400, 401, 403 | Send an employee an expense float |
-| GET | `/api/transactions/ledger` | session | `user_id`, `scope`, `from`, `to`, `status`, `q`, `mode`, `remark` | — | 401, 403 | Running account |
-| GET | `/api/transactions/ledger/statement` | session | `user_id`, `scope`, `from`, `to`, `status`, `q`, `mode`, `remark`, `format` | — | 400, 401, 403 | Download an account statement |
+| GET | `/api/transactions/ledger` | session | `user_id`, `scope`, `from`, `to`, `status`, `q`, `mode` | — | 401, 403 | Running account |
+| GET | `/api/transactions/ledger/statement` | session | `user_id`, `scope`, `from`, `to`, `status`, `q`, `mode`, `format` | — | 400, 401, 403 | Download an account statement |
 | GET | `/api/transactions/wallet` | session | — | — | 401, 403 | Your balance |
 
 ## Users
@@ -405,9 +406,9 @@ The student pipeline: enquiry, registration, course, discount, certificate. New 
 | GET | `/api/student-certificates/{id}/print` | session | `orientation`, `format` | — | 401, 403, 404 | Print the certificate |
 | GET | `/api/student-certificates/pending` | session | — | — | 401, 403 | Completed courses with no certificate yet |
 | GET | `/api/students` | session | `page`, `per_page`, `status`, `q` | — | 401, 403 | List registrations |
-| POST | `/api/students` | session | — | **name**, father_name, dob, gender, **mobile**, alt_mobile, email, address, +10 more | 400, 401, 403 | Register a student |
+| POST | `/api/students` | session | — | **name**, father_name, dob, gender, **mobile**, alt_mobile, email, address, +11 more | 400, 401, 403 | Register a student |
 | GET | `/api/students/{id}` | session | — | — | 401, 403, 404 | One student, with their enrolments and certificates |
-| PATCH | `/api/students/{id}` | session | — | name, father_name, dob, gender, mobile, alt_mobile, email, address, +10 more | 400, 401, 403, 404 | Update a registration |
+| PATCH | `/api/students/{id}` | session | — | name, father_name, dob, gender, mobile, alt_mobile, email, address, +11 more | 400, 401, 403, 404 | Update a registration |
 | DELETE | `/api/students/{id}` | session | — | — | 401, 403, 404, 409 | Delete a registration |
 | GET | `/api/students/enquiries` | session | `page`, `per_page`, `status`, `lab_id`, `q` | — | 401, 403 | Course enquiries |
 | POST | `/api/students/enquiries` | session | — | **name**, **mobile**, email, course_id, course_interested, enquiry_date, source, status, +2 more | 400, 401, 403 | Record a course enquiry |
@@ -544,4 +545,4 @@ Commission billed to a laboratory on a period, its grace days, and the lock on c
 
 Bold body fields are required.
 
-281 endpoints: 35 public, 246 requiring a session.
+282 endpoints: 36 public, 246 requiring a session.

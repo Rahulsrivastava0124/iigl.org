@@ -1312,6 +1312,16 @@ const document = {
       },
     },
 
+    '/api/public/stats': {
+      get: {
+        tags: ['Public'],
+        summary: 'The home page tally',
+        description: 'Counts only: items received, items tested, items still in the laboratory, and listed branches.',
+        security: [],
+        responses: { 200: { description: 'items, tested, pending and branches.' } },
+      },
+    },
+
     '/api/public/education-gallery': {
       get: {
         tags: ['Public'],

@@ -581,6 +581,45 @@ publicRoutes.get(
   }),
 );
 
+/**
+ * The tally the website's home page prints: work done and where it is done.
+ * Counts only — no customer, no laboratory, no money.
+ */
+publicRoutes.get(
+  '/stats',
+  wrap(async (_req, res) => {
+    const count = (q: { executeTakeFirstOrThrow: () => Promise<{ n: unknown }> }) =>
+      q.executeTakeFirstOrThrow().then((r) => Number(r.n));
+
+    const [items, tested, pending, branches] = await Promise.all([
+      // Every item handed in — an order can carry several.
+      count(db.selectFrom('order_details').select(db.fn.countAll().as('n'))),
+      // One report is one item examined, whether or not it is public to verify.
+      count(db.selectFrom('reports').select(db.fn.countAll().as('n'))),
+      // Items on an order still being prepared: in the laboratory now.
+      count(
+        db
+          .selectFrom('order_details')
+          .innerJoin('orders', 'orders.id', 'order_details.order_id')
+          .select(db.fn.countAll().as('n'))
+          .where('orders.status', '=', 'preparing'),
+      ),
+      count(
+        db
+          .selectFrom('users')
+          .select(db.fn.countAll().as('n'))
+          .where('role_id', '=', 2)
+          .where('show_on_site', '=', 1)
+          .where('is_active', '=', 1),
+      ),
+    ]);
+
+    // A tally moves slowly; a few minutes stale is cheaper than counting per visitor.
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.json({ data: { items, tested, pending, branches } });
+  }),
+);
+
 /** The website's Our Company Certificates carousel: the active ones, in the order added. */
 publicRoutes.get(
   '/company-certificates',

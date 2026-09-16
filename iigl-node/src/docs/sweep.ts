@@ -91,6 +91,7 @@ const cases: Case[] = [
   { name: 'reviews', method: 'GET', path: '/api/public/reviews', as: 'anon', expect: [200] },
   { name: 'company certificates', method: 'GET', path: '/api/public/company-certificates', as: 'anon', expect: [200] },
   { name: 'education gallery', method: 'GET', path: '/api/public/education-gallery', as: 'anon', expect: [200] },
+  { name: 'home tally', method: 'GET', path: '/api/public/stats', as: 'anon', expect: [200] },
   { name: 'student testimonials', method: 'GET', path: '/api/public/reviews?kind=student', as: 'anon', expect: [200] },
   { name: 'course certificate, unknown number', method: 'GET', path: '/api/public/student-certificates/IIGL-C-0000-0000', as: 'anon', expect: [404] },
 
