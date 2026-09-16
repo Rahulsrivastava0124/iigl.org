@@ -1026,6 +1026,7 @@ export const extraPaths: Record<string, unknown> = {
           photo: str,
           id_proof: str,
           qualification_doc: str,
+          extra_doc: str,
           registration_date: str,
           course_id: { type: ['integer', 'null'] },
           status: { type: 'string', enum: ['pending', 'registered', 'active'] },
@@ -1073,6 +1074,7 @@ export const extraPaths: Record<string, unknown> = {
         photo: str,
         id_proof: str,
         qualification_doc: str,
+        extra_doc: str,
         registration_date: str,
         course_id: { type: ['integer', 'null'] },
         status: { type: 'string', enum: ['pending', 'registered', 'active'] },
@@ -1626,7 +1628,7 @@ export const extraPaths: Record<string, unknown> = {
       tags: ['Customers'],
       summary: 'Registered customers',
       description:
-        'Every stored registered customer, and every GST customer known only from an order who has not been registered yet — both are real, and dropping either would make the list wrong in a different direction. Matched on mobile. A stored row carries `account_id`, company, owner, city, `discounts` and `show_on_site` (listed on the website); an order-derived row has `account_id: null`, no terms and `show_on_site: null`. Order totals are joined by mobile. A laboratory sees its own; head office sees all.',
+        'Every stored registered customer, and every GST customer known only from an order who has not been registered yet — both are real, and dropping either would make the list wrong in a different direction. Matched on mobile. A stored row carries `account_id`, company, owner, city, `logo`, `discounts` and `show_on_site` (listed on the website); an order-derived row has `account_id: null`, no logo, no terms and `show_on_site: null`. Order totals are joined by mobile. A laboratory sees its own; head office sees all.',
       parameters: [
         { name: 'page', in: 'query', schema: { type: 'integer' } },
         { name: 'per_page', in: 'query', schema: { type: 'integer', maximum: 200 } },

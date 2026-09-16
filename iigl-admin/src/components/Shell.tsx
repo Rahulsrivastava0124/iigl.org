@@ -278,7 +278,6 @@ const ADMIN_GROUPS: Group[] = [
     items: [
       { to: '/content?tab=banners', label: 'Banners', perm: 'website_home' },
       { to: '/content?tab=types', label: 'Report Types', perm: 'website_report' },
-      { to: '/content?tab=customers', label: 'Customers', perm: 'website_home' },
       { to: '/content?tab=branches', label: 'Branches', perm: 'website_home' },
       { to: '/content?tab=reviews', label: 'Reviews', perm: 'website_home' },
       { to: '/content?tab=certificates', label: 'Certificates', perm: 'website_home' },

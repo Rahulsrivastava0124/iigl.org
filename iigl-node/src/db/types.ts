@@ -731,6 +731,7 @@ export interface Students {
   dob: Date | null;
   email: string | null;
   enquiry_id: number | null;
+  extra_doc: string | null;
   father_name: string | null;
   gender: string | null;
   id: Generated<number>;

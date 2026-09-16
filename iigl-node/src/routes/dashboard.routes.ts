@@ -8,7 +8,7 @@ import {
   accruedByLab,
   COMMISSION_TYPE,
   TRANSACTION_TYPE,
-  notAnExpense,
+  receivedIntoWallet,
 } from '../services/commission.service.js';
 
 export const dashboardRoutes = Router();
@@ -218,8 +218,9 @@ dashboardRoutes.get(
           .where(column, '=', req.user.id)
           .where('status', '=', TX_STATUS.APPROVED);
         // An expense addressed to head office is one of its own staff's that
-        // it approves. Nothing arrives, so it is not a credit.
-        const row = await (column === 'received_by' ? base.where(notAnExpense) : base).executeTakeFirstOrThrow();
+        // it approves, and a salary addressed to somebody is their own pay.
+        // Neither arrives in this wallet, so neither is a credit.
+        const row = await (column === 'received_by' ? base.where(receivedIntoWallet) : base).executeTakeFirstOrThrow();
         return Number(row.total ?? 0);
       };
       const [credit, debit] = await Promise.all([side('received_by'), side('send_by')]);

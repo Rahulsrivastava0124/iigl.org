@@ -2371,7 +2371,6 @@ const document = {
           { name: 'status', in: 'query', schema: { type: 'integer', enum: [0, 1, 2] } },
           { name: 'q', in: 'query', schema: { type: 'string' } },
           { name: 'mode', in: 'query', schema: { type: 'string' } },
-          { name: 'remark', in: 'query', schema: { type: 'string' }, description: 'Words that must all appear in the remark.' },
           { name: 'format', in: 'query', schema: { type: 'string', enum: ['html'] }, description: 'Return the markup instead of a PDF.' },
         ],
         responses: {
@@ -2431,7 +2430,8 @@ const document = {
             name: 'q',
             in: 'query',
             schema: { type: 'string' },
-            description: 'A reference to find: part of the transaction number, or the id with or without #. Narrows the rows shown only.',
+            description:
+              'Words to find in the row\u2019s reference and remark together \u2014 part of the transaction number, the id with or without #, or any words of the remark, in any order and without case; every word must appear. Narrows the rows shown only.',
           },
           {
             name: 'mode',
@@ -2439,12 +2439,6 @@ const document = {
             schema: { type: 'string', examples: ['cash', 'online', 'online_upi'] },
             description:
               'List only movements paid this way, matched without case. `online` matches every Cashfree payment (`online_<method>`). Narrows the rows shown only.',
-          },
-          {
-            name: 'remark',
-            in: 'query',
-            schema: { type: 'string' },
-            description: 'Words to find in the remark, in any order and without case; every word must appear. Narrows the rows shown only.',
           },
         ],
         responses: {

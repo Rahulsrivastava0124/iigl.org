@@ -25,14 +25,12 @@ import EmailIcon from '@mui/icons-material/EmailOutlined';
 import PlaceIcon from '@mui/icons-material/PlaceOutlined';
 import CalendarIcon from '@mui/icons-material/EventOutlined';
 import CoursesIcon from '@mui/icons-material/SchoolOutlined';
-import PaidIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
-import DuesIcon from '@mui/icons-material/PendingActionsOutlined';
 import PdfIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import { useFetch } from '../lib/useFetch';
 import { fileUrl } from '../lib/config';
 import { isPdf } from '../components/FilePreview';
 import CertificateDialog, { downloadCertificate } from '../components/CertificateDialog';
-import { IconAction, Panel, RowActions, StateChip, TableFrame, Tile, TILE_CELL, money } from '../components/ui';
+import { IconAction, Panel, RowActions, StateChip, TableFrame, money } from '../components/ui';
 import type { Tone } from '../components/ui';
 import type { Paged } from '../lib/api';
 
@@ -53,6 +51,7 @@ interface Student {
   photo: string | null;
   id_proof: string | null;
   qualification_doc: string | null;
+  extra_doc: string | null;
   registration_date: string | null;
   course_id: number | null;
   status: string;
@@ -229,9 +228,9 @@ export default function StudentView() {
         { label: 'Photo', path: s.photo },
         { label: 'ID proof', path: s.id_proof },
         { label: 'Qualification', path: s.qualification_doc },
+        { label: 'Extra document', path: s.extra_doc },
       ].filter((d): d is { label: string; path: string } => Boolean(d.path))
     : [];
-  const totalDue = Math.max(0, totalPayable - totalPaid);
   const age = ageOf(s?.dob ?? null);
 
   if (!s) {
@@ -309,39 +308,6 @@ export default function StudentView() {
           </Button>
         </Stack>
       </Paper>
-
-      {/* ------------------------------------------------ where they stand */}
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid size={TILE_CELL}>
-          <Tile
-            label="Courses"
-            value={String(enrolRows.length)}
-            note={enrolRows.length === 1 ? 'enrolment' : 'enrolments'}
-            icon={CoursesIcon}
-            fill="brand"
-          />
-        </Grid>
-        <Grid size={TILE_CELL}>
-          <Tile label="Fee paid" value={money(totalPaid)} note={`of ${money(totalPayable)}`} icon={PaidIcon} fill="settled" />
-        </Grid>
-        <Grid size={TILE_CELL}>
-          <Tile
-            label="Fee due"
-            value={money(totalDue)}
-            note={totalDue > 0 ? 'still to collect' : 'nothing owed'}
-            icon={DuesIcon}
-            fill={totalDue > 0 ? 'waiting' : undefined}
-          />
-        </Grid>
-        <Grid size={TILE_CELL}>
-          <Tile
-            label="Certificates"
-            value={String(certRows.length)}
-            note={certRows.length === 1 ? 'issued' : 'issued'}
-            icon={IssueIcon}
-          />
-        </Grid>
-      </Grid>
 
       {/* ------------------------------------------------ the record */}
       <Grid container spacing={2} sx={{ mb: 2 }}>

@@ -80,6 +80,7 @@ export default function StudentCreate() {
     photo: null as string | null,
     id_proof: null as string | null,
     qualification_doc: null as string | null,
+    extra_doc: null as string | null,
   });
 
   const [busy, setBusy] = useState(false);
@@ -315,6 +316,15 @@ export default function StudentCreate() {
                 bucket="documentation"
                 value={docs.qualification_doc}
                 onChange={(path) => setDocs((d) => ({ ...d, qualification_doc: path }))}
+                ratio="3 / 4"
+              />
+              {/* Anything the three slots above do not name: a transfer letter,
+                  an experience certificate, a second ID. */}
+              <FileField
+                label="Extra Document"
+                bucket="documentation"
+                value={docs.extra_doc}
+                onChange={(path) => setDocs((d) => ({ ...d, extra_doc: path }))}
                 ratio="3 / 4"
               />
             </Stack>

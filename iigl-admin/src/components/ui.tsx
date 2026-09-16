@@ -402,6 +402,7 @@ const InsidePanel = createContext(false);
 export function Panel({
   title,
   subtitle,
+  filters,
   count,
   footer,
   actions,
@@ -422,6 +423,14 @@ export function Panel({
    * the time you want it.
    */
   count?: ReactNode;
+  /**
+   * The controls that choose what the table shows, on a row of their own under
+   * the header. A wide set of them beside the title left no room for either:
+   * the heading truncated to "Head…" and a control wrapped to a line of its
+   * own. `actions` stays for what acts on the list — the one button that
+   * downloads it, which belongs beside the title.
+   */
+  filters?: ReactNode;
   /**
    * The table's footer, beside the count — in practice a `Pager`. It belongs
    * on the same rule as the count rather than above it, which is two footers
@@ -450,21 +459,22 @@ export function Panel({
         <Stack
           direction="row"
           spacing={1.5}
-          // One row, always. The header is a heading, a count and the controls
-          // for the table under it, and wrapping turned it into a two-line
-          // block that pushed the table down. The title side truncates; the
-          // filters keep their width, because a select squeezed to "St…" is
-          // not a control any more.
+          // One row while both sides fit; the controls drop to a second row
+          // when they do not. Held to one row, a wide set of filters squeezed
+          // the heading to "Head…" — and a select squeezed to "St…" is not a
+          // control any more, so neither side may be the one that gives way.
           sx={{
             alignItems: 'center',
             justifyContent: 'space-between',
-            flexWrap: 'nowrap',
+            flexWrap: 'wrap',
+            rowGap: 1,
             px: 2,
             py: 1.25,
             // The rule separates the header from what is under it. With
             // nothing under it there is nothing to separate, and the line
-            // reads as a table that failed to load.
-            borderBottom: children ? 1 : 0,
+            // reads as a table that failed to load. A filters row under the
+            // heading is part of the same header, so the rule moves to it.
+            borderBottom: filters ? 0 : children ? 1 : 0,
             borderColor: 'divider',
           }}
         >
@@ -496,11 +506,31 @@ export function Panel({
             <Stack
               direction="row"
               spacing={1}
-              sx={{ alignItems: 'center', flexShrink: 0 }}
+              // The row gives way by wrapping, never by squeezing: a select
+              // narrowed to "St…" is not a control any more. Each control
+              // holds its width; what folds is the row.
+              sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1, minWidth: 0 }}
             >
               {actions}
             </Stack>
           )}
+        </Stack>
+      )}
+      {filters && (
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            rowGap: 1,
+            px: 2,
+            py: 1.25,
+            borderBottom: children ? 1 : 0,
+            borderColor: 'divider',
+          }}
+        >
+          {filters}
         </Stack>
       )}
       <InsidePanel.Provider value>{form}</InsidePanel.Provider>

@@ -259,7 +259,9 @@ export default function FileField({
         instead of adding a line under the frame.
       */}
       <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-        <Typography variant="overline" color="text.secondary">
+        {/* Dark, so the slot is read as the heading of what goes in it
+            rather than as a note under the field above. */}
+        <Typography variant="overline" sx={{ color: 'text.primary', fontWeight: 600 }}>
           {label}
         </Typography>
         {helperText && !error && (

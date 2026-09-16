@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Button, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/FileDownloadOutlined';
+import PayIcon from '@mui/icons-material/PaymentsOutlined';
 import { useFetch, useLiveRefresh } from '../lib/useFetch';
 import { apiUrl } from '../lib/config';
 import { useAuth } from '../lib/auth';
 import { isLab, isSuper } from '../lib/portal';
-import { IconAction, Notice, StateChip, TableFrame, money, type Tone } from './ui';
+import { Notice, RowActions, StateChip, TableFrame, money, type Tone } from './ui';
+import { PayCommissionDialog } from './PayCommission';
 
 /** One billed statement, as `GET /statements` returns it. */
 export interface StatementPeriod {
@@ -66,8 +68,19 @@ export const downloadStatement = (key: string, labId?: number) =>
  */
 export function StatementsTable({ labId }: { labId?: number }) {
   const source = useFetch<{ data: LabStatements }>(`/statements${labId ? `?lab_id=${labId}` : ''}`);
+  const { user } = useAuth();
   const s = source.data?.data;
   const rows = s?.periods ?? [];
+  /*
+    Pay is the laboratory's own, on its own statements: head office reading a
+    laboratory's page (`labId`) is looking at what it is owed, not at a bill.
+
+    Hidden while a payment is already waiting on head office, as the reminder
+    hides it: sending a second one against the same balance pays it twice.
+  */
+  const mayPay = isLab(user) && !labId && (s?.pending ?? 0) === 0;
+  /** What the pay dialog opens on, and whether it is open at all. */
+  const [payDue, setPayDue] = useState<number | null>(null);
 
   return (
     <>
@@ -134,17 +147,41 @@ export function StatementsTable({ labId }: { labId?: number }) {
                   <StateChip {...STATE[p.state]} />
                 </TableCell>
                 <TableCell>
-                  <IconAction
-                    label="Download statement"
-                    icon={DownloadIcon}
-                    onClick={() => downloadStatement(p.key, labId)}
-                  />
+                  <RowActions>
+                    {/* Named, not just drawn: an icon alone made the actions
+                        on this row a guess. */}
+                    {mayPay && p.balance > 0 && (
+                      <Button
+                        size="small"
+                        variant="contained"
+                        startIcon={<PayIcon />}
+                        onClick={() => setPayDue(p.balance)}
+                        sx={{ whiteSpace: 'nowrap' }}
+                      >
+                        Pay
+                      </Button>
+                    )}
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<DownloadIcon />}
+                      onClick={() => downloadStatement(p.key, labId)}
+                      sx={{ whiteSpace: 'nowrap' }}
+                    >
+                      Download
+                    </Button>
+                  </RowActions>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </TableFrame>
+
+      {/* Paid from here, on the statement that says what is owed. */}
+      {payDue !== null && (
+        <PayCommissionDialog due={payDue} onClose={() => setPayDue(null)} onPaid={source.reload} />
+      )}
     </>
   );
 }

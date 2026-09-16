@@ -21,7 +21,6 @@ import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import FileField from '../components/FileField';
 import RichTextField from '../components/RichTextField';
 import BranchLaboratories from '../components/BranchLaboratories';
-import WebsiteCustomers from '../components/WebsiteCustomers';
 import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
@@ -52,7 +51,6 @@ const hits = (term: string, ...fields: (string | number | null | undefined)[]) =
 type Section =
   | 'articles'
   | 'branches'
-  | 'customers'
   | 'types'
   | 'banners'
   | 'reviews'
@@ -64,7 +62,6 @@ const SECTIONS: Array<{ id: Section; label: string; noun: string }> = [
   // The website's own order, as the sidebar lists them.
   { id: 'banners', label: 'Banners', noun: 'banner' },
   { id: 'types', label: 'Report Types', noun: 'report type' },
-  { id: 'customers', label: 'Customers', noun: 'customer' },
   { id: 'branches', label: 'Branches', noun: 'branch' },
   { id: 'reviews', label: 'Reviews', noun: 'review' },
   { id: 'certificates', label: 'Certificates', noun: 'certificate' },
@@ -77,7 +74,6 @@ const SECTIONS: Array<{ id: Section; label: string; noun: string }> = [
 /** The permission each tab is: what head office can give its staff for it. */
 const PERMISSION: Record<Section, ActionType> = {
   banners: 'website_home',
-  customers: 'website_home',
   branches: 'website_home',
   reviews: 'website_home',
   certificates: 'website_home',
@@ -87,12 +83,12 @@ const PERMISSION: Record<Section, ActionType> = {
   articles: 'website_blog',
 };
 
-/** The sections edited on this page. Branches and Customers are lists of their own. */
-type Edited = Exclude<Section, 'branches' | 'customers'>;
+/** The sections edited on this page. Branches are a list of their own. */
+type Edited = Exclude<Section, 'branches'>;
 
 /** The sections whose rows can be deleted; the rest are only ever edited. */
 type Deletable = Exclude<Edited, 'types' | 'articles'>;
-const deletable = (s: Section): s is Deletable => !['types', 'articles', 'branches', 'customers'].includes(s);
+const deletable = (s: Section): s is Deletable => !['types', 'articles', 'branches'].includes(s);
 
 /**
  * Where each section is read from and written to.
@@ -284,7 +280,7 @@ export default function Content() {
   const section: Section =
     asked && visible.some((s) => s.id === asked) ? asked : (visible[0]?.id ?? 'banners');
   const { label, noun } = SECTIONS.find((s) => s.id === section)!;
-  const edited: Edited | null = section === 'branches' || section === 'customers' ? null : section;
+  const edited: Edited | null = section === 'branches' ? null : section;
   const fields = edited ? FIELDS[edited] : [];
 
   const [editing, setEditing] = useState<Editing | null>(null);
@@ -382,8 +378,6 @@ export default function Content() {
       {/* Branches are the laboratories, ticked on and off rather than edited. */}
       {section === 'branches' ? (
         <BranchLaboratories readOnly={!may('branches', 'update')} />
-      ) : section === 'customers' ? (
-        <WebsiteCustomers readOnly={!may('customers', 'update')} />
       ) : (
         <Panel
           form={

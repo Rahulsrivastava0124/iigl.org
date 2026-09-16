@@ -490,6 +490,7 @@ studentRoutes.post(
           photo: text(b.photo),
           id_proof: text(b.id_proof),
           qualification_doc: text(b.qualification_doc),
+          extra_doc: text(b.extra_doc),
           registration_date: date(b.registration_date) ?? new Date(),
           course_id: id(b.course_id),
           status: oneOf(REGISTRATION_STATUS, b.status, 'pending'),
@@ -542,6 +543,7 @@ studentRoutes.patch(
     if (b.photo !== undefined) patch.photo = text(b.photo);
     if (b.id_proof !== undefined) patch.id_proof = text(b.id_proof);
     if (b.qualification_doc !== undefined) patch.qualification_doc = text(b.qualification_doc);
+    if (b.extra_doc !== undefined) patch.extra_doc = text(b.extra_doc);
     if (b.registration_date !== undefined) patch.registration_date = date(b.registration_date);
     if (b.course_id !== undefined) patch.course_id = id(b.course_id);
     if (b.status !== undefined) patch.status = oneOf(REGISTRATION_STATUS, b.status);

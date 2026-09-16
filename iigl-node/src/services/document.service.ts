@@ -645,7 +645,7 @@ const ACCOUNT_STATEMENT_TEMPLATE = path.resolve(
  * period rather than a page of them. A statement that stopped at fifty rows
  * would total to a figure the rows on it do not add up to.
  */
-export type StatementFilter = { status: number | null; q: string | null; mode: string | null; remark?: string | null };
+export type StatementFilter = { status: number | null; q: string | null; mode: string | null };
 
 export async function accountStatementHtml(
   userId: number,
@@ -673,7 +673,7 @@ export async function accountStatementHtml(
     that the figures reconcile.
   */
   const page = await ledgerFor(userId, Number.MAX_SAFE_INTEGER, 0, scope, period, filter);
-  const filtered = filter.status !== null || !!filter.q || !!filter.mode || !!filter.remark;
+  const filtered = filter.status !== null || !!filter.q || !!filter.mode;
 
   const listed = { credit: 0, debit: 0 };
   for (const e of page.entries) {

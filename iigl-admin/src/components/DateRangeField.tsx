@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
-import { Box, Button, IconButton, InputAdornment, Popover, Stack, TextField, Typography } from '@mui/material';
+import { Box, Button, IconButton, InputAdornment, Popover, Stack, TextField } from '@mui/material';
 import { DateCalendar } from '@mui/x-date-pickers/DateCalendar';
 import { PickerDay, type PickerDayProps } from '@mui/x-date-pickers/PickerDay';
 import CalendarIcon from '@mui/icons-material/CalendarMonthOutlined';
@@ -121,10 +121,7 @@ export default function DateRangeField({
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
-        <Box sx={{ pt: 1.5 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ px: 2.5 }}>
-            {!start ? 'Choose the first day' : !end ? 'Now choose the last day' : 'Choose a new first day'}
-          </Typography>
+        <Box>
           <DateCalendar
             value={null}
             referenceDate={start ?? (to ? dayjs(to, ISO) : dayjs())}

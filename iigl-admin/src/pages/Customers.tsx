@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
 import {
+  Avatar,
   Button,
   Checkbox,
   Table,
@@ -11,12 +12,14 @@ import {
   Tab,
   Tabs,
   Typography,
+  Stack,
 } from '@mui/material';
 import { useFetch, useDebounced } from '../lib/useFetch';
 import { messageOf, useAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import { useToast } from '../components/Toast';
 import { isSuper } from '../lib/portal';
+import { fileUrl } from '../lib/config';
 import { usePermissions } from '../lib/permissions';
 import {
   IconAction,
@@ -80,6 +83,8 @@ interface Customer {
   lab_id?: number | null;
   company_name?: string | null;
   owner_name?: string | null;
+  /** The mark on their card, the same one the website shows. */
+  logo?: string | null;
   /** Listed on the website. Null for a customer known only from orders: no record to list. */
   show_on_site?: boolean | null;
 }
@@ -251,7 +256,6 @@ export default function Customers() {
                 <TableCell align="right">Total amount</TableCell>
                 <TableCell align="right">Paid</TableCell>
                 <TableCell align="right">Due</TableCell>
-                <TableCell>Last order</TableCell>
                 {registered && <TableCell align="center">Show on website</TableCell>}
                 {(canView || mayEdit || mayCreate) && <TableCell />}
               </TableRow>
@@ -263,14 +267,27 @@ export default function Customers() {
                 <TableRow key={`${r.account_id ?? 'order'}-${r.mobile}`} hover>
                   <TableCell sx={{ whiteSpace: 'normal', minWidth: 160 }}>
                     {registered && r.company_name ? (
-                      <>
-                        <Typography component="span" sx={{ display: 'block', fontWeight: 600, fontSize: 'inherit' }}>
-                          {r.company_name}
-                        </Typography>
-                        <Typography component="span" variant="caption" color="text.secondary">
-                          {r.owner_name}
-                        </Typography>
-                      </>
+                      <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
+                        {/* Their own mark where they have one, their initial
+                            where they have not: the column keeps one shape
+                            either way, so the names still line up. */}
+                        <Avatar
+                          src={fileUrl(r.logo) ?? undefined}
+                          alt=""
+                          variant="rounded"
+                          sx={{ width: 48, height: 48, fontSize: 18, bgcolor: 'action.hover', color: 'text.secondary' }}
+                        >
+                          {r.company_name.trim().charAt(0).toUpperCase()}
+                        </Avatar>
+                        <span>
+                          <Typography component="span" sx={{ display: 'block', fontWeight: 600, fontSize: 'inherit' }}>
+                            {r.company_name}
+                          </Typography>
+                          <Typography component="span" variant="caption" color="text.secondary">
+                            {r.owner_name}
+                          </Typography>
+                        </span>
+                      </Stack>
                     ) : (
                       r.customer_name || '—'
                     )}
@@ -295,15 +312,15 @@ export default function Customers() {
                   <TableCell align="right" className="tabular">
                     {money(r.paid ?? 0)}
                   </TableCell>
-                  {/* Amber only while something is owed. */}
+                  {/* The figure the list is read for, so it carries the weight;
+                      amber only while something is owed. */}
                   <TableCell
                     align="right"
                     className="tabular"
-                    sx={{ color: (r.due ?? 0) > 0 ? 'warning.main' : undefined }}
+                    sx={{ fontWeight: 600, color: (r.due ?? 0) > 0 ? 'warning.main' : undefined }}
                   >
                     {money(r.due ?? 0)}
                   </TableCell>
-                  <TableCell>{r.last_order ?? '—'}</TableCell>
                   {registered && (
                     <TableCell align="center" padding="checkbox">
                       {r.account_id ? (

@@ -1,4 +1,4 @@
-import { Grid, Stack, Table, TableBody, TableCell, TableHead, TableRow } from '@mui/material';
+import { Grid, Stack, Table, TableBody, TableCell, TableHead, TableRow, Tooltip } from '@mui/material';
 import ApproveIcon from '@mui/icons-material/CheckCircleOutlined';
 import DeclineIcon from '@mui/icons-material/CancelOutlined';
 import BalanceIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
@@ -7,6 +7,21 @@ import SentIcon from '@mui/icons-material/NorthEastOutlined';
 import AwaitingIcon from '@mui/icons-material/HourglassEmptyOutlined';
 import { Panel, StatusChip, TableFrame, Tile, TILE_CELL, ToneAction, money } from './ui';
 import { payModeLabel } from '../lib/payModes';
+
+/*
+  What is printed in the Reference column.
+
+  The row's own id, as `#22`. It is short, it is unique, and it is ours — which
+  a gateway's nineteen-digit number is not: shortening that one loses the very
+  thing it is for, since a Cashfree payment is reconciled by the whole of it,
+  and printing it whole made a column of figures wide enough to push the party,
+  the remark and the amount off the screen.
+
+  So the number this screen quotes is the short one, and the gateway's own is a
+  hover away on the rows that have one. The search box still finds a row by
+  either.
+*/
+const reference = (id: number) => `#${id}`;
 
 /**
  * The running account: what came in, what went out, and the balance after each.
@@ -145,6 +160,7 @@ export function LedgerTable({
   error,
   title = 'Ledger',
   count,
+  filters,
   footer,
   actions,
   bare,
@@ -157,8 +173,11 @@ export function LedgerTable({
   title?: string;
   count?: string;
   footer?: React.ReactNode;
-  /** Controls for the header row, beside the title: the period filter. */
+  /** Controls for the header row, beside the title: the one button that
+   *  downloads the list. */
   actions?: React.ReactNode;
+  /** The controls that choose the rows, on their own row under the heading. */
+  filters?: React.ReactNode;
   /**
    * Render the table alone, without the panel around it.
    *
@@ -213,7 +232,16 @@ export function LedgerTable({
             {entries.map((e) => (
               <TableRow key={e.id} hover>
                 <TableCell>{e.date?.slice(0, 10) ?? '—'}</TableCell>
-                <TableCell className="mono">{e.transaction_no ?? `#${e.id}`}</TableCell>
+                <TableCell className="mono" sx={{ whiteSpace: 'nowrap' }}>
+                  <Tooltip
+                    title={e.transaction_no ? `Payment reference ${e.transaction_no}` : ''}
+                    disableHoverListener={!e.transaction_no}
+                  >
+                    <span style={e.transaction_no ? { textDecoration: 'underline dotted', cursor: 'help' } : undefined}>
+                      {reference(e.id)}
+                    </span>
+                  </Tooltip>
+                </TableCell>
                 <TableCell sx={{ whiteSpace: 'normal', minWidth: 130 }}>
                   {/*
                     `send_by` is 0 on money taken at the counter — a walk-in has
@@ -314,7 +342,7 @@ export function LedgerTable({
   if (bare) return table;
 
   return (
-    <Panel title={title} count={count} footer={footer} actions={actions}>
+    <Panel title={title} count={count} footer={footer} actions={actions} filters={filters}>
       {table}
     </Panel>
   );

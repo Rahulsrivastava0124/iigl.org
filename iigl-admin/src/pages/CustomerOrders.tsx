@@ -12,6 +12,8 @@ import {
   Typography,
 } from '@mui/material';
 import { useFetch } from '../lib/useFetch';
+import { useAuth } from '../lib/auth';
+import { isSuper } from '../lib/portal';
 import { Notice, OrderChip, Panel, TableFrame, Tile, money } from '../components/ui';
 
 /**
@@ -33,6 +35,8 @@ interface CustomerOrder {
   status: string;
   payable_amt: number | null;
   paid_amount: string | null;
+  /** The laboratory the order was placed at. Orders are theirs, not head office's. */
+  laboratory: string | null;
 }
 
 interface History {
@@ -46,6 +50,11 @@ const CELL = { xs: 6, md: 3 } as const;
 
 export default function CustomerOrders() {
   const { mobile = '' } = useParams();
+  // Head office reads across the network, where the same number can have
+  // ordered from more than one laboratory. A laboratory's own list is all its
+  // own, and saying so on every row tells it nothing.
+  const { user } = useAuth();
+  const admin = isSuper(user);
   const { data, loading, error } = useFetch<{ data: History }>(
     `/customers/${encodeURIComponent(mobile)}/orders`,
   );
@@ -100,6 +109,7 @@ export default function CustomerOrders() {
             <TableHead>
               <TableRow>
                 <TableCell>Order</TableCell>
+                {admin && <TableCell>Laboratory</TableCell>}
                 <TableCell>Date</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell align="right">Amount</TableCell>
@@ -120,6 +130,11 @@ export default function CustomerOrders() {
                         {o.order_no}
                       </Link>
                     </TableCell>
+                    {admin && (
+                      <TableCell sx={{ whiteSpace: 'normal', minWidth: 150 }}>
+                        {o.laboratory ?? '—'}
+                      </TableCell>
+                    )}
                     <TableCell>{o.order_date ?? '—'}</TableCell>
                     <TableCell>
                       <OrderChip status={o.status} />

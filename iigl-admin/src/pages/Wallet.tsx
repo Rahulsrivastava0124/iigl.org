@@ -103,7 +103,7 @@ export default function Wallet() {
   };
 
   /*
-    Which rows to list: one status, and a reference to look for.
+    Which rows to list: one status, and a word to look for.
 
     They narrow the list and nothing else. The running balance on each row and
     the totals above are still the whole period's, so a row found by its
@@ -111,11 +111,9 @@ export default function Wallet() {
   */
   const [status, setStatus] = useState('');
   const [mode, setMode] = useState('');
-  const [refFilter, setRefFilter] = useState('');
-  const refTerm = useDebounced(refFilter);
-  /** Words to find in the remark. */
-  const [remarkFilter, setRemarkFilter] = useState('');
-  const remarkTerm = useDebounced(remarkFilter);
+  /** One box over both of the row's own words: its reference and its remark. */
+  const [search, setSearch] = useState('');
+  const term = useDebounced(search);
 
   /*
     The payment types this wallet actually has, not every mode the system knows:
@@ -148,8 +146,21 @@ export default function Wallet() {
     modeOptions.push([mode, mode === 'online' ? 'Online' : payModeLabel(mode)]);
   }
 
+  /*
+    The controls that choose the rows. One strip, which folds onto another line
+    when the panel is narrow: each control keeps its own width, because a date
+    range squeezed to "0-09-2026" is worse than a second line.
+
+    The Statement button is not among them. It acts on what they have chosen
+    rather than choosing anything, and left in the strip it was the one control
+    that wrapped on its own to a line holding nothing else.
+  */
   const filters = (
-    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+    <Stack
+      direction="row"
+      spacing={1}
+      sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1, '& > *': { flexShrink: 0 } }}
+    >
       <DateField month label="Month" value={month} onChange={pickMonth} sx={{ width: 150 }} />
       <DateRangeField label="From – To" from={from} to={to} onChange={pickRange} width={250} />
       <TextField
@@ -187,46 +198,40 @@ export default function Wallet() {
         ))}
       </TextField>
       <SearchField
-        placeholder="Reference"
-        value={refFilter}
+        placeholder="Reference or remark"
+        value={search}
         onChange={(v) => {
-          setRefFilter(v);
+          setSearch(v);
           setPage(1);
         }}
-        width={150}
+        width={220}
       />
-      <SearchField
-        placeholder="Remark"
-        value={remarkFilter}
-        onChange={(v) => {
-          setRemarkFilter(v);
-          setPage(1);
-        }}
-        width={170}
-      />
-      {(period || status !== '' || mode !== '' || refFilter !== '' || remarkFilter !== '') && (
+      {(period || status !== '' || mode !== '' || search !== '') && (
         <Button
           size="small"
           onClick={() => {
             pickMonth('');
             setStatus('');
             setMode('');
-            setRefFilter('');
-            setRemarkFilter('');
+            setSearch('');
           }}
         >
           Clear
         </Button>
       )}
-      {/*
-        The statement for exactly what is on screen: this wallet, these dates,
-        and the status, payment type and reference filters as they stand. Every
-        matching row, not the page being looked at. A filtered sheet says which
-        filters made it and totals only what it prints.
+    </Stack>
+  );
 
-        Opened rather than fetched, so the browser's own viewer shows it and
-        prints or saves it from there.
-      */}
+  /*
+    The statement for exactly what is on screen: this wallet, these dates, and
+    the status, payment type and search as they stand. Every matching row, not
+    the page being looked at. A filtered sheet says which filters made it and
+    totals only what it prints.
+
+    Opened rather than fetched, so the browser's own viewer shows it and prints
+    or saves it from there.
+  */
+  const statement = (
       <Button
         variant="contained"
         startIcon={<DownloadIcon />}
@@ -237,8 +242,7 @@ export default function Wallet() {
           if (to) q.set('to', to);
           if (status !== '') q.set('status', status);
           if (mode !== '') q.set('mode', mode);
-          if (refTerm.trim()) q.set('q', refTerm.trim());
-          if (remarkTerm.trim()) q.set('remark', remarkTerm.trim());
+          if (term.trim()) q.set('q', term.trim());
           const qs = q.toString();
           window.open(apiUrl(`/transactions/ledger/statement${qs ? `?${qs}` : ''}`), '_blank', 'noopener');
         }}
@@ -248,7 +252,41 @@ export default function Wallet() {
       >
         Statement
       </Button>
-    </Stack>
+  );
+
+  /*
+    The header of a tabbed wallet, in the same two bands as the plain one: which
+    wallet and the button that downloads it on top, the controls that choose the
+    rows under them. Held to a single row they were a strip wide enough to push
+    the search box — or the button — onto a line of its own.
+
+    `withFilters` is false on a tab that has none, and the rule stays on the tab
+    row so the table under it is still ruled off.
+  */
+  const header = (tabs: React.ReactNode, withFilters = true) => (
+    <>
+      <Stack
+        direction="row"
+        spacing={2}
+        sx={{
+          px: 2,
+          py: 0.75,
+          mb: withFilters ? 0 : 1,
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          rowGap: 1,
+          borderBottom: withFilters ? 0 : 1,
+          borderColor: 'divider',
+        }}
+      >
+        {tabs}
+        {withFilters && statement}
+      </Stack>
+      {withFilters && (
+        <Box sx={{ px: 2, pb: 1.25, mb: 1, borderBottom: 1, borderColor: 'divider' }}>{filters}</Box>
+      )}
+    </>
   );
 
   const ledger = useFetch<{ data: LedgerPage }>(
@@ -256,8 +294,7 @@ export default function Wallet() {
       `${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}` +
       `${status !== '' ? `&status=${status}` : ''}` +
       `${mode !== '' ? `&mode=${mode}` : ''}` +
-      `${refTerm.trim() ? `&q=${encodeURIComponent(refTerm.trim())}` : ''}` +
-      `${remarkTerm.trim() ? `&remark=${encodeURIComponent(remarkTerm.trim())}` : ''}`,
+      `${term.trim() ? `&q=${encodeURIComponent(term.trim())}` : ''}`,
   );
   const account = ledger.data?.data;
   useEffect(() => {
@@ -385,28 +422,7 @@ export default function Wallet() {
             />
           }
         >
-          {/*
-            One row: the tabs on the left, the period on the right. They were a
-            header row of filters over a row of tabs, which spent two bands of
-            the screen on what is one question — which wallet, over which days.
-            The rule moves from the tabs to the row, so it still runs the full
-            width under both.
-          */}
-          <Stack
-            direction="row"
-            spacing={2}
-            sx={{
-              px: 2,
-              py: 0.75,
-              mb: 1,
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              rowGap: 1,
-              borderBottom: 1,
-              borderColor: 'divider',
-            }}
-          >
+          {header(
             <Tabs
               value={wallet}
               onChange={(_, v) => {
@@ -418,9 +434,8 @@ export default function Wallet() {
               {/* Only floats received and expenses recorded: the admin's
                   transfers to this person, and what was spent from them. */}
               <Tab value="expense" label="Expense wallet" />
-            </Tabs>
-            {filters}
-          </Stack>
+            </Tabs>,
+          )}
           <LedgerTable
             entries={entries}
             loading={ledger.loading}
@@ -459,31 +474,16 @@ export default function Wallet() {
             ) : undefined
           }
         >
-          {/* One row, as the employee's: tabs left, period right. */}
-          <Stack
-            direction="row"
-            spacing={2}
-            sx={{
-              px: 2,
-              py: 0.75,
-              mb: 1,
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              rowGap: 1,
-              borderBottom: 1,
-              borderColor: 'divider',
-            }}
-          >
+          {/* The filters are only over the account: the commission statements
+              are periods already, billed one at a time, and a date range over
+              them would be a second way to choose the same thing. */}
+          {header(
             <Tabs value={tab} onChange={(_, v) => setTab(v)}>
               <Tab value="account" label="Your account" />
               <Tab value="statements" label="Commission statements" />
-            </Tabs>
-            {/* Only over the account: the commission statements are periods
-                already, billed one at a time, and a date range over them would
-                be a second way to choose the same thing. */}
-            {tab === 'account' && filters}
-          </Stack>
+            </Tabs>,
+            tab === 'account',
+          )}
 
           {tab === 'account' && (
             <LedgerTable
@@ -504,8 +504,9 @@ export default function Wallet() {
           error={ledger.error}
           onDecide={decide}
           deciding={deciding}
-          actions={filters}
-          title={isSuper(user) ? 'Head office account' : 'Your account'}
+          actions={statement}
+          filters={filters}
+          title={isSuper(user) ? 'Wallet' : 'Your account'}
           count={ledger.loading ? 'Loading…' : `${total.toLocaleString()} movements`}
           footer={
             <Pager

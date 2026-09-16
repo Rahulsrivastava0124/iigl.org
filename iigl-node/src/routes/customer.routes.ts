@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { sql } from 'kysely';
-import { live } from '../services/order.service.js';
+import { live, liveJoined } from '../services/order.service.js';
 import { wrap } from '../lib/async.js';
 import { paged, readPage, readSearch } from '../lib/paginate.js';
 import { requireLabScope, ROLE } from '../middleware/auth.js';
@@ -191,24 +191,30 @@ customerRoutes.get(
     if (!mobile) throw badRequest('A mobile number is required.');
 
     const s = await scope(req.user);
-    let q = live(db.selectFrom('orders')).where('mobile', '=', mobile);
-    if (s.kind === 'lab') q = q.where('lab_id', '=', s.id);
-    if (s.kind === 'own') q = q.where('received_by', '=', s.id);
+    // Qualified, because the laboratory joined below has a mobile of its own.
+    let q = liveJoined(db.selectFrom('orders')).where('orders.mobile', '=', mobile);
+    if (s.kind === 'lab') q = q.where('orders.lab_id', '=', s.id);
+    if (s.kind === 'own') q = q.where('orders.received_by', '=', s.id);
 
+    // Whose order it is. Head office reads across the network and the same
+    // number can have ordered from more than one laboratory; a laboratory's
+    // list is its own by definition, but the column costs it nothing.
     const orders = await q
+      .leftJoin('users as lab', 'lab.id', 'orders.lab_id')
       .select([
-        'id',
-        'order_no',
-        'order_date',
-        'delivery_date',
-        'status',
-        'customer_name',
-        'payable_amt',
-        'paid_amount',
-        'dues_amount',
-        'total_amount',
+        'orders.id',
+        'orders.order_no',
+        'orders.order_date',
+        'orders.delivery_date',
+        'orders.status',
+        'orders.customer_name',
+        'orders.payable_amt',
+        'orders.paid_amount',
+        'orders.dues_amount',
+        'orders.total_amount',
+        'lab.fullname as laboratory',
       ])
-      .orderBy('id', 'desc')
+      .orderBy('orders.id', 'desc')
       .execute();
 
     const sum = (pick: (o: (typeof orders)[number]) => unknown) =>
@@ -445,6 +451,7 @@ customerRoutes.get(
           account_id: Number(a.id),
           company_name: a.company_name,
           owner_name: a.owner_name,
+          logo: a.logo,
           customer_name: s?.customer_name ?? null,
           mobile: a.mobile,
           email: a.email,
@@ -469,6 +476,7 @@ customerRoutes.get(
           account_id: null,
           company_name: null,
           owner_name: null,
+          logo: null,
           customer_name: r.customer_name,
           mobile: r.mobile,
           email: r.email,

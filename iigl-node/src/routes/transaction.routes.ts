@@ -6,7 +6,7 @@ import { wrap } from '../lib/async.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { paged, readPage, readSearch } from '../lib/paginate.js';
 import { assertEmploys, assertLabOwnership, requireLabScope, ROLE } from '../middleware/auth.js';
-import { accruedByLab, commissionEarnings, COMMISSION_TYPE, expenseWallets, ledgerFor, sendCommission, TRANSACTION_TYPE, validateCommissionInput, notAnExpense, type LedgerScope } from '../services/commission.service.js';
+import { accruedByLab, commissionEarnings, COMMISSION_TYPE, expenseWallets, ledgerFor, sendCommission, TRANSACTION_TYPE, validateCommissionInput, receivedIntoWallet, type LedgerScope } from '../services/commission.service.js';
 import { numericId, numericParams } from '../middleware/params.js';
 
 export const transactionRoutes = Router();
@@ -514,8 +514,9 @@ transactionRoutes.get(
         .select(db.fn.sum<number>('amount').as('total'))
         .where('received_by', '=', req.user.id)
         .where('status', '=', STATUS.APPROVED)
-        // An expense addressed to me is one I approve, not money I received.
-        .where(notAnExpense)
+        // An expense addressed to me is one I approve, and a salary addressed
+        // to me is my own pay: neither is money this wallet received.
+        .where(receivedIntoWallet)
         .executeTakeFirstOrThrow(),
       db
         .selectFrom('transactions')
@@ -635,10 +636,10 @@ transactionRoutes.get(
 transactionRoutes.get(
   '/ledger',
   wrap(async (req, res) => {
-    const { target, scope, from, to, status, q, mode, remark } = readLedgerQuery(req);
+    const { target, scope, from, to, status, q, mode } = readLedgerQuery(req);
     const p = readPage(req, 100, 500);
     res.json({
-      data: await ledgerFor(target, p.limit, p.offset, scope, { from, to }, { status, q, mode, remark }),
+      data: await ledgerFor(target, p.limit, p.offset, scope, { from, to }, { status, q, mode }),
     });
   }),
 );
@@ -654,9 +655,9 @@ transactionRoutes.get(
   '/ledger/statement',
   wrap(async (req, res) => {
     // The same filters the list was given, so the sheet is the list on screen.
-    const { target, scope, from, to, status, q, mode, remark } = readLedgerQuery(req);
+    const { target, scope, from, to, status, q, mode } = readLedgerQuery(req);
     const issuedBy = req.user.fullname ?? 'IIGL';
-    const filter = { status, q, mode, remark };
+    const filter = { status, q, mode };
 
     if (req.query.format === 'html') {
       res.type('html').send(await accountStatementHtml(target, scope, { from, to }, issuedBy, filter));
@@ -717,12 +718,11 @@ function readLedgerQuery(req: Parameters<Parameters<typeof transactionRoutes.get
     throw badRequest('status must be 0 (pending), 1 (approved) or 2 (declined).');
   }
   const status = rawStatus === '' ? null : Number(rawStatus);
-  const q = String(req.query.q ?? '').trim().slice(0, 64) || null;
+  // Words to look for in the reference and the remark together.
+  const q = String(req.query.q ?? '').trim().slice(0, 100) || null;
   // How it was paid: cash, upi, card, bank, cheque. Free text rather than a
   // fixed list, because the older rows carry whatever was typed at the time.
   const mode = String(req.query.mode ?? '').trim().slice(0, 40) || null;
-  // Words to look for in the remark.
-  const remark = String(req.query.remark ?? '').trim().slice(0, 100) || null;
 
-  return { target, scope, from, to, status, q, mode, remark };
+  return { target, scope, from, to, status, q, mode };
 }

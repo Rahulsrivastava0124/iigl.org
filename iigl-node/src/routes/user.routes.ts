@@ -808,25 +808,67 @@ userRoutes.post(
       .where('date', '<=', new Date(`${month}-${String(daysInMonth).padStart(2, '0')}T00:00:00`))
       .executeTakeFirstOrThrow();
 
-    const result = await db
-      .insertInto('salary_payments')
-      .values({
-        emp_id: empId,
-        paid_by: req.user.id,
-        month,
-        amount: String(Math.round(amount * 100) / 100),
-        paid_on: new Date(`${paidOn}T00:00:00`),
-        pay_mode: String(req.body?.pay_mode ?? 'cash'),
-        reference: req.body?.reference ? String(req.body.reference).trim() : null,
-        note: req.body?.note ? String(req.body.note).trim() : null,
-        salary_month: employment?.salary ? String(employment.salary) : null,
-        days_present: Number(present.n) || 0,
-        created_at: new Date(),
-        updated_at: new Date(),
-      })
-      .executeTakeFirst();
+    const value = String(Math.round(amount * 100) / 100);
+    const payMode = String(req.body?.pay_mode ?? 'cash');
+    const reference = req.body?.reference ? String(req.body.reference).trim() : null;
+    const note = req.body?.note ? String(req.body.note).trim() : null;
 
-    res.status(201).json({ data: { id: Number(result.insertId), month, amount } });
+    /*
+      Both rows or neither.
+
+      The payslip says the month was paid; the transaction is the money leaving
+      the employer's wallet and reaching the employee's. A salary recorded
+      without its transaction left an employer's balance holding every rupee it
+      had already handed over, and the employee's account never showing what
+      they were paid.
+
+      Dated by `paid_on` rather than by now, because that is the day the money
+      moved — a payment entered late is still the day it was made. The running
+      balance is built in id order, so a backdated row settles at the end of the
+      ledger with its own date on it.
+    */
+    const id = await db.transaction().execute(async (trx) => {
+      const result = await trx
+        .insertInto('salary_payments')
+        .values({
+          emp_id: empId,
+          paid_by: req.user.id,
+          month,
+          amount: value,
+          paid_on: new Date(`${paidOn}T00:00:00`),
+          pay_mode: payMode,
+          reference,
+          note,
+          salary_month: employment?.salary ? String(employment.salary) : null,
+          days_present: Number(present.n) || 0,
+          created_at: new Date(),
+          updated_at: new Date(),
+        })
+        .executeTakeFirst();
+
+      await trx
+        .insertInto('transactions')
+        .values({
+          amount: value,
+          pay_mode: payMode,
+          transaction_no: reference,
+          transaction_type: TRANSACTION_TYPE.SALARY,
+          remark: `Salary for ${month}${note ? ` — ${note}` : ''}`,
+          send_by: req.user.id,
+          received_by: empId,
+          status: 1,
+          // The employer wrote it; there is nothing for them to be told about.
+          seen_by_sender: 1,
+          seen_by_receiver: 0,
+          created_at: new Date(`${paidOn}T00:00:00`),
+          updated_at: new Date(),
+        })
+        .executeTakeFirst();
+
+      return Number(result.insertId);
+    });
+
+    res.status(201).json({ data: { id, month, amount } });
   }),
 );
 

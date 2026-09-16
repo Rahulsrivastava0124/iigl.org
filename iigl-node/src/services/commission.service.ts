@@ -43,21 +43,41 @@ export const TRANSACTION_TYPE = {
   EXPENSE: 'expense',
   /** A student's course fee, received by head office. `student_course_id` names the enrolment. */
   COURSE_FEE: 'course_fee',
+  /*
+    Salary paid to an employee: out of the employer's wallet, into theirs.
+
+    Written beside the `salary_payments` row it belongs to, which is the payslip
+    and the record of the month. This is the money leaving — without it an
+    employer's balance still held every rupee it had already paid out.
+
+    Approved on the spot: the employer is the one paying, and nobody approves
+    their own outgoing salary.
+  */
+  SALARY: 'salary',
 } as const;
 
 /**
- * Rows that are money this user genuinely received: everything addressed to
- * them except an expense they were only asked to approve.
+ * Rows that are money this user genuinely took into their wallet.
  *
- * Written as `IS NULL OR <> 'expense'` and not `<> 'expense'` alone. The older
- * rows carry no type at all, and in SQL `NULL <> 'expense'` is NULL rather than
- * true — so the short form would quietly drop every untyped row from every
- * balance it was used in.
+ * Two kinds are addressed to somebody who is not receiving anything into it:
+ *
+ *  - an **expense**, where the employer named is the approver of what a staff
+ *    member spent, not a recipient;
+ *  - a **salary**, where the employee named is paid their own money. Their
+ *    wallet is what they hold on their employer's behalf — collections waiting
+ *    to be handed in — and a salary credited there would read as money they
+ *    still owe. The payslip and the salary history are its record; the wallet
+ *    entry that matters is the employer's, on the sending side.
+ *
+ * Written as `IS NULL OR NOT IN (…)` and not `NOT IN (…)` alone. The older rows
+ * carry no type at all, and in SQL `NULL <> 'expense'` is NULL rather than true
+ * — so the short form would quietly drop every untyped row from every balance
+ * it was used in.
  */
-export const notAnExpense = (eb: any) =>
+export const receivedIntoWallet = (eb: any) =>
   eb.or([
     eb('transaction_type', 'is', null),
-    eb('transaction_type', '!=', TRANSACTION_TYPE.EXPENSE),
+    eb('transaction_type', 'not in', [TRANSACTION_TYPE.EXPENSE, TRANSACTION_TYPE.SALARY]),
   ]);
 
 export const STATUS = { PENDING: 0, APPROVED: 1, DECLINED: 2 } as const;
@@ -579,12 +599,12 @@ export async function ledgerFor(
    * balance and every total is still the account's over the whole period, so a
    * row found by its reference shows where the account really stood after it.
    */
-  filter: { status?: number | null; q?: string | null; mode?: string | null; remark?: string | null } = {},
+  filter: { status?: number | null; q?: string | null; mode?: string | null } = {},
 ): Promise<LedgerPage> {
   // What I sent, and what I received — but not an expense I was only asked to
   // approve, which is not money that reached me and must not credit my balance.
   const mine = (eb: any) =>
-    eb.or([eb('send_by', '=', userId), eb.and([eb('received_by', '=', userId), notAnExpense(eb)])]);
+    eb.or([eb('send_by', '=', userId), eb.and([eb('received_by', '=', userId), receivedIntoWallet(eb)])]);
 
   // The whole history is read because the running balance on any entry depends
   // on every entry before it, and the totals describe the account rather than
@@ -705,30 +725,32 @@ export async function ledgerFor(
     after.push(balance);
   }
 
-  // A reference is what is printed on the row: the transaction number, or the
-  // `#id` shown when there is none. Matched loosely, because it is typed from a
-  // slip of paper.
   const wantStatus = filter.status ?? null;
   // Compared without case: the Laravel rows were typed by hand as well as
   // chosen from a list, so `Cash` and `cash` are the same way of paying.
   const wantMode = (filter.mode ?? '').trim().toLowerCase() || null;
-  const term = (filter.q ?? '').trim().toLowerCase().replace(/^#/, '');
-  // Words to find in the remark, in any order: "course fee rahul" finds
-  // "Course fee — First Course, rahul kumar".
-  const remarkWords = (filter.remark ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+  /*
+    One thing to search, over the words the row shows: its reference — the
+    transaction number, or the `#id` printed when there is none — and its
+    remark. Matched loosely, because a reference is typed from a slip of paper,
+    and word by word in any order, so "course fee rahul" finds
+    "Course fee — First Course, rahul kumar".
+
+    The type is searched with them. A row with no remark of its own prints its
+    type in the remark column — `commision`, `collected_by_order` — and a search
+    that could not find what the column plainly says is a search that looks
+    broken.
+  */
+  const words = (filter.q ?? '').trim().toLowerCase().replace(/^#/, '').split(/\s+/).filter(Boolean);
   const listed: number[] = [];
   rows.forEach((row, i) => {
     if (wantStatus !== null && Number(row.status) !== wantStatus) return;
     // "online" is every gateway payment, whatever its method (online_upi, online_debit_card…).
     const mode = String(row.pay_mode ?? '').trim().toLowerCase();
     if (wantMode && !(mode === wantMode || (wantMode === 'online' && mode.startsWith('online_')))) return;
-    if (term) {
-      const ref = String(row.transaction_no ?? '').toLowerCase();
-      if (!ref.includes(term) && String(row.id) !== term) return;
-    }
-    if (remarkWords.length) {
-      const remark = String(row.remark ?? '').toLowerCase();
-      if (!remarkWords.every((w) => remark.includes(w))) return;
+    if (words.length) {
+      const hay = `${row.transaction_no ?? ''} ${row.id} ${row.remark ?? row.transaction_type ?? ''}`.toLowerCase();
+      if (!words.every((w) => hay.includes(w))) return;
     }
     listed.push(i);
   });

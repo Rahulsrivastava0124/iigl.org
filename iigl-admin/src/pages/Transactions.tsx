@@ -12,18 +12,15 @@ import {
   TableHead,
   TableRow,
   TextField,
-  Typography,
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import { useToast } from '../components/Toast';
 import { useFetch, useDebounced } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import { payWithCashfree, type PaymentConfig, type StartedPayment } from '../lib/cashfree';
 import { payModeLabel } from '../lib/payModes';
+import { PayCommissionDialog } from '../components/PayCommission';
 import {
-  Dialog,
-  hint,
   OrderChip,
   DEFAULT_PER_PAGE, Pager,
   Panel,
@@ -129,102 +126,25 @@ export default function Transactions() {
      commission row, and the API refuses it from anybody else. */
   const canPay = commissionOnly && isLab(user) && (position?.rate ?? 0) > 0;
 
-  const [paying, setPaying] = useState(false);
-  /**
-   * Paying commission: cash handed over, or paid online through Cashfree.
-   *
-   * The dialog asks for what is being transferred and nothing else. It used to
-   * ask for the pieces certified, or the takings the share was reckoned on, and
-   * derive the amount from the laboratory's configured rate — correct
-   * arithmetic and the wrong question: a laboratory settling its account knows
-   * the figure it is sending, and often it is an old balance or a round number
-   * agreed on the phone that no single collection explains.
-   *
-   * Cash is raised pending, and head office approves or declines it when the
-   * money arrives. Online is recorded approved once Cashfree confirms it.
-   */
-  const [payMode, setPayMode] = useState('cash');
-  const [payAmount, setPayAmount] = useState('');
-  const [sending, setSending] = useState(false);
-
-  /*
-    Two ways only. Cash is counted, and its receipt is the transaction row
-    itself. Online goes through Cashfree, which is its own record of the money —
-    so neither asks for a reference or a screenshot.
-  */
-  const online = payMode === 'online';
-  // Whether Cashfree is set up, and whether it is test mode.
-  const gateway = useFetch<{ data: PaymentConfig }>('/payments/config');
-  const gatewayOn = Boolean(gateway.data?.data.enabled);
-  const testMode = gateway.data?.data.mode !== 'production';
-
-  const amount = Math.round((Number(payAmount) || 0) * 100) / 100;
+  /** What the dialog opens on, and whether it is open at all. */
+  const [payDue, setPayDue] = useState<number | null>(null);
 
   /** Opened on what is outstanding; editable for a part payment. */
-  const openPay = () => {
-    const due = position?.due ?? 0;
-    setPayMode('cash');
-    setPayAmount(due > 0 ? String(due) : '');
-    setPaying(true);
-  };
+  const openPay = () => setPayDue(position?.due ?? 0);
 
   /*
-    Arriving from the statement reminder's Pay: the dialog opens on what the
-    statements say is outstanding, once — the parameter is dropped as it opens.
+    Arriving from a Pay elsewhere: the dialog opens on what that screen says is
+    outstanding, once — the parameter is dropped as it opens.
   */
   const payParam = params.get('pay');
   useEffect(() => {
     if (!payParam || !canPay) return;
-    setPayMode('cash');
-    setPayAmount(payParam);
-    setPaying(true);
+    setPayDue(Number(payParam) || 0);
     const next = new URLSearchParams(params);
     next.delete('pay');
     setParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payParam, canPay]);
-
-  const payCommission = async () => {
-    setSending(true);
-    try {
-      /*
-        Online: Cashfree takes the money in its own window, and the API records
-        the remittance — approved, since the gateway has confirmed it — only
-        once Cashfree says the order is paid.
-      */
-      if (online) {
-        const started = await api.post<{ data: StartedPayment }>('/payments/commission', { amount });
-        const outcome = await payWithCashfree(started.data);
-        if (outcome.status === 'paid') {
-          toast.ok(`${money(outcome.amount)} paid online${testMode ? ' (test mode)' : ''}. Recorded as approved.`);
-          setPaying(false);
-          setPayMode('cash');
-          setPayAmount('');
-          reload();
-          summary.reload();
-        } else {
-          toast.error('The payment was not completed. Nothing was charged or recorded.');
-        }
-        return;
-      }
-      await api.post('/transactions/commission', {
-        amount,
-        pay_mode: payMode,
-        transaction_no: null,
-        attachment: null,
-      });
-      toast.ok('Commission sent. It waits on head office to approve it.');
-      setPaying(false);
-      setPayMode('cash');
-      setPayAmount('');
-      reload();
-      summary.reload();
-    } catch (err) {
-      toast.error(messageOf(err));
-    } finally {
-      setSending(false);
-    }
-  };
 
   const decide = async (id: number, next: 1 | 2) => {
     setBusyId(id);
@@ -495,65 +415,15 @@ export default function Transactions() {
         </TableFrame>
       </Panel>
 
-      {paying && position && (
-        <Dialog
-          title="Pay commission"
-          onClose={() => setPaying(false)}
-          onSubmit={payCommission}
-          submitLabel={
-            amount > 0
-              ? `${online ? 'Pay' : 'Send'} ${money(amount)}${online ? ' online' : ''}`
-              : online
-                ? 'Pay online'
-                : 'Send'
-          }
-          busy={sending}
-          disabled={amount <= 0}
-        >
-          <Grid container spacing={2}>
-            <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField
-                select
-                label="Payment method"
-                value={payMode}
-                onChange={(e) => setPayMode(e.target.value)}
-              >
-                <MenuItem value="cash">Cash</MenuItem>
-                {/* Cashfree: cards, UPI, netbanking, in its own window. */}
-                <MenuItem value="online" disabled={!gatewayOn}>
-                  Pay online (Cashfree){gatewayOn ? '' : ' — not set up'}
-                </MenuItem>
-              </TextField>
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField
-                label="Amount"
-                type="number"
-                required
-                value={payAmount}
-                onChange={(e) => setPayAmount(e.target.value)}
-                slotProps={{
-                  htmlInput: { min: 0, step: '0.01' },
-                  ...hint('Opens at what is outstanding. Type less to pay part of it.'),
-                }}
-              />
-            </Grid>
-
-            {/* Online says nothing here: the Cashfree window is the next thing seen. */}
-            {!online && (
-              <Grid size={12}>
-                <Typography
-                  variant="body2"
-                  sx={{ fontWeight: 600, color: amount > 0 ? 'text.primary' : 'error.main' }}
-                >
-                  {amount > 0
-                    ? `Sending ${money(amount)} to head office. It waits there for approval.`
-                    : 'Enter an amount above zero: nothing to send until then.'}
-                </Typography>
-              </Grid>
-            )}
-          </Grid>
-        </Dialog>
+      {payDue !== null && (
+        <PayCommissionDialog
+          due={payDue}
+          onClose={() => setPayDue(null)}
+          onPaid={() => {
+            reload();
+            summary.reload();
+          }}
+        />
       )}
     </>
   );

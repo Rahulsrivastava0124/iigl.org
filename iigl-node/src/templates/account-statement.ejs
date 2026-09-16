@@ -37,7 +37,23 @@ const periodText = from && to ? `${from} to ${to}` : from ? `From ${from}` : to 
        margin above it left a blank strip before anything was said. */
     @page { size: A4; margin: 7mm 14mm 14mm; }
     * { box-sizing: border-box; }
-    body { font: 11.5px/1.5 "Helvetica Neue", Arial, sans-serif; color: #101828; margin: 0; }
+    /*
+      The page, not the end of the table: the signature block belongs at the
+      foot of the sheet, and a short statement used to leave it stranded
+      halfway up with a hand's width of blank paper under it.
+
+      A4 less the printed margins above — the body fills one page at least, and
+      `.sign` takes the space left over. A longer statement simply flows on and
+      the block follows the last row, which is where it belongs there.
+    */
+    body {
+      font: 11.5px/1.5 "Helvetica Neue", Arial, sans-serif;
+      color: #101828;
+      margin: 0;
+      min-height: calc(297mm - 7mm - 14mm);
+      display: flex;
+      flex-direction: column;
+    }
     /* The document title band and who it is for, under the letterhead. */
     .doctitle { margin: 0 0 12px; text-align: center; }
     .lh { margin-bottom: 14px !important; }
@@ -49,17 +65,28 @@ const periodText = from && to ? `${from} to ${to}` : from ? `From ${from}` : to 
     .meta .k { color: #667085; min-width: 92px; }
     .meta .v { font-weight: 600; }
     .meta .right { justify-content: flex-end; }
-    .sign { margin-top: 36px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 10.5px; color: #667085; }
+    .sign { margin-top: auto; padding-top: 36px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 10.5px; color: #667085; }
     .sign .line { border-top: 1px solid #98a2b3; padding-top: 4px; min-width: 180px; text-align: center; color: #101828; }
     .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
     .box { border: 1px solid #d0d5dd; border-radius: 6px; padding: 8px 10px; }
     .box .k { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: #667085; }
     .box .v { font-size: 14px; font-weight: 600; margin-top: 2px; }
     .neg { color: #97293f; }
+    /* The gateway's own number, under the remark it belongs to. */
+    .ref { color: #667085; font-size: 9px; margin-top: 1px; }
     table { width: 100%; border-collapse: collapse; margin-top: 6px; }
     th, td { border: 1px solid #d0d5dd; padding: 5px 7px; text-align: left; vertical-align: top; }
     th { background: #f2f4f7; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
     td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    /*
+      Date, reference, party, status and payment are each one short phrase, and
+      a table left to itself was breaking them over two lines — "Rahul / Kumar" —
+      to widen the remark. They keep their line; the remark is the column that
+      wraps, because it is the only one that is a sentence.
+    */
+    td:nth-child(1), td:nth-child(2), td:nth-child(3), td:nth-child(5), td:nth-child(6),
+    th:nth-child(1), th:nth-child(2), th:nth-child(3), th:nth-child(5), th:nth-child(6) { white-space: nowrap; }
+    td:nth-child(4) { width: 99%; }
     /* A date, a reference and a way of paying are each one token: broken over two
        lines they read as two values. */
     tbody td:nth-child(1), tbody td:nth-child(2), tbody td:nth-child(6) { white-space: nowrap; }
@@ -118,9 +145,13 @@ const periodText = from && to ? `${from} to ${to}` : from ? `From ${from}` : to 
              complete, but it did not move the balance, and is greyed to say so. */%>
         <tr class="<%= Number(e.status) === 1 ? '' : 'muted' %>">
           <td><%= day(e.date) %></td>
-          <td><%= v(e.transaction_no) || '#' + e.id %></td>
+          <%/* The row's own number: short, unique, and the one the screen
+               quotes. A gateway's nineteen digits are printed under the remark
+               instead, where the column is wide enough for them — in the
+               Reference column they squeezed every other column on the sheet. */%>
+          <td>#<%= e.id %></td>
           <td><%= e.type === 'expense' ? 'Expense' : v(e.counterparty_name) || (e.counterparty > 0 ? '#' + e.counterparty : 'Customer') %></td>
-          <td><%= v(e.remark) || v(e.type) %></td>
+          <td><%= v(e.remark) || v(e.type) %><% if (e.transaction_no) { %><div class="ref">Payment reference <%= v(e.transaction_no) %></div><% } %></td>
           <td><%= statusLabel(e.status) %></td>
           <td><%= modeLabel(e.pay_mode) %></td>
           <td class="num <%= e.direction === 'credit' ? 'credit' : '' %>"><%= e.direction === 'credit' ? money(e.amount) : '' %></td>

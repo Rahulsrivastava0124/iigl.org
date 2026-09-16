@@ -24,8 +24,8 @@ const stateLabel = { paid: 'Paid', due: 'Due', overdue: 'Overdue' }[period.state
     * { box-sizing: border-box; }
     body { font: 12px/1.5 "Helvetica Neue", Arial, sans-serif; color: #101828; margin: 0; }
     .sub { font-size: 11px; color: #667085; }
-    h1 { font-size: 15px; margin: 18px 0 2px; }
-    .period { color: #667085; font-size: 11.5px; margin-bottom: 14px; }
+    h1 { font-size: 15px; margin: 18px 0 14px; }
+    .period { color: #667085; font-size: 11.5px; font-weight: 400; margin-left: 8px; }
     .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
     .box { border: 1px solid #d0d5dd; border-radius: 6px; padding: 8px 10px; }
     .box .k { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: #667085; }
@@ -43,10 +43,11 @@ const stateLabel = { paid: 'Paid', due: 'Due', overdue: 'Overdue' }[period.state
 </head>
 <body>
   <%- letterhead %>
-  <div class="sub" style="margin-top: 8px;">Commission statement issued to <%= v(lab.fullname) %><%= lab.city ? ' · ' + v(lab.city) : '' %></div>
-
-  <h1>Commission statement — <%= periodLabel %> <span class="state <%= period.state %>"><%= stateLabel %></span></h1>
-  <div class="period"><%= period.from %> to <%= period.to %> · billed on <%= period.billed_on %> · due by <%= period.due_on %></div>
+  <%
+    /* Heading, standing and dates on one line: three stacked lines of small
+       print above the figures said less than this one does. */
+  %>
+  <h1>Commission statement — <%= periodLabel %> <span class="state <%= period.state %>"><%= stateLabel %></span><span class="period">· <%= period.from %> – <%= period.to %> · billed <%= period.billed_on %> · due <%= period.due_on %></span></h1>
 
   <div class="grid">
     <div class="box"><div class="k">Rate</div><div class="v"><%= perPiece ? '₹ ' + money(rate) + ' / pc' : money(rate) + ' %' %></div></div>
