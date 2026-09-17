@@ -34,7 +34,17 @@ fileRoutes.get(
       return;
     }
 
-    const key = `uploads/${decodeURIComponent(req.path).replace(/^\/+/, '')}`;
+    /*
+      The object key for the path asked for.
+
+      Every bucket lives under `uploads/` except one: payment proof, which
+      Laravel wrote to `public/screenshots` and which therefore has no
+      `uploads/` above it. Prefixing that one anyway asked R2 for
+      `uploads/screenshots/x.webp`, which is nothing — so a bill photo could be
+      uploaded and never shown again.
+    */
+    const rel = decodeURIComponent(req.path).replace(/^\/+/, '');
+    const key = (rel.split('/')[0] ?? '') === 'screenshots' ? rel : `uploads/${rel}`;
 
     const direct = publicUrlFor(key);
     if (direct) {

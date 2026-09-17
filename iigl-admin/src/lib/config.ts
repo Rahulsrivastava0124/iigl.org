@@ -47,8 +47,13 @@ export function apiUrl(path: string): string {
  * A URL for a file the database points at.
  *
  * Image columns hold the path Laravel wrote — `public/uploads/icon/x.jpg` —
- * and the API serves the `uploads` directory at `/files`, so the stored
- * `public/uploads/` prefix comes off and the rest is the path.
+ * and the API serves those files at `/files`, so Laravel's own document root
+ * comes off and the rest is the path.
+ *
+ * `public/` and `uploads/` are stripped separately, because one folder is not
+ * under the other: payment proof is `public/screenshots/x.webp`, and taking
+ * the two off only as a pair left the prefix on and asked for a file that
+ * does not exist.
  *
  * Returns null for an empty column, so a caller can decide what an absent
  * image looks like rather than rendering a broken one.
@@ -58,7 +63,7 @@ export function fileUrl(stored: string | null | undefined): string | null {
   const trimmed = stored.trim();
   if (!trimmed) return null;
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  return apiUrl(`/files/${trimmed.replace(/^\/*(public\/)?uploads\//, '')}`);
+  return apiUrl(`/files/${trimmed.replace(/^\/+/, '').replace(/^public\//, '').replace(/^uploads\//, '')}`);
 }
 
 if (import.meta.env.DEV && IS_CROSS_ORIGIN) {

@@ -8,6 +8,7 @@ import { paged, readPage } from '../lib/paginate.js';
 import { requireLabScope } from '../middleware/auth.js';
 import { numericId } from '../middleware/params.js';
 import { TRANSACTION_TYPE, STATUS } from '../services/commission.service.js';
+import { setting } from '../services/settings.service.js';
 
 /**
  * Purchase and sales invoices.
@@ -190,25 +191,39 @@ function purchaseList() {
     const supplier = String(req.query.supplier ?? '').trim().toLowerCase();
     const product = String(req.query.product ?? '').trim().toLowerCase();
 
-    const [mine, bought] = await Promise.all([
+    const [mine, bought, companyName, companyGstin] = await Promise.all([
       db.selectFrom('purchases').selectAll().where('lab_id', '=', req.user.id).execute(),
       db
         .selectFrom('sales')
         .leftJoin('users as seller', 'seller.id', 'sales.lab_id')
         .selectAll('sales')
-        .select('seller.fullname as seller_name')
+        .select(['seller.fullname as seller_name', 'seller.gst_no as seller_gst', 'seller.role_id as seller_role'])
         .where('sales.buyer_lab_id', '=', req.user.id)
         .execute(),
+      // Head office trades under the company on its letterhead, not under the
+      // name of whoever holds the account: a laboratory reading its purchases
+      // should see the same supplier the printed invoice is from.
+      setting('company.name'),
+      setting('company.gstin'),
     ]);
 
     const rows = [
       ...mine.map((r) => ({ ...r, source: 'purchase' as const })),
-      // The seller is the supplier on this side of the same line.
-      ...bought.map(({ seller_name, buyer_lab_id: _buyer, ...r }) => ({
-        ...r,
-        party_name: seller_name ?? 'Head office',
-        source: 'sale' as const,
-      })),
+      /*
+        The seller is the supplier on this side of the same line — and the GST
+        on the row is the *buyer's*, which the sales form fills in from the
+        laboratory it was sold to. Shown unchanged it told a laboratory its own
+        tax number was its supplier's. Both come from the seller instead.
+      */
+      ...bought.map(({ seller_name, seller_gst, seller_role, buyer_lab_id: _buyer, ...r }) => {
+        const headOffice = Number(seller_role) === 1;
+        return {
+          ...r,
+          party_name: (headOffice ? companyName : null) || seller_name || 'Head office',
+          gst_no: (headOffice ? companyGstin : seller_gst) || null,
+          source: 'sale' as const,
+        };
+      }),
     ]
       .filter((r) => !supplier || String(r.party_name).toLowerCase().includes(supplier))
       .filter((r) => !product || String(r.product_name).toLowerCase().includes(product))

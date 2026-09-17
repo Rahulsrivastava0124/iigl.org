@@ -170,7 +170,11 @@ export function createApp() {
       }
       next();
     })
-    .use(express.static(path.resolve(env.legacyPublicRoot, 'uploads'), { index: false }), fileRoutes);
+    .use(express.static(path.resolve(env.legacyPublicRoot, 'uploads'), { index: false }))
+    // Payment proof sits beside `uploads/` rather than under it, because that
+    // is where Laravel put it.
+    .use('/screenshots', express.static(path.resolve(env.legacyPublicRoot, 'screenshots'), { index: false }))
+    .use(fileRoutes);
 
   // The website's own pictures are as public as the pages they sit on: what
   // Website Setup uploads (banner), the course cards (website), and category
