@@ -152,7 +152,7 @@ export default function ReviewsSection({ kind = 'client' }) {
         <div className="mx-auto max-w-[820px] text-center">
           <SectionLabel>{copy.label}</SectionLabel>
 
-          <h2 className="m-0 mt-4 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[28px]">
+          <h2 className="m-0 mt-4 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[24px]">
             {copy.title}
           </h2>
 

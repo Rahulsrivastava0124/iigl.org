@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import { A11y, Autoplay } from 'swiper/modules';
+import { Swiper, SwiperSlide } from 'swiper/react';
+import 'swiper/css';
 import { Award, BadgeCheck, CircleCheck, FileSearch, Keyboard, Microscope, MonitorPlay, Presentation } from 'lucide-react';
 import ac1 from '../../../Assets/AC1.png';
 import ac2 from '../../../Assets/AC2.png';
@@ -24,7 +27,7 @@ import { fileUrl, getPublic, usePublic } from '../../lib/api.js';
  */
 
 const serif = "font-['Playfair_Display',Georgia,'Times_New_Roman',serif]";
-const headingClass = `m-0 mt-4 ${serif} text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[28px]`;
+const headingClass = `m-0 mt-4 ${serif} text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[24px]`;
 const introClass = 'mx-auto mt-3 max-w-[760px] text-[16px] font-normal leading-[1.7] text-[#4a5265]';
 
 function Heading({ label, title, intro }) {
@@ -44,23 +47,23 @@ function Hero() {
     <section className="bg-linear-to-b from-[#0b2a63] to-[#061948] px-5 py-16 text-center text-white sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[860px]">
         <p className="m-0 text-[12px] font-medium uppercase tracking-[0.14em] text-[#e3b447]">IIGL Education</p>
-        <h1 className={`m-0 mt-4 ${serif} text-[48px] font-medium leading-[1.08] max-[640px]:text-[34px]`}>
+        <h1 className={`m-0 mt-4 ${serif} text-[48px] font-medium leading-[1.08] max-[640px]:text-[24px]`}>
           Your Journey to Excellence Starts Here
         </h1>
         <p className="mx-auto mt-4 max-w-[680px] text-[16px] leading-[1.7] text-white/80">
           Expert-led courses in gemology, diamonds and jewellery, taught in the classroom and the laboratory, with a
           certificate anyone can verify.
         </p>
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+        <div className="mt-8 flex items-center justify-center gap-3">
           <a
             href="#courses"
-            className="inline-flex h-[50px] items-center rounded-lg bg-linear-to-b from-[#df9d3d] to-[#bd7724] px-7 text-[15px] font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.32)]"
+            className="inline-flex h-[50px] items-center whitespace-nowrap rounded-lg bg-linear-to-b from-[#df9d3d] to-[#bd7724] px-7 text-[15px] font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.32)] max-[420px]:px-4 max-[420px]:text-[13px]"
           >
             Explore Courses
           </a>
           <a
             href="#verify-certificate"
-            className="inline-flex h-[50px] items-center rounded-lg border border-white/40 px-7 text-[15px] font-medium text-white transition-colors hover:bg-white/10"
+            className="inline-flex h-[50px] items-center whitespace-nowrap rounded-lg border border-white/40 px-7 text-[15px] font-medium text-white transition-colors hover:bg-white/10 max-[420px]:px-4 max-[420px]:text-[13px]"
           >
             Verify a Certificate
           </a>
@@ -95,6 +98,19 @@ const METHODS = [
   },
 ];
 
+function MethodCard({ icon: Icon, title, text, index }) {
+  return (
+    <article className="relative h-full rounded-xl border border-[#e6e8ee] bg-white p-6 shadow-[0_15px_38px_rgba(44,59,100,0.08)]">
+      <span className="absolute right-5 top-5 text-[13px] font-semibold text-[#d5d9e2]">0{index + 1}</span>
+      <span className="icon-gold-outline inline-flex h-14 w-14">
+        <Icon className="h-7 w-7" strokeWidth={1.5} />
+      </span>
+      <h3 className={`m-0 mt-5 ${serif} text-[20px] font-medium text-[#061948]`}>{title}</h3>
+      <p className="m-0 mt-2 text-[14.5px] leading-[1.65] text-[#4a5265]">{text}</p>
+    </article>
+  );
+}
+
 function LearningMethods() {
   return (
     <section id="learning-methods" className="bg-[#f8f9fb] px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
@@ -108,19 +124,30 @@ function LearningMethods() {
           }
           intro="Theory, practice and assessment, in the order a gemmologist actually needs them."
         />
-        <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          {METHODS.map(({ icon: Icon, title, text }, index) => (
-            <article
-              key={title}
-              className="relative rounded-xl border border-[#e6e8ee] bg-white p-6 shadow-[0_15px_38px_rgba(44,59,100,0.08)]"
-            >
-              <span className="absolute right-5 top-5 text-[13px] font-semibold text-[#d5d9e2]">0{index + 1}</span>
-              <span className="icon-gold-outline inline-flex h-14 w-14">
-                <Icon className="h-7 w-7" strokeWidth={1.5} />
-              </span>
-              <h3 className={`m-0 mt-5 ${serif} text-[20px] font-medium text-[#061948]`}>{title}</h3>
-              <p className="m-0 mt-2 text-[14.5px] leading-[1.65] text-[#4a5265]">{text}</p>
-            </article>
+        {/* Phone: the methods auto-rotate through a one-card swiper; the static
+            grid takes over from `sm` up. */}
+        <div className="mt-8 sm:hidden">
+          <Swiper
+            className="w-full"
+            modules={[A11y, Autoplay]}
+            loop
+            speed={600}
+            spaceBetween={16}
+            slidesPerView={1.1}
+            autoplay={{ delay: 3000, disableOnInteraction: false }}
+            a11y={{ prevSlideMessage: 'Previous method', nextSlideMessage: 'Next method' }}
+          >
+            {METHODS.map((method, index) => (
+              <SwiperSlide key={method.title} className="h-auto">
+                <MethodCard {...method} index={index} />
+              </SwiperSlide>
+            ))}
+          </Swiper>
+        </div>
+
+        <div className="mt-8 hidden gap-5 sm:grid sm:grid-cols-2 xl:grid-cols-4">
+          {METHODS.map((method, index) => (
+            <MethodCard key={method.title} {...method} index={index} />
           ))}
         </div>
       </div>

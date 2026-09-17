@@ -47,6 +47,7 @@ import StudentIcon from '@mui/icons-material/SchoolOutlined';
 import EnquiryIcon from '@mui/icons-material/SupportAgentOutlined';
 import AttendanceIcon from '@mui/icons-material/CalendarMonthOutlined';
 import MessagesIcon from '@mui/icons-material/ForumOutlined';
+import InvoiceIcon from '@mui/icons-material/ReceiptLongOutlined';
 import SettingsIcon from '@mui/icons-material/SettingsOutlined';
 import LogoutIcon from '@mui/icons-material/LogoutOutlined';
 import { alpha } from '@mui/material/styles';
@@ -165,6 +166,16 @@ const ADMIN_GROUPS: Group[] = [
     ],
   },
   {
+    // Purchase and sales invoices, straight after the account. One page, a tab
+    // each, reached from its own sub-item.
+    label: 'Invoice',
+    icon: InvoiceIcon,
+    items: [
+      { to: '/invoices?tab=purchase', label: 'Purchase' },
+      { to: '/invoices?tab=sales', label: 'Sales' },
+    ],
+  },
+  {
     label: 'Laboratory',
     icon: LabsIcon,
     items: [{ to: '/laboratories', label: 'View Franchise', perm: 'laboratory' }],
@@ -200,13 +211,6 @@ const ADMIN_GROUPS: Group[] = [
       // employee menu rather than as part of this one.
       { to: '/roles', label: 'Roles & Permissions', adminOnly: true },
     ],
-  },
-  {
-    // Head office's conversations with its laboratories and with staff, on a
-    // page of their own rather than beside an attendance calendar.
-    label: 'Messages',
-    icon: MessagesIcon,
-    items: [{ to: '/messages', label: 'Messages', end: true, badge: 'messages' }],
   },
   {
     label: 'Customer',
@@ -377,6 +381,17 @@ const FIELD_GROUPS: Group[] = [
     ],
   },
   {
+    // Purchase and sales invoices, after the account. The laboratory account
+    // only, not its staff. One page, a tab reached from each sub-item.
+    label: 'Invoice',
+    icon: InvoiceIcon,
+    labOnly: true,
+    items: [
+      { to: '/invoices?tab=purchase', label: 'Purchase', labOnly: true },
+      { to: '/invoices?tab=sales', label: 'Sales', labOnly: true },
+    ],
+  },
+  {
     /*
       Their own working day: the month they punched.
 
@@ -399,14 +414,6 @@ const FIELD_GROUPS: Group[] = [
       // Staff chat with their employer on this page, so the unread count sits here.
       { to: '/attendance', label: 'Attendance', end: true, staffOnly: true, badge: 'messages' },
     ],
-  },
-  {
-    // The laboratory's messages, with head office and with its staff. Its staff
-    // have no page of their own: their chat is on Attendance, beside the month.
-    label: 'Messages',
-    icon: MessagesIcon,
-    labOnly: true,
-    items: [{ to: '/messages', label: 'Messages', end: true, badge: 'messages' }],
   },
   {
     label: 'Employee',
@@ -1064,11 +1071,33 @@ export default function Shell() {
             )}
 
             {/*
-              The bell counts the one thing in this system that actually waits
-              on a person — money sent to them and not yet approved or declined
-              — and opens the box that lists it. See `NotificationBell`.
+              Messages and the bell, kept close together as the pair of things
+              that wait on a person. Wrapped so the Toolbar's own gap sits around
+              the pair, not between the two icons.
+
+              Messages moved off the sidebar to sit beside the bell, opened from
+              the same corner whoever is signed in. The count is the unread total
+              the menu used to carry.
             */}
-            <NotificationBell />
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Tooltip title={unreadCount === 0 ? 'Messages' : `${unreadCount} unread`}>
+                <IconButton
+                  aria-label={unreadCount === 0 ? 'Messages' : `Messages, ${unreadCount} unread`}
+                  onClick={() => navigate('/messages')}
+                >
+                  <Badge color="success" badgeContent={unreadCount} max={99}>
+                    <MessagesIcon />
+                  </Badge>
+                </IconButton>
+              </Tooltip>
+
+              {/*
+                The bell counts the one thing in this system that actually waits
+                on a person — money sent to them and not yet approved or declined
+                — and opens the box that lists it. See `NotificationBell`.
+              */}
+              <NotificationBell />
+            </Box>
 
             <Stack
               direction="row"

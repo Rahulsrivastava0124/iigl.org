@@ -131,7 +131,7 @@ export default function CompanyCertificatesSection() {
       <div className="relative mx-auto max-w-[1390px]">
         <div className="mx-auto max-w-[820px] text-center">
           <SectionLabel>Trust &amp; Authenticity</SectionLabel>
-          <h2 className="m-0 mt-4 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[28px]">
+          <h2 className="m-0 mt-4 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[24px]">
             Our Company <span className="text-[#bd7724]">Certificates</span>
           </h2>
           <p className="mx-auto mt-3 max-w-[760px] text-[16px] font-normal leading-[1.7] text-[#4a5265]">

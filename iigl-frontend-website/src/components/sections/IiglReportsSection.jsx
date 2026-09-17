@@ -3,11 +3,13 @@ import logoTextUrl from '../../../Assets/logo-text.png';
 
 export default function IiglReportsSection() {
   return (
-    <section className="bg-white px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
-      <div className="mx-auto max-w-[1390px]">
+    <section className="bg-white py-12 text-[#2c3b64]">
+      {/* The heading and blurb keep the page's column; the report image below
+          breaks out of it to run edge to edge across the screen. */}
+      <div className="mx-auto max-w-[1390px] px-5 sm:px-8 lg:px-12">
         <div className="grid items-end gap-8 lg:grid-cols-[0.88fr_1.12fr] lg:gap-14">
           <div>
-            <h2 className="m-0 flex flex-wrap items-end gap-x-4 gap-y-2 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[28px]">
+            <h2 className="m-0 flex flex-wrap items-end gap-x-4 gap-y-2 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[24px]">
               <img
                 className="h-auto w-[clamp(112px,10vw,154px)] translate-y-[2px]"
                 src={logoTextUrl}
@@ -22,15 +24,15 @@ export default function IiglReportsSection() {
             of reports, grading and authenticating loose diamonds, gemstones, and finished jewelry around the world.
           </p>
         </div>
-
-        <figure className="mt-9 h-[clamp(300px,34vw,520px)] overflow-hidden rounded-[22px] border border-[#e6e8ee] bg-[#edf3f7] shadow-[0_20px_46px_rgba(44,59,100,0.12)] max-[640px]:mt-7 max-[640px]:h-[260px] max-[640px]:rounded-xl">
-          <img
-            className="h-full w-full object-cover"
-            src={certificateUrl}
-            alt="IIGL printed grading report booklet and certificate preview"
-          />
-        </figure>
       </div>
+
+      <figure className="mt-9 h-[clamp(300px,34vw,520px)] w-full overflow-hidden border-y border-[#e6e8ee] bg-[#edf3f7] shadow-[0_20px_46px_rgba(44,59,100,0.12)] max-[640px]:mt-7 max-[640px]:h-[260px]">
+        <img
+          className="h-full w-full object-cover"
+          src={certificateUrl}
+          alt="IIGL printed grading report booklet and certificate preview"
+        />
+      </figure>
     </section>
   );
 }

@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { A11y, Autoplay } from 'swiper/modules';
+import { Swiper, SwiperSlide } from 'swiper/react';
+import 'swiper/css';
 import {
   BadgeCheck,
   CircleAlert,
@@ -389,7 +392,7 @@ export default function VerifyReportPage({ id }) {
       <section className="bg-linear-to-b from-[#0b2a63] to-[#061948] px-5 pb-28 pt-14 text-center text-white sm:px-8 lg:px-12">
         <div className="mx-auto max-w-[820px]">
           <p className="m-0 text-[12px] font-medium uppercase tracking-[0.14em] text-[#e3b447]">Trust &amp; Authenticity</p>
-          <h1 className={`m-0 mt-4 ${serif} text-[48px] font-medium leading-[1.08] max-[640px]:text-[34px]`}>Verify Report</h1>
+          <h1 className={`m-0 mt-4 ${serif} text-[48px] font-medium leading-[1.08] max-[640px]:text-[24px]`}>Verify Report</h1>
           <p className="mx-auto mt-4 max-w-[640px] text-[16px] leading-[1.7] text-white/80">
             Check any IIGL grading report against the laboratory’s own record — type the report number, or scan the QR
             code printed on it.
@@ -409,36 +412,42 @@ export default function VerifyReportPage({ id }) {
             <label htmlFor="report-no" className="mb-2 block text-[14px] font-medium text-[#2c3b64]">
               Report number
             </label>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <input
-                id="report-no"
-                // Grows beside the buttons on a wide screen only: flex-1 in the phone's
-                // column would set its height to nothing.
-                className="h-[52px] min-w-0 rounded-lg border border-[#e6e8ee] bg-[#f8f9fb] px-4 font-mono text-[16px] text-[#061948] outline-none placeholder:font-sans placeholder:text-[#8b93a7] focus:border-[#d58a2b] focus:bg-white sm:flex-1"
-                value={no}
-                onChange={(event) => setNo(event.target.value)}
-                placeholder="Enter your report number"
-                required
-                maxLength={40}
-                autoComplete="off"
-                spellCheck={false}
-                autoFocus={!id && !initialNo}
-              />
+            {/* Input and Verify share one row; the QR scanner is an icon button
+                tucked inside the field's right edge. */}
+            <div className="flex gap-3">
+              <div className="relative min-w-0 flex-1">
+                <input
+                  id="report-no"
+                  className="h-[52px] w-full rounded-lg border border-[#e6e8ee] bg-[#f8f9fb] pl-4 pr-14 font-mono text-[16px] text-[#061948] outline-none placeholder:font-sans placeholder:text-[#8b93a7] focus:border-[#d58a2b] focus:bg-white"
+                  value={no}
+                  onChange={(event) => setNo(event.target.value)}
+                  placeholder="Enter your report number"
+                  required
+                  maxLength={40}
+                  autoComplete="off"
+                  spellCheck={false}
+                  autoFocus={!id && !initialNo}
+                />
+                <button
+                  type="button"
+                  onClick={openScanner}
+                  aria-label="Scan QR code"
+                  className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-[#061948] transition-colors hover:bg-[#eef0f4]"
+                >
+                  <ScanLine aria-hidden className="h-[20px] w-[20px]" strokeWidth={2} />
+                </button>
+              </div>
               <button
                 type="submit"
                 disabled={result.status === 'checking'}
-                className="inline-flex h-[52px] cursor-pointer items-center justify-center gap-2 rounded-lg border-0 bg-linear-to-b from-[#df9d3d] to-[#bd7724] px-7 text-[15px] font-medium text-white disabled:cursor-wait disabled:opacity-60"
+                aria-label={result.status === 'checking' ? 'Checking…' : 'Verify'}
+                className="inline-flex h-[52px] w-[52px] shrink-0 cursor-pointer items-center justify-center rounded-lg border-0 bg-linear-to-b from-[#df9d3d] to-[#bd7724] text-white disabled:cursor-wait disabled:opacity-60"
               >
-                <Search aria-hidden className="h-[18px] w-[18px]" strokeWidth={2} />
-                {result.status === 'checking' ? 'Checking…' : 'Verify'}
-              </button>
-              <button
-                type="button"
-                onClick={openScanner}
-                className="inline-flex h-[52px] cursor-pointer items-center justify-center gap-2 rounded-lg border border-[#061948] bg-white px-6 text-[15px] font-medium text-[#061948] transition-colors hover:bg-[#061948] hover:text-white"
-              >
-                <ScanLine aria-hidden className="h-[18px] w-[18px]" strokeWidth={2} />
-                Scan QR code
+                {result.status === 'checking' ? (
+                  <span aria-hidden className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                ) : (
+                  <Search aria-hidden className="h-[20px] w-[20px]" strokeWidth={2} />
+                )}
               </button>
             </div>
             <p className="m-0 mt-3 text-[13px] leading-[1.5] text-[#8b93a7]">
@@ -462,7 +471,7 @@ export default function VerifyReportPage({ id }) {
 
       <section className="px-5 py-14 sm:px-8 lg:px-12">
         <div className="mx-auto max-w-[1180px]">
-          <h2 className={`m-0 text-center ${serif} text-[36px] font-medium leading-[1.08] text-[#061948] max-[640px]:text-[28px]`}>
+          <h2 className={`m-0 text-center ${serif} text-[36px] font-medium leading-[1.08] text-[#061948] max-[640px]:text-[24px]`}>
             How to Verify a <span className="text-[#bd7724]">Report</span>
           </h2>
           <ol className="m-0 mt-8 grid list-none gap-5 p-0 md:grid-cols-3">
@@ -478,7 +487,34 @@ export default function VerifyReportPage({ id }) {
             ))}
           </ol>
 
-          <div className="mt-6 grid gap-5 md:grid-cols-3">
+          {/* Phone: the notes auto-rotate through a swiper; the static grid
+              takes over from `md` up. */}
+          <div className="mt-6 md:hidden">
+            <Swiper
+              className="w-full"
+              modules={[A11y, Autoplay]}
+              loop
+              speed={600}
+              spaceBetween={16}
+              slidesPerView={1.1}
+              autoplay={{ delay: 3000, disableOnInteraction: false }}
+              a11y={{ prevSlideMessage: 'Previous note', nextSlideMessage: 'Next note' }}
+            >
+              {NOTES.map(({ icon: Icon, title, text }) => (
+                <SwiperSlide key={title} className="h-auto">
+                  <div className="flex h-full gap-4 rounded-xl bg-[#061948] p-6 text-white">
+                    <Icon aria-hidden className="h-6 w-6 shrink-0 text-[#e3b447]" strokeWidth={1.6} />
+                    <div>
+                      <h3 className="m-0 text-[16px] font-semibold">{title}</h3>
+                      <p className="m-0 mt-2 text-[14px] leading-[1.6] text-white/80">{text}</p>
+                    </div>
+                  </div>
+                </SwiperSlide>
+              ))}
+            </Swiper>
+          </div>
+
+          <div className="mt-6 hidden gap-5 md:grid md:grid-cols-3">
             {NOTES.map(({ icon: Icon, title, text }) => (
               <div key={title} className="flex gap-4 rounded-xl bg-[#061948] p-6 text-white">
                 <Icon aria-hidden className="h-6 w-6 shrink-0 text-[#e3b447]" strokeWidth={1.6} />

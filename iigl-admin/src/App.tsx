@@ -12,6 +12,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Orders from './pages/Orders';
 import OrderDetail from './pages/OrderDetail';
+import Invoices from './pages/Invoices';
 import Reports from './pages/Reports';
 import Transactions from './pages/Transactions';
 import Laboratories from './pages/Laboratories';
@@ -164,6 +165,8 @@ function Routed() {
         {/* The same form, amending. See `NewOrder`. */}
         <Route path="/orders/:id/edit" element={<NewOrder />} />
         <Route path="/orders/:id" element={<OrderDetail />} />
+        {/* Purchase and sales invoices, one page with two tabs. */}
+        <Route path="/invoices" element={<Invoices />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/reports/new" element={<NewReport />} />
         {/* Amending an issued certificate. Its own screen rather than the

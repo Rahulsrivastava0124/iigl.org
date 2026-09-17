@@ -43,7 +43,7 @@ export default function StatsSection() {
             className="flex flex-col items-center text-center md:border-l md:border-white/15 md:first:border-l-0"
           >
             <Icon aria-hidden className="h-7 w-7 text-[#e3b447]" strokeWidth={1.5} />
-            <dd className="m-0 mt-3 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[40px] font-medium leading-none max-[640px]:text-[32px]">
+            <dd className="m-0 mt-3 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[40px] font-medium leading-none max-[640px]:text-[26px]">
               {/* Indian grouping: 1,22,103, as every other number on the site reads. */}
               {stats[key].toLocaleString('en-IN')}
             </dd>

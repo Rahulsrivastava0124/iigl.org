@@ -10,6 +10,7 @@ import FaqSection from './components/sections/FaqSection.jsx';
 import GallerySection from './components/sections/GallerySection.jsx';
 import Footer from './components/sections/Footer.jsx';
 import HeroSection from './components/sections/HeroSection.jsx';
+import { AboutPage, AffiliationPage, ContactPage, ImportancePage } from './components/sections/InfoPages.jsx';
 import IiglReportsSection from './components/sections/IiglReportsSection.jsx';
 import OurBranchesSection from './components/sections/OurBranchesSection.jsx';
 import Navbar from './components/sections/Navbar.jsx';
@@ -30,6 +31,8 @@ export default function App() {
   const verify = window.location.pathname.match(/^\/verify-report(?:\/(\d+))?\/?$/);
   // The blog, at /blog, and one article at /blog/<slug>.
   const blog = window.location.pathname.match(/^\/blog(?:\/([^/]+))?\/?$/);
+  // The standing information pages carried over from the old site.
+  const path = window.location.pathname.replace(/\/$/, '');
 
   return (
     <div className="min-h-screen overflow-x-clip bg-white text-[#2c3b64]">
@@ -59,6 +62,16 @@ export default function App() {
         blog[1] ? <BlogArticlePage slug={blog[1]} /> : <BlogPage />
       ) : education ? (
         <EducationPage />
+      ) : path === '/about-us' ? (
+        <AboutPage />
+      ) : path === '/affiliation' ? (
+        <AffiliationPage />
+      ) : path === '/importance-of-certificate' ? (
+        <ImportancePage />
+      ) : path === '/contact-us' ? (
+        <ContactPage />
+      ) : path === '/faq' ? (
+        <FaqSection />
       ) : (
         <>
       <HeroSection />

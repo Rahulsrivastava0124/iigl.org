@@ -124,7 +124,7 @@ function Hero({ title, intro }) {
     <section className="bg-linear-to-b from-[#0b2a63] to-[#061948] px-5 py-16 text-center text-white sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[860px]">
         <p className="m-0 text-[12px] font-medium uppercase tracking-[0.14em] text-[#e3b447]">IIGL Blog</p>
-        <h1 className={`m-0 mt-4 ${serif} text-[48px] font-medium leading-[1.08] max-[640px]:text-[34px]`}>{title}</h1>
+        <h1 className={`m-0 mt-4 ${serif} text-[48px] font-medium leading-[1.08] max-[640px]:text-[24px]`}>{title}</h1>
         <p className="mx-auto mt-4 max-w-[680px] text-[16px] leading-[1.7] text-white/80">{intro}</p>
       </div>
     </section>
@@ -134,7 +134,7 @@ function Hero({ title, intro }) {
 function Notice({ title, text, back }) {
   return (
     <div className="mx-auto max-w-[520px] py-16 text-center">
-      <h2 className={`m-0 ${serif} text-[28px] font-medium text-[#061948]`}>{title}</h2>
+      <h2 className={`m-0 ${serif} text-[28px] font-medium text-[#061948] max-[640px]:text-[22px]`}>{title}</h2>
       <p className="mx-auto mt-3 text-[15px] leading-[1.7] text-[#4a5265]">{text}</p>
       {back && (
         <a className="mt-6 inline-flex items-center gap-2 text-[14px] font-medium text-[#bd7724] hover:underline" href="/blog">
@@ -359,7 +359,7 @@ export function BlogArticlePage({ slug }) {
           {article.category && (
             <p className="m-0 mt-6 text-[12px] font-medium uppercase tracking-[0.14em] text-[#e3b447]">{article.category}</p>
           )}
-          <h1 className={`m-0 mt-3 ${serif} text-[44px] font-medium leading-[1.12] max-[640px]:text-[30px]`}>{article.page_name}</h1>
+          <h1 className={`m-0 mt-3 ${serif} text-[44px] font-medium leading-[1.12] max-[640px]:text-[25px]`}>{article.page_name}</h1>
           {article.excerpt && <p className="m-0 mt-4 max-w-[720px] text-[17px] leading-[1.7] text-white/85">{article.excerpt}</p>}
           <div className="mt-6">
             <Meta article={article} minutes={minutes} light />
@@ -385,7 +385,7 @@ export function BlogArticlePage({ slug }) {
           <div className="mx-auto max-w-[1240px]">
             <div className="text-center">
               <SectionLabel>Keep Reading</SectionLabel>
-              <h2 className={`m-0 mt-4 ${serif} text-[36px] font-medium leading-[1.08] text-[#061948] max-[640px]:text-[28px]`}>
+              <h2 className={`m-0 mt-4 ${serif} text-[36px] font-medium leading-[1.08] text-[#061948] max-[640px]:text-[24px]`}>
                 More From the Blog
               </h2>
             </div>

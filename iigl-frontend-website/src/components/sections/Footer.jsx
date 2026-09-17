@@ -28,13 +28,11 @@ const columns = [
   {
     heading: 'Company',
     links: [
-      { label: 'About Us', href: '#about' },
-      { label: 'IIGL Reports', href: '#reports' },
-      { label: 'Our Services', href: '#services' },
-      { label: 'School of Gemology', href: '#school-of-gemology' },
-      { label: 'School of Rock', href: '#school-of-rock' },
+      { label: 'About Us', href: '/about-us' },
+      { label: 'Affiliation', href: '/affiliation' },
+      { label: 'Importance of Certificate', href: '/importance-of-certificate' },
       { label: 'GemBlog', href: '/blog' },
-      { label: 'Contact Us', href: '#contact' },
+      { label: 'Contact Us', href: '/contact-us' },
     ],
   },
   {
@@ -43,9 +41,9 @@ const columns = [
       { label: 'Courses', href: '#courses' },
       { label: 'Study Materials', href: '#study-materials' },
       { label: 'Certification', href: '#certification' },
-      { label: 'FAQ', href: '#faq' },
+      { label: 'FAQ', href: '/faq' },
       { label: 'Blog', href: '/blog' },
-      { label: 'Help Center', href: '#help' },
+      { label: 'Help Center', href: '/contact-us' },
     ],
   },
   {
@@ -107,10 +105,11 @@ export default function Footer() {
       />
 
       <div className="relative mx-auto max-w-[1390px]">
-        {/* One column on a phone, two on a tablet, the design's five on a desktop. */}
-        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.25fr_0.85fr_0.85fr_0.85fr_1.15fr] lg:gap-8">
+        {/* Two columns on a phone, the design's five on a desktop. The brand
+            block spans the pair so its logo and address keep the full width. */}
+        <div className="grid grid-cols-2 gap-x-6 gap-y-10 lg:grid-cols-[1.25fr_0.85fr_0.85fr_0.85fr_1.15fr] lg:gap-8">
           {/* -------------------------------------------------- the brand */}
-          <div>
+          <div className="col-span-2 lg:col-span-1">
             <a className="flex items-center gap-3" href="/" aria-label="IIGL home">
               <span
                 aria-hidden
@@ -215,14 +214,14 @@ export default function Footer() {
               nothing is worse than one that plainly does not work yet.
             */}
             <form
-              className="mt-5 flex h-[46px] max-w-[300px] items-center overflow-hidden rounded-md border border-white/15 bg-white/[0.04] focus-within:border-white/60"
+              className="mt-5 flex h-[46px] w-full items-center overflow-hidden rounded-md border border-white/15 bg-white/[0.04] focus-within:border-white/60"
               onSubmit={(event) => event.preventDefault()}
             >
               <label className="sr-only" htmlFor="footer-newsletter">
                 Your email address
               </label>
               <input
-                className="h-full min-w-0 flex-1 bg-transparent px-4 text-[13px] font-normal text-white placeholder:text-white/45 focus:outline-none"
+                className="h-full min-w-0 flex-1 bg-transparent px-4 text-[13px] font-normal text-white placeholder:text-white focus:outline-none"
                 id="footer-newsletter"
                 name="email"
                 type="email"

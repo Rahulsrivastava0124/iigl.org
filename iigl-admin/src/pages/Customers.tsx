@@ -115,14 +115,16 @@ export default function Customers() {
   const current = tabs.find((t) => t.id === tab) ?? tabs[0];
 
   /*
-    All Customers has no view control.
+    The view control on every tab, All Customers included.
 
-    That page is one customer's orders, and this tab is the network's list: the
-    same number can have ordered from two laboratories, so what it would open is
-    a history assembled across franchises rather than the one anybody came from.
-    The Registered and Not-Registered tabs keep it.
+    That page is one customer's orders. On the network list the same number can
+    have ordered from more than one laboratory, so what it opens is a history
+    assembled across franchises — head office's `/customers/:mobile/orders`
+    returns exactly that, with the Laboratory column naming each. Withholding it
+    on All Customers left head office, whose list this is, unable to open the
+    orders — and the order behind them — from the one tab it lives on.
   */
-  const canView = current.id !== 'all';
+  const canView = true;
   const registered = current.id === 'registered';
   // Granted like everything else about customers: a laboratory and head office
   // always may, staff when they have been given it.

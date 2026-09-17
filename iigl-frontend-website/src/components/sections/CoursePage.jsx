@@ -121,7 +121,7 @@ export default function CoursePage({ id }) {
           <p className="m-0 text-[15px] text-[#4a5265]">Loading the course…</p>
         ) : (
           <>
-            <h1 className="m-0 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[32px] font-medium text-[#061948]">
+            <h1 className="m-0 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[32px] font-medium text-[#061948] max-[640px]:text-[24px]">
               Course not found
             </h1>
             <p className="mx-auto mt-3 max-w-[480px] text-[15px] text-[#4a5265]">
@@ -176,7 +176,7 @@ export default function CoursePage({ id }) {
                 ))}
               </div>
 
-              <h1 className="m-0 mt-4 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[44px] font-medium leading-[1.1] text-[#061948] max-[640px]:text-[32px]">
+              <h1 className="m-0 mt-4 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[44px] font-medium leading-[1.1] text-[#061948] max-[640px]:text-[26px]">
                 {title}
               </h1>
               {course.subtitle && (
