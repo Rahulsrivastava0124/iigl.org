@@ -9,6 +9,7 @@ import { authRoutes } from './routes/auth.routes.js';
 import { catalogRoutes } from './routes/catalog.routes.js';
 import { publicRoutes } from './routes/public.routes.js';
 import { orderRoutes } from './routes/order.routes.js';
+import { invoiceRoutes } from './routes/invoice.routes.js';
 import { reportRoutes } from './routes/report.routes.js';
 import { transactionRoutes } from './routes/transaction.routes.js';
 import { userRoutes } from './routes/user.routes.js';
@@ -186,6 +187,7 @@ export function createApp() {
   app.use('/api', requireAuth);
   app.use('/api/catalog', catalogRoutes);
   app.use('/api/orders', orderRoutes);
+  app.use('/api/invoices', invoiceRoutes);
   app.use('/api/reports', reportRoutes);
   app.use('/api/transactions', transactionRoutes);
   app.use('/api/users', userRoutes);

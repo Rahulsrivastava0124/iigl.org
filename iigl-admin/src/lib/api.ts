@@ -231,6 +231,8 @@ export interface Lab {
   company_logo?: string | null;
   mobile: string;
   city: string | null;
+  /** The laboratory's own GST number, where it recorded one. */
+  gst_no?: string | null;
   commision: number | null;
   /** How that rate reads: `percent` of what was collected, or `per_pc`. */
   commission_type: string | null;

@@ -878,6 +878,42 @@ export interface Websites {
   updated_at: Date | null;
 }
 
+export interface Purchases {
+  amount: Decimal;
+  created_at: Date | null;
+  created_by: number | null;
+  gst_no: string | null;
+  id: Generated<number>;
+  invoice_date: Date | string;
+  lab_id: number;
+  paid_amount: Decimal;
+  party_name: string;
+  payment_method: string | null;
+  product_name: string;
+  quantity: Decimal;
+  rate: Decimal;
+  transaction_id: number | null;
+  updated_at: Date | null;
+}
+
+export interface Sales {
+  amount: Decimal;
+  created_at: Date | null;
+  created_by: number | null;
+  gst_no: string | null;
+  id: Generated<number>;
+  invoice_date: Date | string;
+  lab_id: number;
+  paid_amount: Decimal;
+  party_name: string;
+  payment_method: string | null;
+  product_name: string;
+  quantity: Decimal;
+  rate: Decimal;
+  transaction_id: number | null;
+  updated_at: Date | null;
+}
+
 export interface DB {
   attendances: Attendances;
   attribute_master_values: AttributeMasterValues;
@@ -911,6 +947,7 @@ export interface DB {
   payment_orders: PaymentOrders;
   permission_actions: PermissionActions;
   prices: Prices;
+  purchases: Purchases;
   registered_customers: RegisteredCustomers;
   reports: Reports;
   reportsearches: Reportsearches;
@@ -918,6 +955,7 @@ export interface DB {
   reviews: Reviews;
   role_permissions: RolePermissions;
   roles: Roles;
+  sales: Sales;
   salary_payments: SalaryPayments;
   schema_migrations: SchemaMigrations;
   settings: Settings;

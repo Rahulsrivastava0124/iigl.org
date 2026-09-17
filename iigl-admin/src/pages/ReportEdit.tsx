@@ -253,6 +253,7 @@ export default function ReportEdit() {
             bucket="report"
             value={image}
             onChange={setImage}
+            ratio="1 / 1"
             helperText="Printed on the card beside the QR code."
           />
         </Stack>

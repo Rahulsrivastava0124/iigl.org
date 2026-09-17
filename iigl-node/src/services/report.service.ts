@@ -338,10 +338,15 @@ export async function expandAttributes(descriptions: (string | null)[]) {
       return {
         attr_id: Number(a.attr_id),
         attr_name: attr?.attr_name ?? null,
+        // The resolved name, for the cards and the certificate.
         value: val?.value_name ?? a.attr_value,
         value_icon: val?.icon ?? null,
         description: a.attr_desc,
         image: a.attr_img ?? null,
+        // The raw stored id and note, so the edit form can pre-select the value
+        // it holds (the dropdown is keyed by value id, not by name).
+        attr_value: a.attr_value ?? null,
+        attr_desc: a.attr_desc ?? null,
         show_in_smart_card: attr?.show_in_smart_card ?? 0,
         show_in_classic_card: attr?.show_in_classic_card ?? 0,
         order_no: attr?.order_no ?? 0,

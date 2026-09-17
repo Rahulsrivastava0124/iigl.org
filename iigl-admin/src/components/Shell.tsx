@@ -166,12 +166,12 @@ const ADMIN_GROUPS: Group[] = [
     ],
   },
   {
-    // Purchase and sales invoices, straight after the account. One page, a tab
-    // each, reached from its own sub-item.
+    // Purchase and sales invoices, straight after the account. Sales is head
+    // office's own — a laboratory keeps only Purchase.
     label: 'Invoice',
     icon: InvoiceIcon,
     items: [
-      { to: '/invoices?tab=purchase', label: 'Purchase' },
+      { to: '/invoices', label: 'Purchase', end: true },
       { to: '/invoices?tab=sales', label: 'Sales' },
     ],
   },
@@ -381,15 +381,12 @@ const FIELD_GROUPS: Group[] = [
     ],
   },
   {
-    // Purchase and sales invoices, after the account. The laboratory account
-    // only, not its staff. One page, a tab reached from each sub-item.
+    // Purchase invoices, after the account. The laboratory account only, not
+    // its staff.
     label: 'Invoice',
     icon: InvoiceIcon,
     labOnly: true,
-    items: [
-      { to: '/invoices?tab=purchase', label: 'Purchase', labOnly: true },
-      { to: '/invoices?tab=sales', label: 'Sales', labOnly: true },
-    ],
+    items: [{ to: '/invoices', label: 'Purchase', end: true, labOnly: true }],
   },
   {
     /*
