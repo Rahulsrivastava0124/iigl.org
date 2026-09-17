@@ -227,6 +227,18 @@ export default function RegisteredCustomersSection() {
   const filtered = Boolean(applied.state || applied.city);
   const canScroll = !showAll && pages > 1;
 
+  /*
+    Auto-advance the band a page at a time, looping back to the first. Re-armed
+    on every page change (page is a dependency), and held while the pointer is
+    over the row so it does not slide out from under someone reading a card.
+  */
+  const [paused, setPaused] = useState(false);
+  useEffect(() => {
+    if (!canScroll || paused) return undefined;
+    const id = setTimeout(() => goTo(page + 1 >= pages ? 0 : page + 1), 3500);
+    return () => clearTimeout(id);
+  }, [canScroll, paused, page, pages]);
+
   return (
     <section id="customers" className="bg-[#f8f9fb] px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[1390px]">
@@ -244,28 +256,39 @@ export default function RegisteredCustomersSection() {
 
         {/* -------------------------------------------------------- filters */}
         <form onSubmit={search} className="mt-7 flex flex-col gap-3 md:flex-row md:gap-5">
-          <SelectField
-            icon={MapPin}
-            label="Select your state"
-            value={state}
-            onChange={(value) => {
-              setState(value);
-              // A city from another state would match nothing.
-              if (value && city && !locations.some((l) => same(l.state, value) && l.cities.some((c) => same(c, city)))) {
-                setCity('');
-              }
-            }}
-            options={stateOptions}
-            disabled={status !== 'ready' || stateOptions.length === 0}
-          />
-          <SelectField
-            icon={Building2}
-            label="Select your city"
-            value={city}
-            onChange={setCity}
-            options={cityOptions}
-            disabled={status !== 'ready' || cityOptions.length === 0}
-          />
+          {/* The two dropdowns share a row on the phone; `md:contents` dissolves
+              this wrapper from `md` up so the button lines up beside them. */}
+          <div className="flex flex-1 gap-3 md:contents">
+            <SelectField
+              icon={MapPin}
+              label="Select your state"
+              value={state}
+              onChange={(value) => {
+                // A city from another state would match nothing.
+                const keepCity =
+                  value && city && !locations.some((l) => same(l.state, value) && l.cities.some((c) => same(c, city)))
+                    ? ''
+                    : city;
+                setState(value);
+                setCity(keepCity);
+                // Auto-search: the list follows the dropdowns without the button.
+                setApplied({ state: value, city: keepCity });
+              }}
+              options={stateOptions}
+              disabled={status !== 'ready' || stateOptions.length === 0}
+            />
+            <SelectField
+              icon={Building2}
+              label="Select your city"
+              value={city}
+              onChange={(value) => {
+                setCity(value);
+                setApplied({ state, city: value });
+              }}
+              options={cityOptions}
+              disabled={status !== 'ready' || cityOptions.length === 0}
+            />
+          </div>
           <button
             type="submit"
             disabled={status !== 'ready'}
@@ -284,7 +307,12 @@ export default function RegisteredCustomersSection() {
         on it — the cards and the arrows — stays inside the same 1390px column
         as the heading and filters above, so the row lines up with them.
       */}
-      <div className="-mx-5 mt-6 bg-[#0b1f4b] px-5 py-6 shadow-[0_20px_46px_rgba(6,25,72,0.22)] sm:-mx-8 sm:px-8 lg:-mx-12 lg:px-12">
+      <div
+        className="-mx-5 mt-6 bg-[#0b1f4b] px-5 py-6 shadow-[0_20px_46px_rgba(6,25,72,0.22)] sm:-mx-8 sm:px-8 lg:-mx-12 lg:px-12"
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => setPaused(false)}
+        onTouchStart={() => setPaused(true)}
+      >
         <div className="relative mx-auto max-w-[1390px]">
           <div>
             {status === 'loading' && (

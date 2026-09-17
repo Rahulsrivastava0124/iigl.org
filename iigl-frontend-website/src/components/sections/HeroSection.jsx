@@ -69,7 +69,7 @@ export default function HeroSection() {
             <picture className="block">
               {banner.mobile && <source media="(max-width: 640px)" srcSet={banner.mobile} />}
               <img
-                className="h-[clamp(340px,48vw,760px)] w-full object-cover"
+                className="h-[clamp(240px,48vw,760px)] w-full object-cover"
                 src={banner.image}
                 alt={banner.alt}
               />

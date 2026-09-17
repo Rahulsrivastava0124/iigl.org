@@ -461,7 +461,6 @@ export default function Wallet() {
           )}
           <LedgerTable
             entries={entries}
-            account={account}
             loading={ledger.loading}
             error={ledger.error}
             bare
@@ -505,7 +504,6 @@ export default function Wallet() {
           {tab === 'account' && (
             <LedgerTable
               entries={entries}
-              account={account}
               loading={ledger.loading}
               error={ledger.error}
               bare
@@ -518,7 +516,6 @@ export default function Wallet() {
       ) : (
         <LedgerTable
           entries={entries}
-          account={account}
           loading={ledger.loading}
           error={ledger.error}
           onDecide={decide}

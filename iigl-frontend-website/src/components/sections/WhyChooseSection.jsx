@@ -1,3 +1,6 @@
+import { A11y, Autoplay } from 'swiper/modules';
+import { Swiper, SwiperSlide } from 'swiper/react';
+import 'swiper/css';
 import { FileBadge2, Gem, Microscope, ShieldCheck, UsersRound } from 'lucide-react';
 import whyChooseBg from '../../../Assets/whychoose_bg.png';
 import SectionLabel from '../SectionLabel.jsx';
@@ -30,6 +33,20 @@ const reasons = [
   },
 ];
 
+function ReasonCard({ title, description, icon: Icon }) {
+  return (
+    <article className="flex min-h-[198px] flex-col items-center justify-start rounded-xl border border-[#e6e8ee] bg-white px-5 py-7 text-center shadow-[0_15px_38px_rgba(44,59,100,0.08)]">
+      <span className="icon-gold-outline inline-flex h-[58px] w-[58px]">
+        <Icon size={34} strokeWidth={1.6} />
+      </span>
+
+      <h3 className="mt-5 text-[15px] font-medium leading-tight tracking-normal text-[#061948]">{title}</h3>
+
+      <p className="mt-3 text-[13px] font-normal leading-[1.55] text-[#30394d]">{description}</p>
+    </article>
+  );
+}
+
 export default function WhyChooseSection() {
   return (
     <section
@@ -50,24 +67,30 @@ export default function WhyChooseSection() {
           </p>
         </div>
 
-        <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          {reasons.map(({ title, description, icon: Icon }) => (
-            <article
-              className="flex min-h-[198px] flex-col items-center justify-start rounded-xl border border-[#e6e8ee] bg-white px-5 py-7 text-center shadow-[0_15px_38px_rgba(44,59,100,0.08)]"
-              key={title}
-            >
-              <span className="icon-gold-outline inline-flex h-[58px] w-[58px]">
-                <Icon size={34} strokeWidth={1.6} />
-              </span>
+        {/* Phone: the reasons auto-rotate through a swiper, one and a peek at a
+            time. The static grid takes over from `sm` up. */}
+        <div className="mt-12 sm:hidden">
+          <Swiper
+            className="w-full"
+            modules={[A11y, Autoplay]}
+            loop
+            speed={600}
+            spaceBetween={12}
+            slidesPerView={1.15}
+            autoplay={{ delay: 2500, disableOnInteraction: false }}
+            a11y={{ prevSlideMessage: 'Previous reason', nextSlideMessage: 'Next reason' }}
+          >
+            {reasons.map((reason) => (
+              <SwiperSlide key={reason.title} className="h-auto">
+                <ReasonCard {...reason} />
+              </SwiperSlide>
+            ))}
+          </Swiper>
+        </div>
 
-              <h3 className="mt-5 text-[15px] font-medium leading-tight tracking-normal text-[#061948]">
-                {title}
-              </h3>
-
-              <p className="mt-3 text-[13px] font-normal leading-[1.55] text-[#30394d]">
-                {description}
-              </p>
-            </article>
+        <div className="mt-12 hidden gap-4 sm:grid sm:grid-cols-2 lg:grid-cols-5">
+          {reasons.map((reason) => (
+            <ReasonCard key={reason.title} {...reason} />
           ))}
         </div>
       </div>

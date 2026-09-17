@@ -1,3 +1,6 @@
+import { A11y, Autoplay } from 'swiper/modules';
+import { Swiper, SwiperSlide } from 'swiper/react';
+import 'swiper/css';
 import { CircleDot, Diamond, Flower2, Gem, MoveRight } from 'lucide-react';
 import card1Url from '../../../Assets/card1.png';
 import card2Url from '../../../Assets/card2.png';
@@ -84,7 +87,37 @@ export default function ReportCategoriesSection() {
           </p>
         </div>
 
-        <div className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        {/* Phone: two square image-only cards per view, autosliding. No copy,
+            no button — the picture is the whole card. The full cards below take
+            over from the small `sm` breakpoint up. */}
+        <div className="mt-7 sm:hidden">
+          <Swiper
+            className="w-full"
+            modules={[A11y, Autoplay]}
+            loop
+            speed={600}
+            spaceBetween={12}
+            slidesPerView={2}
+            autoplay={{ delay: 2500, disableOnInteraction: false }}
+            a11y={{ prevSlideMessage: 'Previous category', nextSlideMessage: 'Next category' }}
+          >
+            {categories.map((category) => (
+              <SwiperSlide key={category.title}>
+                <div className="relative aspect-square overflow-hidden rounded-xl border border-[#e6e8ee] bg-[#f8f9fb] shadow-[0_22px_52px_rgba(44,59,100,0.16)]">
+                  {category.image && (
+                    <img
+                      className="h-full w-full object-cover"
+                      src={category.image}
+                      alt={category.imageAlt}
+                    />
+                  )}
+                </div>
+              </SwiperSlide>
+            ))}
+          </Swiper>
+        </div>
+
+        <div className="mt-7 hidden gap-5 sm:grid sm:grid-cols-2 xl:grid-cols-4">
           {categories.map((category) => (
             <article
               className="relative flex min-h-[422px] flex-col overflow-hidden rounded-xl border border-[#e6e8ee] bg-white text-center shadow-[0_22px_52px_rgba(44,59,100,0.16)] max-[1260px]:min-h-[416px] max-[640px]:min-h-[436px]"

@@ -1,4 +1,5 @@
-import { ChevronDown, Menu, ShieldCheck, UserRound } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, Menu, ShieldCheck, UserRound, X } from "lucide-react";
 import logoUrl from "../../../Assets/logo-text.png";
 import { usePublic } from "../../lib/api.js";
 
@@ -15,6 +16,8 @@ const navItems = [
 export default function Navbar() {
   // The laboratories ticked under Website Setup › Branches, each opening its own page.
   const branches = usePublic("/laboratories");
+  // The mobile menu, closed until the hamburger is pressed.
+  const [open, setOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-50 flex h-[60px] w-full items-center border-b border-[rgba(18,25,68,0.08)] bg-white px-[34px] shadow-[0_11px_26px_rgba(19,28,58,0.10)] max-[900px]:px-[18px] max-[560px]:h-[58px]">
@@ -95,11 +98,54 @@ export default function Navbar() {
 
       <button
         className="ml-auto hidden h-10 w-10 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-[#2c3b64] max-[900px]:inline-flex"
-        aria-label="Open menu"
+        aria-label={open ? "Close menu" : "Open menu"}
+        aria-expanded={open}
         type="button"
+        onClick={() => setOpen((v) => !v)}
       >
-        <Menu size={24} />
+        {open ? <X size={24} /> : <Menu size={24} />}
       </button>
+
+      {/* The menu itself, only ever mounted on the small layout the hamburger
+          belongs to. A tap on any link closes it. Branches drop to the section
+          on the home page rather than repeating the whole laboratory list. */}
+      {open && (
+        <div className="absolute inset-x-0 top-full hidden border-t border-[rgba(18,25,68,0.08)] bg-white shadow-[0_18px_44px_rgba(6,25,72,0.16)] max-[900px]:block">
+          <nav className="flex flex-col p-4" aria-label="Mobile navigation">
+            {navItems.map((item) => (
+              <a
+                key={item.label}
+                className={`rounded-lg px-3 py-3 text-[14px] font-medium leading-none ${
+                  item.active ? "text-[#d58a2b]" : "text-[#2c3b64]"
+                }`}
+                href={item.href ?? `/#${item.label.toLowerCase()}`}
+                onClick={() => setOpen(false)}
+              >
+                {item.label}
+              </a>
+            ))}
+
+            <div className="mt-3 flex flex-col gap-3 border-t border-[rgba(18,25,68,0.08)] pt-4">
+              <a
+                className="inline-flex h-[42px] items-center justify-center gap-2 rounded-full bg-linear-to-b from-[#df9d3d] to-[#bd7724] px-6 text-[13px] font-medium leading-none text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.32)]"
+                href="/verify-report"
+                onClick={() => setOpen(false)}
+              >
+                <ShieldCheck size={20} strokeWidth={2.2} />
+                <span>VERIFY REPORT</span>
+              </a>
+              <a
+                className="inline-flex items-center justify-center gap-[9px] text-[14px] font-medium text-[#2c3b64]"
+                href="#login"
+                onClick={() => setOpen(false)}
+              >
+                <UserRound size={22} strokeWidth={2.1} />
+                <span>Login</span>
+              </a>
+            </div>
+          </nav>
+        </div>
+      )}
     </header>
   );
 }

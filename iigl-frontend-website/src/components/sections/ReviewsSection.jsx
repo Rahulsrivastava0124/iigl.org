@@ -1,3 +1,6 @@
+import { A11y, Autoplay } from 'swiper/modules';
+import { Swiper, SwiperSlide } from 'swiper/react';
+import 'swiper/css';
 import { ArrowRight, Star } from 'lucide-react';
 import SectionLabel from '../SectionLabel.jsx';
 import { usePublic } from '../../lib/api.js';
@@ -104,6 +107,40 @@ const initials = (name) =>
     .join('')
     .toUpperCase();
 
+function ReviewCard({ review }) {
+  return (
+    <article className="flex h-full flex-col items-center rounded-xl border border-[#e6e8ee] bg-white px-5 py-7 text-center shadow-[0_15px_38px_rgba(44,59,100,0.08)]">
+      <span
+        aria-hidden
+        className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-full bg-[#f7efe7] text-[19px] font-semibold tracking-[0.04em] text-[#bd7724] shadow-[0_12px_26px_rgba(213,138,43,0.14)]"
+      >
+        {initials(review.name)}
+      </span>
+
+      <h3 className="m-0 mt-4 text-[18px] font-semibold leading-tight tracking-normal text-[#061948]">
+        {review.name}
+      </h3>
+      <p className="m-0 mt-1 text-[14px] font-normal leading-tight text-[#4a5265]">{review.trade}</p>
+
+      <div className="mt-5 flex items-center justify-center gap-1" aria-label={`Rated ${review.rating ?? 5} out of 5`}>
+        {Array.from({ length: 5 }, (_, i) => (
+          // Filled, not outlined: a row of five outlines reads as five
+          // empty stars, which is the opposite of what it says. The
+          // stars not earned are the same shape in grey.
+          <Star
+            key={i}
+            className={`h-[18px] w-[18px] ${i < (review.rating ?? 5) ? 'text-[#d58a2b]' : 'text-[#e6e8ee]'}`}
+            fill="currentColor"
+            strokeWidth={0}
+          />
+        ))}
+      </div>
+
+      <p className="mt-5 flex-1 text-[15px] font-normal leading-[1.75] text-[#3c4252]">{review.quote}</p>
+    </article>
+  );
+}
+
 export default function ReviewsSection({ kind = 'client' }) {
   const copy = COPY[kind];
   const live = usePublic(`/reviews?kind=${kind}`);
@@ -124,44 +161,30 @@ export default function ReviewsSection({ kind = 'client' }) {
           </p>
         </div>
 
-        <div className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        {/* Phone: the reviews auto-rotate through a one-card swiper. The static
+            grid takes over from `sm` up. */}
+        <div className="mt-7 sm:hidden">
+          <Swiper
+            className="w-full"
+            modules={[A11y, Autoplay]}
+            loop
+            speed={600}
+            spaceBetween={16}
+            slidesPerView={1.1}
+            autoplay={{ delay: 3500, disableOnInteraction: false }}
+            a11y={{ prevSlideMessage: 'Previous review', nextSlideMessage: 'Next review' }}
+          >
+            {reviews.map((review) => (
+              <SwiperSlide key={review.id ?? review.name} className="h-auto">
+                <ReviewCard review={review} />
+              </SwiperSlide>
+            ))}
+          </Swiper>
+        </div>
+
+        <div className="mt-7 hidden gap-5 sm:grid sm:grid-cols-2 xl:grid-cols-4">
           {reviews.map((review) => (
-            <article
-              key={review.id ?? review.name}
-              className="flex flex-col items-center rounded-xl border border-[#e6e8ee] bg-white px-5 py-7 text-center shadow-[0_15px_38px_rgba(44,59,100,0.08)]"
-            >
-              <span
-                aria-hidden
-                className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-full bg-[#f7efe7] text-[19px] font-semibold tracking-[0.04em] text-[#bd7724] shadow-[0_12px_26px_rgba(213,138,43,0.14)]"
-              >
-                {initials(review.name)}
-              </span>
-
-              <h3 className="m-0 mt-4 text-[18px] font-semibold leading-tight tracking-normal text-[#061948]">
-                {review.name}
-              </h3>
-              <p className="m-0 mt-1 text-[14px] font-normal leading-tight text-[#4a5265]">
-                {review.trade}
-              </p>
-
-              <div className="mt-5 flex items-center justify-center gap-1" aria-label={`Rated ${review.rating ?? 5} out of 5`}>
-                {Array.from({ length: 5 }, (_, i) => (
-                  // Filled, not outlined: a row of five outlines reads as five
-                  // empty stars, which is the opposite of what it says. The
-                  // stars not earned are the same shape in grey.
-                  <Star
-                    key={i}
-                    className={`h-[18px] w-[18px] ${i < (review.rating ?? 5) ? 'text-[#d58a2b]' : 'text-[#e6e8ee]'}`}
-                    fill="currentColor"
-                    strokeWidth={0}
-                  />
-                ))}
-              </div>
-
-              <p className="mt-5 flex-1 text-[15px] font-normal leading-[1.75] text-[#3c4252]">
-                {review.quote}
-              </p>
-            </article>
+            <ReviewCard key={review.id ?? review.name} review={review} />
           ))}
         </div>
 

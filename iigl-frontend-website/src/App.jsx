@@ -16,7 +16,6 @@ import Navbar from './components/sections/Navbar.jsx';
 import ReportCategoriesSection from './components/sections/ReportCategoriesSection.jsx';
 import RegisteredCustomersSection from './components/sections/RegisteredCustomersSection.jsx';
 import ReviewsSection from './components/sections/ReviewsSection.jsx';
-import StatsSection from './components/sections/StatsSection.jsx';
 import WhyChooseSection from './components/sections/WhyChooseSection.jsx';
 
 export default function App() {
@@ -63,7 +62,6 @@ export default function App() {
       ) : (
         <>
       <HeroSection />
-      <StatsSection />
       <WhyChooseSection />
       <ReportCategoriesSection />
       <IiglReportsSection />

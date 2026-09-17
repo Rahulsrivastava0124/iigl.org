@@ -1,4 +1,8 @@
 import { useState } from 'react';
+import { A11y, Autoplay, Scrollbar } from 'swiper/modules';
+import { Swiper, SwiperSlide } from 'swiper/react';
+import 'swiper/css';
+import 'swiper/css/scrollbar';
 import {
   ArrowRight,
   BarChart3,
@@ -75,6 +79,60 @@ const courses = [
     // icon: ScrollText,
   },
 ];
+
+function CourseCard({ id, title, description, level, duration, lessons, image, imageAlt }) {
+  return (
+    <article className="flex h-full flex-col overflow-hidden rounded-xl border border-[#e6e8ee] bg-white shadow-[0_15px_38px_rgba(44,59,100,0.08)]">
+      <div className="relative h-[196px] overflow-hidden bg-[#f8f9fb]">
+        {image && <img className="h-full w-full object-cover" src={image} alt={imageAlt} />}
+        {level && (
+          <span className="absolute right-3 top-3 rounded-md bg-[#bd7724] px-2.5 py-1 text-[11px] font-medium leading-none text-white">
+            {level}
+          </span>
+        )}
+      </div>
+
+      {/* Padding lives here, not on the article, so the image stays
+          flush with the card edge. */}
+      <div className="flex flex-1 flex-col px-5 pb-5 pt-5">
+        <div className="flex items-start gap-3.5">
+          <h3 className="m-0 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[19px] font-medium leading-[1.25] tracking-normal text-[#061948]">
+            {title}
+          </h3>
+        </div>
+        <p className="mt-4 text-[14px] font-normal leading-[1.65] text-[#4a5265]">{description}</p>
+
+        {/* Pushed to the bottom so the meta row lines up across cards
+            whose descriptions run to different lengths. */}
+        <div className="mt-auto flex items-center gap-3 pt-6 text-[13px] font-normal leading-none text-[#4a5265]">
+          {duration && (
+            <span className="inline-flex items-center gap-2">
+              <Clock className="h-[15px] w-[15px] text-[#2c3b64]" strokeWidth={1.6} />
+              {duration}
+            </span>
+          )}
+          {duration && lessons && <span className="h-[14px] w-px bg-[#e6e8ee]" />}
+          {lessons && (
+            <span className="inline-flex items-center gap-2">
+              <BarChart3 className="h-[15px] w-[15px] text-[#2c3b64]" strokeWidth={1.6} />
+              {/* "12" typed in the panel reads as "12 Lessons" on the card. */}
+              {/^\d+$/.test(lessons) ? `${lessons} Lessons` : lessons}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <a
+        className="flex items-center justify-between bg-[#061948] px-5 py-4 text-[15px] font-medium leading-none text-white transition duration-200 hover:bg-[#10285e] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#d58a2b]"
+        // A course from the panel opens its own page; the built-in cards have none.
+        href={id ? `/courses/${id}` : '#courses'}
+      >
+        <span>View Course</span>
+        <ArrowRight className="h-[17px] w-[17px]" strokeWidth={1.8} />
+      </a>
+    </article>
+  );
+}
 
 export default function AvailableCoursesSection() {
   const [active, setActive] = useState('all');
@@ -155,62 +213,34 @@ export default function AvailableCoursesSection() {
           </div>
         </div>
 
-        <div className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          {shown.map(({ id, title, description, level, duration, lessons, image, imageAlt }) => (
-            <article
-              className="flex flex-col overflow-hidden rounded-xl border border-[#e6e8ee] bg-white shadow-[0_15px_38px_rgba(44,59,100,0.08)]"
-              key={title}
-            >
-              <div className="relative h-[196px] overflow-hidden bg-[#f8f9fb]">
-                {image && <img className="h-full w-full object-cover" src={image} alt={imageAlt} />}
-                {level && (
-                  <span className="absolute right-3 top-3 rounded-md bg-[#bd7724] px-2.5 py-1 text-[11px] font-medium leading-none text-white">
-                    {level}
-                  </span>
-                )}
-              </div>
+        {/* Phone: the courses auto-advance through a swiper, with a draggable
+            bar under them for position. Keyed on the filter so switching
+            categories rebuilds the track from the first card. The static grid
+            takes over from `sm` up. */}
+        <div className="mt-7 sm:hidden">
+          <Swiper
+            key={current}
+            className="w-full !pb-8"
+            modules={[A11y, Autoplay, Scrollbar]}
+            loop
+            speed={600}
+            spaceBetween={16}
+            slidesPerView={1.15}
+            autoplay={{ delay: 3000, disableOnInteraction: false }}
+            scrollbar={{ draggable: true }}
+            a11y={{ prevSlideMessage: 'Previous course', nextSlideMessage: 'Next course' }}
+          >
+            {shown.map((course) => (
+              <SwiperSlide key={course.title} className="h-auto">
+                <CourseCard {...course} />
+              </SwiperSlide>
+            ))}
+          </Swiper>
+        </div>
 
-              {/* Padding lives here, not on the article, so the image stays
-                  flush with the card edge. */}
-              <div className="flex flex-1 flex-col px-5 pb-5 pt-5">
-                <div className="flex items-start gap-3.5">
-                  {/* 
-                   */}
-                  <h3 className="m-0 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[19px] font-medium leading-[1.25] tracking-normal text-[#061948]">
-                    {title}
-                  </h3>
-                </div>
-                <p className="mt-4 text-[14px] font-normal leading-[1.65] text-[#4a5265]">{description}</p>
-
-                {/* Pushed to the bottom so the meta row lines up across cards
-                    whose descriptions run to different lengths. */}
-                <div className="mt-auto flex items-center gap-3 pt-6 text-[13px] font-normal leading-none text-[#4a5265]">
-                  {duration && (
-                    <span className="inline-flex items-center gap-2">
-                      <Clock className="h-[15px] w-[15px] text-[#2c3b64]" strokeWidth={1.6} />
-                      {duration}
-                    </span>
-                  )}
-                  {duration && lessons && <span className="h-[14px] w-px bg-[#e6e8ee]" />}
-                  {lessons && (
-                    <span className="inline-flex items-center gap-2">
-                      <BarChart3 className="h-[15px] w-[15px] text-[#2c3b64]" strokeWidth={1.6} />
-                      {/* "12" typed in the panel reads as "12 Lessons" on the card. */}
-                      {/^\d+$/.test(lessons) ? `${lessons} Lessons` : lessons}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <a
-                className="flex items-center justify-between bg-[#061948] px-5 py-4 text-[15px] font-medium leading-none text-white transition duration-200 hover:bg-[#10285e] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#d58a2b]"
-                // A course from the panel opens its own page; the built-in cards have none.
-                href={id ? `/courses/${id}` : '#courses'}
-              >
-                <span>View Course</span>
-                <ArrowRight className="h-[17px] w-[17px]" strokeWidth={1.8} />
-              </a>
-            </article>
+        <div className="mt-7 hidden gap-5 sm:grid sm:grid-cols-2 xl:grid-cols-4">
+          {shown.map((course) => (
+            <CourseCard key={course.title} {...course} />
           ))}
         </div>
 

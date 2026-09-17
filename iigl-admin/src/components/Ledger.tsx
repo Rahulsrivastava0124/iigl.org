@@ -1,4 +1,4 @@
-import { Grid, Stack, Table, TableBody, TableCell, TableFooter, TableHead, TableRow, Tooltip } from '@mui/material';
+import { Grid, Stack, Table, TableBody, TableCell, TableHead, TableRow, Tooltip } from '@mui/material';
 import ApproveIcon from '@mui/icons-material/CheckCircleOutlined';
 import DeclineIcon from '@mui/icons-material/CancelOutlined';
 import BalanceIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
@@ -184,7 +184,6 @@ export function LedgerTotals({
 /** The statement itself. `footer` is the pager, when the caller pages it. */
 export function LedgerTable({
   entries,
-  account,
   loading,
   error,
   title = 'Ledger',
@@ -197,11 +196,6 @@ export function LedgerTable({
   deciding,
 }: {
   entries: LedgerEntry[];
-  /**
-   * The account the rows came from, for the totals rule under them. Left out
-   * on a table that is only a list of movements and owes nobody a total.
-   */
-  account?: LedgerPage;
   loading: boolean;
   error: string | null;
   title?: string;
@@ -234,7 +228,6 @@ export function LedgerTable({
   /** The row a decision is in flight for; its buttons stop taking clicks. */
   deciding?: number | null;
 }) {
-  const total = shown(account);
   const table = (
     <>
       <TableFrame
@@ -369,52 +362,6 @@ export function LedgerTable({
               </TableRow>
             ))}
           </TableBody>
-          {/*
-            What it all came to, on the columns it came to.
-
-            These three figures were a strip on the panel's footer rule, laid
-            out by a Stack: right of the pager, under nothing in particular,
-            and the one place on the screen where a credit was not under
-            Credit. In the table they are cells, so they cannot drift — the
-            column widths are the same widths.
-
-            The pager moves the rows; it never moves these. They are the
-            period's, or the filter's, never the page's.
-          */}
-          {account && (
-            <TableFooter>
-              {/* The rule is on the row, so every cell carries it and the line
-                  runs the width of the table rather than under nine of ten
-                  columns. The size too: a footer cell is 0.75rem by default,
-                  which put the totals in smaller type than the rows above. */}
-              <TableRow
-                sx={{ '& td': { fontSize: '0.875rem', borderTop: 2, borderColor: 'divider' } }}
-              >
-                <TableCell colSpan={6} sx={{ color: 'text.secondary' }}>
-                  {total.filtered
-                    ? 'Totals of the rows listed, and closing balance'
-                    : 'Totals and closing balance'}
-                </TableCell>
-                {(
-                  [
-                    [total.credit, 'success.main'],
-                    [total.debit, 'error.main'],
-                    [account.balance, 'text.primary'],
-                  ] as const
-                ).map(([figure, color], i) => (
-                  <TableCell
-                    key={i}
-                    align="right"
-                    className="tabular"
-                    sx={{ fontWeight: 700, color }}
-                  >
-                    {money(figure)}
-                  </TableCell>
-                ))}
-                {onDecide && <TableCell />}
-              </TableRow>
-            </TableFooter>
-          )}
         </Table>
       </TableFrame>
     </>
