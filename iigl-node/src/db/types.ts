@@ -480,6 +480,24 @@ export interface Prices {
   updated_at: Date | null;
 }
 
+export interface Purchases {
+  amount: Decimal;
+  created_at: Date | null;
+  created_by: number | null;
+  gst_no: string | null;
+  id: Generated<number>;
+  invoice_date: Date | string;
+  lab_id: number;
+  paid_amount: Decimal;
+  party_name: string;
+  payment_method: string | null;
+  product_name: string;
+  quantity: Decimal;
+  rate: Decimal;
+  transaction_id: number | null;
+  updated_at: Date | null;
+}
+
 export interface RegisteredCustomers {
   area: string | null;
   city: string | null;
@@ -600,6 +618,25 @@ export interface SalaryPayments {
   pay_mode: Generated<string>;
   reference: string | null;
   salary_month: Decimal | null;
+  updated_at: Date | null;
+}
+
+export interface Sales {
+  amount: Decimal;
+  buyer_lab_id: number | null;
+  created_at: Date | null;
+  created_by: number | null;
+  gst_no: string | null;
+  id: Generated<number>;
+  invoice_date: Date | string;
+  lab_id: number;
+  paid_amount: Decimal;
+  party_name: string;
+  payment_method: string | null;
+  product_name: string;
+  quantity: Decimal;
+  rate: Decimal;
+  transaction_id: number | null;
   updated_at: Date | null;
 }
 
@@ -878,42 +915,6 @@ export interface Websites {
   updated_at: Date | null;
 }
 
-export interface Purchases {
-  amount: Decimal;
-  created_at: Date | null;
-  created_by: number | null;
-  gst_no: string | null;
-  id: Generated<number>;
-  invoice_date: Date | string;
-  lab_id: number;
-  paid_amount: Decimal;
-  party_name: string;
-  payment_method: string | null;
-  product_name: string;
-  quantity: Decimal;
-  rate: Decimal;
-  transaction_id: number | null;
-  updated_at: Date | null;
-}
-
-export interface Sales {
-  amount: Decimal;
-  created_at: Date | null;
-  created_by: number | null;
-  gst_no: string | null;
-  id: Generated<number>;
-  invoice_date: Date | string;
-  lab_id: number;
-  paid_amount: Decimal;
-  party_name: string;
-  payment_method: string | null;
-  product_name: string;
-  quantity: Decimal;
-  rate: Decimal;
-  transaction_id: number | null;
-  updated_at: Date | null;
-}
-
 export interface DB {
   attendances: Attendances;
   attribute_master_values: AttributeMasterValues;
@@ -955,8 +956,8 @@ export interface DB {
   reviews: Reviews;
   role_permissions: RolePermissions;
   roles: Roles;
-  sales: Sales;
   salary_payments: SalaryPayments;
+  sales: Sales;
   schema_migrations: SchemaMigrations;
   settings: Settings;
   site_profiles: SiteProfiles;

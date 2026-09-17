@@ -92,6 +92,26 @@ async function syncWalletTxn(
   return null;
 }
 
+/**
+ * The laboratory a sale was made to, by the name on it.
+ *
+ * The panel picks the laboratory from a list and sends its `fullname`, so the
+ * name is exact. Stored as an id all the same: a name cannot be joined on, and
+ * it stops being true the day somebody is renamed.
+ *
+ * Null for a sale to anybody who is not a laboratory — nothing more happens
+ * with it than before.
+ */
+async function buyerLabId(partyName: string): Promise<number | null> {
+  const lab = await db
+    .selectFrom('users')
+    .select('id')
+    .where('fullname', '=', partyName)
+    .where('role_id', '=', 2)
+    .executeTakeFirst();
+  return lab ? Number(lab.id) : null;
+}
+
 /** Read and check the body common to a purchase and a sale. */
 function validate(body: Record<string, unknown>): Input {
   const party_name = String(body.party_name ?? '').trim();
@@ -127,8 +147,8 @@ async function own(kind: Kind, id: number, userId: number) {
   return row;
 }
 
-/** The list, newest first, for the caller's own account, filtered by supplier
- *  (party) and product where either is given. */
+/** The sales list, newest first, filtered by customer (party) and product
+ *  where either is given. Purchases have their own, below. */
 function list(kind: Kind) {
   return wrap(async (req, res) => {
     const p = readPage(req);
@@ -148,7 +168,60 @@ function list(kind: Kind) {
   });
 }
 
-invoiceRoutes.get('/purchases', list('purchases'));
+/**
+ * A laboratory's purchases: its own, and what head office sold it.
+ *
+ * A sale is head office's row, in head office's books — and it is the same
+ * event as the laboratory buying the thing. Kept apart, a laboratory could not
+ * see what it had been billed for until somebody typed the bill in a second
+ * time, which is two records of one purchase and two chances to be wrong.
+ *
+ * So head office's sales to this laboratory are listed here as purchases from
+ * head office, marked `source: 'sale'`. They are read-only on this side: the
+ * row belongs to the seller, and it is theirs to correct or to be paid.
+ *
+ * ponytail: the two lists are merged and paged in memory. These are hand-kept
+ * ledgers of tens to hundreds of lines; past a few thousand this wants to be
+ * one UNION query paged in SQL.
+ */
+function purchaseList() {
+  return wrap(async (req, res) => {
+    const p = readPage(req);
+    const supplier = String(req.query.supplier ?? '').trim().toLowerCase();
+    const product = String(req.query.product ?? '').trim().toLowerCase();
+
+    const [mine, bought] = await Promise.all([
+      db.selectFrom('purchases').selectAll().where('lab_id', '=', req.user.id).execute(),
+      db
+        .selectFrom('sales')
+        .leftJoin('users as seller', 'seller.id', 'sales.lab_id')
+        .selectAll('sales')
+        .select('seller.fullname as seller_name')
+        .where('sales.buyer_lab_id', '=', req.user.id)
+        .execute(),
+    ]);
+
+    const rows = [
+      ...mine.map((r) => ({ ...r, source: 'purchase' as const })),
+      // The seller is the supplier on this side of the same line.
+      ...bought.map(({ seller_name, buyer_lab_id: _buyer, ...r }) => ({
+        ...r,
+        party_name: seller_name ?? 'Head office',
+        source: 'sale' as const,
+      })),
+    ]
+      .filter((r) => !supplier || String(r.party_name).toLowerCase().includes(supplier))
+      .filter((r) => !product || String(r.product_name).toLowerCase().includes(product))
+      .sort((a, b) => {
+        const day = String(b.invoice_date).slice(0, 10).localeCompare(String(a.invoice_date).slice(0, 10));
+        return day !== 0 ? day : Number(b.id) - Number(a.id);
+      });
+
+    res.json(paged(rows.slice(p.offset, p.offset + p.limit), rows.length, p));
+  });
+}
+
+invoiceRoutes.get('/purchases', purchaseList());
 invoiceRoutes.get('/sales', list('sales'));
 
 /*
@@ -219,6 +292,7 @@ invoiceRoutes.post(
       .insertInto('sales')
       .values({
         lab_id: req.user.id,
+        buyer_lab_id: await buyerLabId(input.party_name),
         party_name: input.party_name,
         product_name: input.product_name,
         gst_no: input.gst_no,
@@ -308,6 +382,8 @@ function edit(kind: Kind) {
       await trx
         .updateTable(kind)
         .set({
+          // A sale re-pointed at another laboratory follows the name.
+          ...(kind === 'sales' ? { buyer_lab_id: await buyerLabId(input.party_name) } : {}),
           party_name: input.party_name,
           product_name: input.product_name,
           gst_no: input.gst_no,

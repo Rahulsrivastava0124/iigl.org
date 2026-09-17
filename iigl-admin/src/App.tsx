@@ -167,6 +167,9 @@ function Routed() {
         <Route path="/orders/:id" element={<OrderDetail />} />
         {/* Purchase and sales invoices, one page with two tabs. */}
         <Route path="/invoices" element={<Invoices />} />
+        {/* One supplier's own page: what was bought from them, and what has
+            been paid. The same screen, opened on a single name. */}
+        <Route path="/invoices/supplier/:name" element={<Invoices />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/reports/new" element={<NewReport />} />
         {/* Amending an issued certificate. Its own screen rather than the

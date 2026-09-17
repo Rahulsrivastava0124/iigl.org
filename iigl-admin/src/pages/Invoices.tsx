@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
 import {
   Autocomplete,
   Box,
@@ -30,6 +30,8 @@ import AddIcon from '@mui/icons-material/AddOutlined';
 import CloseIcon from '@mui/icons-material/CloseOutlined';
 import MoreIcon from '@mui/icons-material/MoreVertOutlined';
 import InvoiceIcon from '@mui/icons-material/ReceiptLongOutlined';
+import ViewIcon from '@mui/icons-material/VisibilityOutlined';
+import BackIcon from '@mui/icons-material/ArrowBackOutlined';
 import PayIcon from '@mui/icons-material/PaymentsOutlined';
 import EditIcon from '@mui/icons-material/EditOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
@@ -66,6 +68,14 @@ interface Invoice {
   amount: string;
   paid_amount: string;
   payment_method: string | null;
+  /**
+   * Whose row it is.
+   *
+   * `sale` is head office's sale to this laboratory, listed here as the
+   * purchase it also is. It belongs to the seller: this side reads it and
+   * prints it, and cannot edit, pay or delete it.
+   */
+  source?: 'purchase' | 'sale';
 }
 
 const PAYMENT_METHODS = ['Cash', 'UPI', 'Bank Transfer', 'Cheque', 'Card'] as const;
@@ -97,8 +107,9 @@ const fromRow = (r: Invoice) => ({
 
 /** A printable invoice, opened in its own window. */
 function printInvoice(r: Invoice, kind: Kind) {
-  const label = kind === 'purchase' ? 'Purchase' : 'Sales';
-  const prefix = kind === 'purchase' ? 'PUR' : 'SAL';
+  const sold = r.source === 'sale';
+  const label = sold || kind === 'sales' ? 'Sales' : 'Purchase';
+  const prefix = sold || kind === 'sales' ? 'SAL' : 'PUR';
   const party = kind === 'purchase' ? 'Supplier' : 'Customer';
   const rows: [string, string][] = [
     ['Invoice No.', `${prefix}-${r.id}`],
@@ -141,7 +152,16 @@ export default function Invoices() {
   // The tab lives in the URL. Sales is head office's alone; a laboratory is held
   // to Purchase whatever the address says.
   const [params, setParams] = useSearchParams();
-  const kind: Kind = admin && params.get('tab') === 'sales' ? 'sales' : 'purchase';
+  /*
+    One supplier's own page, at /invoices/supplier/<name>.
+
+    The same screen: the list is simply held to that supplier, and every row
+    control — the invoice, the payment, edit, delete — is the one it already
+    had. Purchases are what a supplier has; the tabs are not offered here.
+  */
+  const { name: supplierParam } = useParams();
+  const viewing = supplierParam ? decodeURIComponent(supplierParam) : null;
+  const kind: Kind = !viewing && admin && params.get('tab') === 'sales' ? 'sales' : 'purchase';
   const resource = kind === 'purchase' ? 'purchases' : 'sales';
   const base = `/invoices/${resource}`;
   const party = kind === 'purchase' ? 'Supplier' : 'Customer';
@@ -160,10 +180,10 @@ export default function Invoices() {
   const [payFor, setPayFor] = useState<Invoice | null>(null);
   const [payAmount, setPayAmount] = useState('');
   const [paying, setPaying] = useState(false);
-  const [supplierView, setSupplierView] = useState<string | null>(null);
 
   const query = new URLSearchParams({ per_page: '100' });
-  if (supplier.trim()) query.set('supplier', supplier.trim());
+  if (viewing) query.set('supplier', viewing);
+  else if (supplier.trim()) query.set('supplier', supplier.trim());
   if (product.trim()) query.set('product', product.trim());
   const list = useFetch<Paged<Invoice>>(`${base}?${query}`);
   const rows = list.data?.data ?? [];
@@ -200,17 +220,10 @@ export default function Invoices() {
     () => labList.find((l) => l.fullname === form.party) ?? null,
     [form.party, labList],
   );
-  const supplierHistory = useFetch<Paged<Invoice>>(
-    supplierView
-      ? `/invoices/purchases?supplier=${encodeURIComponent(supplierView)}&per_page=100`
-      : null,
-  );
+  // What has actually been paid out to them, beside what was bought.
   const supplierTransactions = useFetch<Paged<Transaction>>(
-    supplierView
-      ? `/transactions?type=expense&q=${encodeURIComponent(supplierView)}&per_page=100`
-      : null,
+    viewing ? `/transactions?type=expense&q=${encodeURIComponent(viewing)}&per_page=100` : null,
   );
-  const supplierPurchases = supplierHistory.data?.data ?? [];
   const supplierTxns = supplierTransactions.data?.data ?? [];
 
   const set = (key: keyof ReturnType<typeof blank>, value: string) =>
@@ -242,6 +255,35 @@ export default function Invoices() {
     }));
   };
 
+  /*
+    The purchase list is a list of suppliers, not of lines.
+
+    A supplier buying the same printer every month filled the screen with the
+    same name; what the list is read for is who is supplied from, what they
+    supply, and what is still owed them. The lines themselves are on their own
+    page, which is also the only place they can be paid or corrected.
+
+    Folded from the rows already fetched, so the supplier and product filters
+    above narrow this exactly as they narrow the lines.
+  */
+  const suppliers = useMemo(() => {
+    const by = new Map<
+      string,
+      { name: string; gst: string | null; products: string[]; lines: number; amount: number; paid: number }
+    >();
+    for (const r of rows) {
+      const name = r.party_name || '—';
+      const seen = by.get(name) ?? { name, gst: r.gst_no, products: [], lines: 0, amount: 0, paid: 0 };
+      if (r.product_name && !seen.products.includes(r.product_name)) seen.products.push(r.product_name);
+      seen.gst = seen.gst || r.gst_no;
+      seen.lines += 1;
+      seen.amount += Number(r.amount);
+      seen.paid += Number(r.paid_amount);
+      by.set(name, seen);
+    }
+    return [...by.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [rows]);
+
   const totals = useMemo(() => {
     const amount = rows.reduce((n, r) => n + Number(r.amount), 0);
     const paid = rows.reduce((n, r) => n + Number(r.paid_amount), 0);
@@ -252,7 +294,6 @@ export default function Invoices() {
   const setTab = (next: Kind) => {
     setShowForm(false);
     setEditingId(null);
-    setSupplierView(null);
     setParams(next === 'sales' ? { tab: 'sales' } : {});
   };
 
@@ -376,19 +417,34 @@ export default function Invoices() {
 
   return (
     <Panel
-      title={`${kind === 'purchase' ? 'Purchase' : 'Sales'} Invoices`}
+      title={viewing ?? `${kind === 'purchase' ? 'Purchase' : 'Sales'} Invoices`}
+      subtitle={viewing ? 'Supplier' : undefined}
       actions={
         !showForm ? (
           <>
-            {!admin && filterControls}
-            <Button variant="contained" startIcon={<AddIcon />} onClick={openAdd}>
+            {viewing ? (
+              <Button variant="outlined" startIcon={<BackIcon />} component={RouterLink} to="/invoices">
+                All suppliers
+              </Button>
+            ) : (
+              !admin && filterControls
+            )}
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => {
+                openAdd();
+                // Opened from a supplier's own page: it is their purchase.
+                if (viewing) setForm((f) => ({ ...f, party: viewing }));
+              }}
+            >
               Add {kind === 'purchase' ? 'Purchase' : 'Sale'}
             </Button>
           </>
         ) : null
       }
     >
-      {admin && (
+      {admin && !viewing && (
         <Box
           sx={{
             display: 'flex',
@@ -550,6 +606,86 @@ export default function Invoices() {
         </Box>
       )}
 
+      {/* The purchase list, folded to one row a supplier. Their lines are on
+          their own page, reached from here. */}
+      {kind === 'purchase' && !viewing ? (
+        <TableFrame
+          loading={list.loading}
+          error={list.error}
+          empty={suppliers.length === 0}
+          emptyText="No supplier has been purchased from yet."
+        >
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Supplier</TableCell>
+                <TableCell>Products</TableCell>
+                <TableCell>GST No.</TableCell>
+                <TableCell align="right">Purchases</TableCell>
+                <TableCell align="right">Total</TableCell>
+                <TableCell align="right">Paid</TableCell>
+                <TableCell align="right">Due</TableCell>
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {suppliers.map((sup) => {
+                const owed = Math.max(0, sup.amount - sup.paid);
+                return (
+                  <TableRow key={sup.name} hover>
+                    <TableCell sx={{ whiteSpace: 'normal', minWidth: 150 }}>
+                      <Box
+                        component={RouterLink}
+                        to={`/invoices/supplier/${encodeURIComponent(sup.name)}`}
+                        sx={{
+                          color: 'primary.main',
+                          fontWeight: 600,
+                          textDecoration: 'none',
+                          '&:hover': { textDecoration: 'underline' },
+                        }}
+                      >
+                        {sup.name}
+                      </Box>
+                    </TableCell>
+                    <TableCell sx={{ whiteSpace: 'normal', minWidth: 180 }}>
+                      {sup.products.join(', ') || '—'}
+                    </TableCell>
+                    <TableCell className="mono">{sup.gst || '—'}</TableCell>
+                    <TableCell align="right" className="tabular">
+                      {sup.lines}
+                    </TableCell>
+                    <TableCell align="right" className="tabular">
+                      {money(sup.amount)}
+                    </TableCell>
+                    <TableCell align="right" className="tabular">
+                      {money(sup.paid)}
+                    </TableCell>
+                    <TableCell
+                      align="right"
+                      className="tabular"
+                      sx={{ fontWeight: 600, color: owed > 0 ? 'error.main' : 'text.secondary' }}
+                    >
+                      {money(owed)}
+                    </TableCell>
+                    <TableCell align="right">
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<ViewIcon />}
+                        component={RouterLink}
+                        to={`/invoices/supplier/${encodeURIComponent(sup.name)}`}
+                        sx={{ whiteSpace: 'nowrap' }}
+                      >
+                        View
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableFrame>
+      ) : (
       <TableFrame
         loading={list.loading}
         error={list.error}
@@ -574,21 +710,15 @@ export default function Invoices() {
           </TableHead>
           <TableBody>
             {rows.map((r) => (
-              <TableRow key={r.id} hover>
+              <TableRow key={`${r.source ?? 'purchase'}-${r.id}`} hover>
                 <TableCell>
-                  {kind === 'purchase' && r.party_name ? (
+                  {kind === 'purchase' && r.party_name && !viewing ? (
                     <Box
-                      component="button"
-                      type="button"
-                      onClick={() => setSupplierView(r.party_name)}
+                      component={RouterLink}
+                      to={`/invoices/supplier/${encodeURIComponent(r.party_name)}`}
                       sx={{
-                        p: 0,
-                        border: 0,
-                        background: 'none',
                         color: 'primary.main',
-                        cursor: 'pointer',
-                        font: 'inherit',
-                        textAlign: 'left',
+                        textDecoration: 'none',
                         '&:hover': { textDecoration: 'underline' },
                       }}
                     >
@@ -628,22 +758,25 @@ export default function Invoices() {
                         <InvoiceIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
-                    {due(r) > 0 && (
+                    {/* Head office's own row: read it and print it, nothing more. */}
+                    {r.source !== 'sale' && due(r) > 0 && (
                       <Tooltip title={`Pay ${money(due(r))} due`}>
                         <IconButton size="small" color="primary" onClick={() => openPay(r)}>
                           <PayIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                     )}
-                    <Tooltip title="More">
-                      <IconButton
-                        size="small"
-                        onClick={(e) => setMenu({ el: e.currentTarget, row: r })}
-                        aria-label="More actions"
-                      >
-                        <MoreIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                    {r.source !== 'sale' && (
+                      <Tooltip title="More">
+                        <IconButton
+                          size="small"
+                          onClick={(e) => setMenu({ el: e.currentTarget, row: r })}
+                          aria-label="More actions"
+                        >
+                          <MoreIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
                   </Stack>
                 </TableCell>
               </TableRow>
@@ -670,22 +803,50 @@ export default function Invoices() {
           </TableBody>
         </Table>
       </TableFrame>
+      )}
+
+      {/* What has been paid out to this supplier, beside what was bought. */}
+      {viewing && (
+        <Box sx={{ p: 2, pt: 3 }}>
+          <Typography variant="h2" sx={{ mb: 1 }}>
+            Payment history
+          </Typography>
+          <TableFrame
+            loading={supplierTransactions.loading}
+            error={supplierTransactions.error}
+            empty={supplierTxns.length === 0}
+            emptyText="Nothing has been paid out to this supplier yet."
+          >
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Date</TableCell>
+                  <TableCell>Remark</TableCell>
+                  <TableCell>Mode</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Amount</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {supplierTxns.map((t) => (
+                  <TableRow key={t.id} hover>
+                    <TableCell>{t.created_at ? String(t.created_at).slice(0, 10) : '—'}</TableCell>
+                    <TableCell sx={{ whiteSpace: 'normal', minWidth: 180 }}>{t.remark || '—'}</TableCell>
+                    <TableCell>{t.pay_mode || '—'}</TableCell>
+                    <TableCell>{t.status === 1 ? 'Approved' : t.status === 2 ? 'Declined' : 'Pending'}</TableCell>
+                    <TableCell align="right" className="tabular">
+                      {money(t.amount)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableFrame>
+        </Box>
+      )}
 
       {/* Edit and delete; Invoice and Pay are on the row itself. */}
       <Menu anchorEl={menu?.el ?? null} open={Boolean(menu)} onClose={() => setMenu(null)}>
-        {kind === 'purchase' && menu?.row.party_name && (
-          <MenuItem
-            onClick={() => {
-              setSupplierView(menu.row.party_name);
-              setMenu(null);
-            }}
-          >
-            <ListItemIcon>
-              <InvoiceIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Supplier history</ListItemText>
-          </MenuItem>
-        )}
         <MenuItem onClick={() => menu && openEdit(menu.row)}>
           <ListItemIcon>
             <EditIcon fontSize="small" />
@@ -726,105 +887,6 @@ export default function Invoices() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={Boolean(supplierView)} onClose={() => setSupplierView(null)} maxWidth="lg" fullWidth>
-        <DialogTitle>{supplierView ? `${supplierView} history` : 'Supplier history'}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 0.5 }}>
-            <Box>
-              <Typography variant="h2" sx={{ mb: 1 }}>
-                Purchase history
-              </Typography>
-              <TableFrame
-                loading={supplierHistory.loading}
-                error={supplierHistory.error}
-                empty={supplierPurchases.length === 0}
-                emptyText="No purchases found for this supplier."
-              >
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Date</TableCell>
-                      <TableCell>Product</TableCell>
-                      <TableCell align="right">Qty</TableCell>
-                      <TableCell align="right">Rate</TableCell>
-                      <TableCell align="right">Total</TableCell>
-                      <TableCell align="right">Paid</TableCell>
-                      <TableCell align="right">Due</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {supplierPurchases.map((p) => (
-                      <TableRow key={p.id}>
-                        <TableCell>{String(p.invoice_date).slice(0, 10)}</TableCell>
-                        <TableCell>{p.product_name || '—'}</TableCell>
-                        <TableCell align="right" className="tabular">
-                          {Number(p.quantity)}
-                        </TableCell>
-                        <TableCell align="right" className="tabular">
-                          {money(p.rate)}
-                        </TableCell>
-                        <TableCell align="right" className="tabular">
-                          {money(p.amount)}
-                        </TableCell>
-                        <TableCell align="right" className="tabular">
-                          {money(p.paid_amount)}
-                        </TableCell>
-                        <TableCell
-                          align="right"
-                          className="tabular"
-                          sx={{ color: due(p) > 0 ? 'error.main' : 'text.secondary' }}
-                        >
-                          {money(due(p))}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableFrame>
-            </Box>
-
-            <Box>
-              <Typography variant="h2" sx={{ mb: 1 }}>
-                Transaction history
-              </Typography>
-              <TableFrame
-                loading={supplierTransactions.loading}
-                error={supplierTransactions.error}
-                empty={supplierTxns.length === 0}
-                emptyText="No purchase transactions found for this supplier."
-              >
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Date</TableCell>
-                      <TableCell>Remark</TableCell>
-                      <TableCell>Mode</TableCell>
-                      <TableCell>Status</TableCell>
-                      <TableCell align="right">Amount</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {supplierTxns.map((t) => (
-                      <TableRow key={t.id}>
-                        <TableCell>{t.created_at ? String(t.created_at).slice(0, 10) : '—'}</TableCell>
-                        <TableCell>{t.remark || '—'}</TableCell>
-                        <TableCell>{t.pay_mode || '—'}</TableCell>
-                        <TableCell>{t.status === 1 ? 'Approved' : t.status === 2 ? 'Declined' : 'Pending'}</TableCell>
-                        <TableCell align="right" className="tabular">
-                          {money(t.amount)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableFrame>
-            </Box>
-          </Stack>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setSupplierView(null)}>Close</Button>
-        </DialogActions>
-      </Dialog>
     </Panel>
   );
 }
