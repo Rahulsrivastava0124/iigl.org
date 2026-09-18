@@ -19,7 +19,8 @@ import {
 import { useToast } from '../components/Toast';
 import { useFetch, useDebounced } from '../lib/useFetch';
 import { api } from '../lib/api';
-import { messageOf } from '../lib/auth';
+import { messageOf, useAuth } from '../lib/auth';
+import { isSuper } from '../lib/portal';
 import {
   IconAction,
   money,
@@ -39,6 +40,18 @@ import EditIcon from '@mui/icons-material/EditOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined';
 
 export default function Orders() {
+  /*
+    Head office reads this list and opens nothing on it.
+
+    The order's own page is a laboratory's record — `GET /api/orders/:id`
+    refuses role 1, and `OrderRef` prints the number as text everywhere else —
+    so the controls that lead there are not offered here either. The Receipt and
+    the Delete stay: a document and an administrative act are not the counter's
+    page.
+  */
+  const { user } = useAuth();
+  const opensOrders = !isSuper(user);
+
   // The laboratory menu points here four ways — in progress, paid and
   // delivered, dues, and everything — so the URL holds the filter rather than
   // the component.
@@ -273,7 +286,7 @@ export default function Orders() {
                         Settling happens on the order's own page, where the
                         amount payable is in front of whoever takes the money.
                       */}
-                      {ready || owing ? (
+                      {!opensOrders ? null : ready || owing ? (
                         <Button
                           size="small"
                           variant="contained"
@@ -296,16 +309,20 @@ export default function Orders() {
                           to={`/reports/new?order=${o.id}`}
                         />
                       )}
-                      <IconAction label="View order" icon={OpenIcon} to={`/orders/${o.id}`} />
+                      {opensOrders && (
+                        <IconAction label="View order" icon={OpenIcon} to={`/orders/${o.id}`} />
+                      )}
                       {/* Amending is occasional and it rewrites a record
                           somebody may already have a receipt for, so it sits
                           behind the ⋯ with the other second thoughts. */}
-                      <IconAction
-                        label="Edit order"
-                        icon={EditIcon}
-                        overflow
-                        to={`/orders/${o.id}/edit`}
-                      />
+                      {opensOrders && (
+                        <IconAction
+                          label="Edit order"
+                          icon={EditIcon}
+                          overflow
+                          to={`/orders/${o.id}/edit`}
+                        />
+                      )}
                       <IconAction
                         label="Receipt"
                         icon={ReceiptIcon}

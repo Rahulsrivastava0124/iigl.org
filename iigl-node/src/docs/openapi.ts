@@ -1732,6 +1732,7 @@ const document = {
       get: {
         tags: ['Orders'],
         summary: 'Read an order with its items and certificates',
+        description: 'Scoped to the caller’s laboratory. **Refused for head office (role 1) with 403.** An order is the counter’s record of one visit and belongs to the laboratory that took it; head office reads the order lists, the customer history and the dashboard, all of which stay open to it. The printed receipt and invoice also stay open — a document asked of head office is not head office browsing a counter.',
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
         responses: {
           200: {
@@ -1744,6 +1745,11 @@ const document = {
           },
           404: errorResponse('Order not found.'),
           ...guarded,
+          // After the spread on purpose: this one is more specific than the
+          // shared 403, which would otherwise overwrite it.
+          403: errorResponse(
+            'Another laboratory’s record — or, for head office, a laboratory’s order page, which role 1 does not open.',
+          ),
         },
       },
     },
@@ -1781,7 +1787,7 @@ const document = {
         tags: ['Orders'],
         summary: 'Price an order',
         description:
-          'Prices every certificate on the order against the weight bands and returns the breakdown. Changes nothing, so it is safe to call while the operator adjusts the discount.',
+          'Prices every certificate on the order against the weight bands and returns the breakdown. Changes nothing, so it is safe to call while the operator adjusts the discount.\n\nThis is the money on the order’s own page, so it closes with the page: **refused for head office (role 1) with 403**.',
         parameters: [
           { name: 'id', in: 'path', required: true, schema: { type: 'integer' } },
           { name: 'discount', in: 'query', schema: { type: 'number', minimum: 0 }, description: 'Flat amount off, not a percentage. Omit it and the order’s own `discount` applies — an order settled at a discount priced back at full rate when this defaulted to zero, and the balance owing jumped by the discount somebody had already given.' },
@@ -1793,6 +1799,11 @@ const document = {
           },
           404: errorResponse('Order not found.'),
           ...guarded,
+          // After the spread on purpose: this one is more specific than the
+          // shared 403, which would otherwise overwrite it.
+          403: errorResponse(
+            'Another laboratory’s record — or, for head office, a laboratory’s order page, which role 1 does not open.',
+          ),
         },
       },
     },

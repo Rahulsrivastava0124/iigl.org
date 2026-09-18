@@ -106,6 +106,27 @@ function OwnerOnly({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * One order's own page, which is a laboratory's and not head office's.
+ *
+ * Head office keeps every list an order appears on — the order queue, a
+ * customer's history, the certificate list, the dashboard — and the number is
+ * printed on all of them. What it does not open is the order itself: that page
+ * is the counter's record of one visit, and `GET /api/orders/:id` refuses role
+ * 1 for the same reason. This sends them back to the list rather than letting
+ * the page mount and fill with a refusal.
+ *
+ * `OrderRef` in `components/ui.tsx` is the other half — it prints the number as
+ * text rather than a link, so nobody is offered the way in. This guard is for
+ * the ways that are not a link: a typed URL, a bookmark, the browser's back
+ * button after a role change.
+ */
+function LaboratoryOrderPage({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (isSuper(user)) return <Navigate to="/orders" replace />;
+  return <>{children}</>;
+}
+
 function Routed() {
   const { user, loading, offline } = useAuth();
 
@@ -163,8 +184,22 @@ function Routed() {
         <Route path="/orders" element={<Orders />} />
         <Route path="/orders/new" element={<NewOrder />} />
         {/* The same form, amending. See `NewOrder`. */}
-        <Route path="/orders/:id/edit" element={<NewOrder />} />
-        <Route path="/orders/:id" element={<OrderDetail />} />
+        <Route
+          path="/orders/:id/edit"
+          element={
+            <LaboratoryOrderPage>
+              <NewOrder />
+            </LaboratoryOrderPage>
+          }
+        />
+        <Route
+          path="/orders/:id"
+          element={
+            <LaboratoryOrderPage>
+              <OrderDetail />
+            </LaboratoryOrderPage>
+          }
+        />
         {/* Purchase and sales invoices, one page with two tabs. */}
         <Route path="/invoices" element={<Invoices />} />
         {/* One supplier's own page: what was bought from them, and what has

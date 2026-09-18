@@ -34,7 +34,8 @@
     "sync:uploads": "tsx src/docs/sync-uploads.ts",
     "check:uploads": "tsx src/docs/check-uploads.ts",
     "fetch:uploads": "tsx src/docs/fetch-uploads.ts",
-    "check:dashboard": "tsx src/docs/check-dashboard-speed.ts"
+    "check:dashboard": "tsx src/docs/check-dashboard-speed.ts",
+    "check:order-scope": "tsx src/docs/check-order-page-scope.ts"
   },
   "keywords": [],
   "author": "",

@@ -261,11 +261,23 @@ is a counter's record. One component decides it, `OrderRef` in
 number all render through it: a customer's orders, the certificate list, and the
 wallet's commission earnings.
 
-This is the panel's half and it is deliberately only half. `GET /api/orders/:id`
-still answers role 1, so a typed URL still opens an order, and the Orders list's
-own row controls — the arrow, Pay, Edit — still lead to that page. Closing those
-is a change to the API rather than to a link, and it would empty head office's
-order receipts and invoices with it.
+**And head office does not open the page at all.** `GET /api/orders/:id` and
+`GET /api/orders/:id/quote` refuse role 1 with 403, so a typed URL and a
+bookmark are closed along with the link; the panel sends role 1 back to the list
+rather than mounting a page that would fill with a refusal
+(`LaboratoryOrderPage` in `iigl-admin/src/App.tsx`), and the Orders list drops
+the row controls that lead there — the arrow, Pay and Edit.
+
+What stays open to head office is everything that measures the network rather
+than reproducing a counter's record: the order lists, a customer's history, the
+certificate list, the dashboard, the commission and statement figures. **The
+printed receipt and invoice stay open too** — a document somebody asks head
+office for is not head office browsing a counter — as do Delete, which is an
+administrative act rather than a reading.
+
+`npm run check:order-scope` asserts all of it against the live data, including
+the rule a change to the other two breaks by accident: a laboratory still opens
+its own order, and still cannot open another's.
 
 ### Money: an account's history is its own, head office included
 
