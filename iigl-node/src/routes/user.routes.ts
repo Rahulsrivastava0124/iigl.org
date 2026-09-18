@@ -100,6 +100,37 @@ async function assertRoleAssignable(user: Express.Request['user'], roleId: numbe
 const isSenior = (roleId: unknown) =>
   roleId !== null && (Number(roleId) === ROLE.SUPER || Number(roleId) === ROLE.LAB);
 
+/**
+ * The **active** account holding this mobile number, if there is one.
+ *
+ * People sign in by mobile, `users.mobile` carries no unique constraint, and
+ * the migrated data holds three numbers twice over. So the number has to be
+ * guarded — but guarded against the thing that actually goes wrong, which
+ * `POST /auth/login` states exactly: a sign-in is resolved by the password, and
+ * it fails only when **two active accounts** share a number and a password.
+ *
+ * A deactivated account cannot sign in at all, so a number it holds locks
+ * nobody out and is free for somebody else to take. Checking against every row
+ * instead — which is what this used to do — refused an edit on account of a row
+ * that can never be signed in as, and the refusal named an account nobody could
+ * see in the panel. That is how laboratory LAB0004 came to be stuck with
+ * `"9437371187 MALLESHWAR"` in its mobile field: cleaning it to the number
+ * collided with EMP00012, deactivated in 2025.
+ *
+ * The other half of this is in `PATCH /users/:id/active` — reactivating an
+ * account is the moment a dormant duplicate becomes a live one, and it is
+ * checked there for the same reason it is checked here.
+ */
+async function activeMobileHolder(mobile: string, exceptUserId?: number) {
+  let q = db
+    .selectFrom('users')
+    .select(['id', 'fullname'])
+    .where('mobile', '=', mobile)
+    .where('is_active', '=', 1);
+  if (exceptUserId !== undefined) q = q.where('id', '!=', exceptUserId);
+  return q.executeTakeFirst();
+}
+
 const PUBLIC_COLUMNS = [
   'id',
   'empid',
@@ -1129,12 +1160,8 @@ userRoutes.post(
     }
     if (String(password).length < 8) throw badRequest('Password must be at least 8 characters.');
 
-    const clash = await db
-      .selectFrom('users')
-      .select('id')
-      .where('mobile', '=', String(mobile))
-      .executeTakeFirst();
-    if (clash) throw conflict('An account with that mobile number already exists.');
+    const clash = await activeMobileHolder(String(mobile).trim());
+    if (clash) throw conflict('An active account with that mobile number already exists.');
 
     const role = role_id === null || role_id === '' ? null : Number(role_id);
     await assertRoleAssignable(req.user, role);
@@ -1230,10 +1257,31 @@ userRoutes.patch(
     const active = req.body?.is_active ? 1 : 0;
     const row = await db
       .selectFrom('users')
-      .select('id')
+      .select(['id', 'mobile'])
       .where('id', '=', Number(req.params.id))
       .executeTakeFirst();
     if (!row) throw notFound('User not found.');
+
+    /*
+      Switching an account back on is the moment its mobile number starts
+      mattering again, and the only moment a duplicate that was harmless
+      becomes a lockout. Nothing checked it here, so the number could be given
+      away while the account slept and handed back a second active holder when
+      it woke — two people, one number, and `POST /auth/login` refusing them
+      both once their passwords are told apart no further.
+
+      Deactivating is never refused. Somebody has to be able to switch an
+      account off, and switching one off cannot create a duplicate.
+    */
+    if (active && row.mobile) {
+      const clash = await activeMobileHolder(String(row.mobile), Number(row.id));
+      if (clash) {
+        throw conflict(
+          `${clash.fullname} (account ${clash.id}) is already active on ${row.mobile}. ` +
+            'Give one of the two a different number before switching this account back on.',
+        );
+      }
+    }
 
     await db
       .updateTable('users')
@@ -1497,15 +1545,10 @@ userRoutes.patch(
     if (req.body?.mobile !== undefined) {
       const mobile = String(req.body.mobile).trim();
       if (!mobile) throw badRequest('Mobile number cannot be blank.');
-      const clash = await db
-        .selectFrom('users')
-        .select('id')
-        .where('mobile', '=', mobile)
-        .where('id', '!=', id)
-        .executeTakeFirst();
+      const clash = await activeMobileHolder(mobile, id);
       if (clash) {
         throw conflict(
-          `Account ${clash.id} already uses that mobile number. Two accounts sharing a number is what locks people out of sign-in.`,
+          `${clash.fullname} (account ${clash.id}) is active on that mobile number. Two active accounts sharing a number is what locks people out of sign-in.`,
         );
       }
       patch.mobile = mobile;

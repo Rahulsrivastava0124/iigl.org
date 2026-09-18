@@ -2585,7 +2585,8 @@ const document = {
       patch: {
         tags: ['Users'],
         summary: 'Activate or deactivate an account',
-        description: 'Administrators only.',
+        description:
+          'Administrators only. Switching an account back on is refused while another **active** account holds the same mobile number: people sign in by mobile, and two live accounts on one number is the lockout. Switching an account off is never refused.',
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
         requestBody: {
           required: true,
@@ -2598,6 +2599,7 @@ const document = {
         responses: {
           200: { description: 'Updated.' },
           404: errorResponse('User not found.'),
+          409: errorResponse('Another active account already uses this account’s mobile number.'),
           ...guarded,
         },
       },

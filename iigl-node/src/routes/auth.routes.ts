@@ -8,7 +8,7 @@ import { badRequest, unauthorized } from '../lib/errors.js';
 import { env } from '../lib/env.js';
 import { sendPasswordReset } from '../lib/mail.js';
 import { requireAuth, resolveLabId } from '../middleware/auth.js';
-import { clearSession, issueSession, panelAddressFor, type SessionUser } from '../lib/session.js';
+import { admits, clearSession, issueSession, panelAddressFor, portalOf, type SessionUser } from '../lib/session.js';
 
 /** How long a reset link works for. Long enough to read mail, short enough to matter. */
 const RESET_TTL_MS = 60 * 60 * 1000;
@@ -107,19 +107,52 @@ authRoutes.post(
       throw unauthorized('That mobile number and password do not match.');
     }
 
-    const active = matches.filter((m) => m.is_active);
-    if (active.length === 0) throw unauthorized('This account has been deactivated.');
+    const stillActive = matches.filter((m) => m.is_active);
+    if (stillActive.length === 0) throw unauthorized('This account has been deactivated.');
 
-    // Two active accounts, one number, one password. Guessing would sign
-    // someone in as the wrong person, possibly with a different role.
-    if (active.length > 1) {
+    /*
+      The door narrows the field.
+
+      Two accounts can hold one number and one password and still not be
+      ambiguous, because they do not sign in at the same place. A laboratory's
+      owner is the commonest case in this data: LAB0001 is IIGL-KOLKATTA and
+      EMP00014 is Sanjoy Naskar, who owns it — one number, one password, and
+      two accounts, which used to refuse them both.
+
+      Which is wrong twice over. The laboratory door is for role 2 and the team
+      door is for staff, so at `admin.` there was only ever one account this
+      could mean, and at `team.` only the other. The panel already knew that --
+      `admits` in `iigl-admin/src/lib/portal.ts` -- but it knew it too late: the
+      API had already picked a single account and refused, so the door it was
+      asked at never entered into it.
+
+      A request that names no door — curl, `npm run sweep`, the API docs —
+      keeps the whole field and the refusal below. Nothing there has a sign-in
+      screen to be at the wrong one of.
+    */
+    const portal = portalOf(req);
+    const atThisDoor = portal ? stillActive.filter((m) => admits(portal, m.role_id)) : stillActive;
+
+    /*
+      Refused here reads exactly like a wrong password, which is the rule
+      `REFUSED` in portal.ts states and the reason this endpoint gives one
+      message for a missing account and a bad one: a sentence that says "right
+      credentials, wrong door" confirms the credentials.
+    */
+    if (atThisDoor.length === 0) {
+      throw unauthorized('That mobile number and password do not match.');
+    }
+
+    // Two accounts, one number, one password, and the same door. Guessing would
+    // sign someone in as the wrong person.
+    if (atThisDoor.length > 1) {
       throw unauthorized(
         'More than one active account shares this mobile number and password. ' +
           'Ask an administrator to separate them before signing in.',
       );
     }
 
-    const row = active[0];
+    const row = atThisDoor[0];
 
     const user: SessionUser = {
       id: Number(row.id),

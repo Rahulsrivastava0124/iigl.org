@@ -34,6 +34,7 @@ import { holidayRoutes } from './routes/holiday.routes.js';
 import { statementRoutes } from './routes/statement.routes.js';
 import { siteRoutes } from './routes/site.routes.js';
 import { requireAuth } from './middleware/auth.js';
+import { invalidateDashboard } from './services/dashboard-cache.js';
 import { loginLimiter, resetLimiter, verifyLogLimiter, renderLimiter, courseEnquiryLimiter } from './middleware/limits.js';
 import { openApiDocument } from './docs/openapi.js';
 
@@ -189,6 +190,33 @@ export function createApp() {
   // Everything below requires a session. Routes are private by default —
   // the inverse of the Laravel app, where 15 routes sat outside all middleware.
   app.use('/api', requireAuth);
+
+  /*
+    Anything written drops the dashboard's held answers.
+
+    Here rather than at each write, because the dashboard counts nearly every
+    table in the schema — orders, order details, certificates, transactions,
+    students, users — and a list of the routes that move a tile is a list that
+    goes out of date the first time somebody adds one. The next endpoint
+    invalidates correctly without its author knowing this cache exists.
+
+    The cost of being this broad is a re-computed dashboard after a write that
+    did not touch it. Writes here are somebody typing at a counter, the map is
+    a few dozen entries, and the alternative is a tile that disagrees with the
+    screen the same person just came from.
+
+    After the handler, and only when it succeeded: a refused write changed
+    nothing, and clearing on it would hand the slow path to anybody who can
+    provoke a 400.
+  */
+  app.use('/api', (req, res, next) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+    res.on('finish', () => {
+      if (res.statusCode < 400) invalidateDashboard();
+    });
+    next();
+  });
+
   app.use('/api/catalog', catalogRoutes);
   app.use('/api/orders', orderRoutes);
   app.use('/api/invoices', invoiceRoutes);

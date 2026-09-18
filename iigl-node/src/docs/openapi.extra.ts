@@ -2574,7 +2574,7 @@ export const extraPaths: Record<string, unknown> = {
       responses: {
         200: ok('Updated.'),
         400: err('Nothing to update, or a blank mobile number.'),
-        409: err('Another account already uses that mobile number, or employments still point at this empid.'),
+        409: err('Another active account already uses that mobile number, or employments still point at this empid.'),
         404: err('Account not found.'),
         ...guarded,
       },

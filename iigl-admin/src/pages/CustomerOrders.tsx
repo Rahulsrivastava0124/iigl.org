@@ -14,7 +14,7 @@ import {
 import { useFetch } from '../lib/useFetch';
 import { useAuth } from '../lib/auth';
 import { isSuper } from '../lib/portal';
-import { Notice, OrderChip, Panel, TableFrame, Tile, money } from '../components/ui';
+import { Notice, OrderChip, OrderRef, Panel, TableFrame, Tile, money } from '../components/ui';
 
 /**
  * Everything one customer has ordered, and what it came to.
@@ -126,9 +126,7 @@ export default function CustomerOrders() {
                     <TableCell className="mono">
                       {/* This page says what was billed; the order says what
                           for. */}
-                      <Link component={RouterLink} to={`/orders/${o.id}`} underline="hover">
-                        {o.order_no}
-                      </Link>
+                      <OrderRef id={o.id}>{o.order_no}</OrderRef>
                     </TableCell>
                     {admin && (
                       <TableCell sx={{ whiteSpace: 'normal', minWidth: 150 }}>

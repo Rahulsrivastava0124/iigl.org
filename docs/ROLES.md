@@ -253,6 +253,20 @@ is a laboratory's menu and is left off the super admin sidebar. `GET
 /api/orders` is still unscoped for role 1 and `/orders` is still a route — the
 header search lands on it — so this is emphasis in the menu, not a permission.
 
+**An order number is not a link for head office.** Role 1 reads the lists — the
+counts and the money on them are what the network is measured by — but the
+number is text there rather than a way into the order, because the order itself
+is a counter's record. One component decides it, `OrderRef` in
+`iigl-admin/src/components/ui.tsx`, and the three lists that print an order
+number all render through it: a customer's orders, the certificate list, and the
+wallet's commission earnings.
+
+This is the panel's half and it is deliberately only half. `GET /api/orders/:id`
+still answers role 1, so a typed URL still opens an order, and the Orders list's
+own row controls — the arrow, Pay, Edit — still lead to that page. Closing those
+is a change to the API rather than to a link, and it would empty head office's
+order receipts and invoices with it.
+
 ### Money: an account's history is its own, head office included
 
 `GET /api/transactions` answers *"my transactions"* — the rows this account
@@ -460,7 +474,7 @@ head office rather than to a laboratory.
 
 | Rule | File |
 | --- | --- |
-| Which roles each door admits | `iigl-admin/src/lib/portal.ts` |
+| Which roles each door admits | `iigl-admin/src/lib/portal.ts`, and `admits()` in `iigl-node/src/lib/session.ts` |
 | Role narrowing in the panel | `isSuper()` for head office, `isAdmin()` — the same test as `isLab()` — for a laboratory, same file |
 | Which menu a role sees | `ADMIN_GROUPS` / `FIELD_GROUPS` in `iigl-admin/src/components/Shell.tsx` |
 | Session role and laboratory | `resolveLabId()` in `iigl-node/src/middleware/auth.ts` |

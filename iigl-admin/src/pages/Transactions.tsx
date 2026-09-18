@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Button,
   Grid,
-  Link,
   MenuItem,
   Stack,
   Table,
@@ -13,7 +12,6 @@ import {
   TableRow,
   TextField,
 } from '@mui/material';
-import { Link as RouterLink } from 'react-router-dom';
 import { useToast } from '../components/Toast';
 import { useFetch, useDebounced } from '../lib/useFetch';
 import { api } from '../lib/api';
@@ -22,6 +20,7 @@ import { payModeLabel } from '../lib/payModes';
 import { PayCommissionDialog } from '../components/PayCommission';
 import {
   OrderChip,
+  OrderRef,
   DEFAULT_PER_PAGE, Pager,
   Panel,
   SearchField,
@@ -247,9 +246,7 @@ export default function Transactions() {
                 {earned.map((e) => (
                   <TableRow key={e.order_id} hover>
                     <TableCell className="mono">
-                      <Link component={RouterLink} to={`/orders/${e.order_id}`} underline="hover">
-                        {e.order_no}
-                      </Link>
+                      <OrderRef id={e.order_id}>{e.order_no}</OrderRef>
                     </TableCell>
                     <TableCell>{e.order_date ?? '—'}</TableCell>
                     {isSuper(user) && <TableCell>{e.lab_name ?? `#${e.order_id}`}</TableCell>}

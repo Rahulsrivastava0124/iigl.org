@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
 import { requirePermission } from '../services/permission.service.js';
-import { conflict, notFound } from '../lib/errors.js';
+import { conflict, forbidden, notFound } from '../lib/errors.js';
 import { paged, readPage, readSearch } from '../lib/paginate.js';
 import { assertLabOwnership, requireLabScope, ROLE } from '../middleware/auth.js';
 import { createOrder, live, liveJoined, updateOrder, validateOrderInput, validateUpdateOrderInput } from '../services/order.service.js';
@@ -19,6 +19,31 @@ orderRoutes.use(requireLabScope);
 function scopeToLab<Q extends { where: any }>(q: Q, user: Express.Request['user']): Q {
   if (user.roleId === ROLE.SUPER) return q;
   return q.where('orders.lab_id', '=', user.labId) as Q;
+}
+
+/**
+ * Head office reads the lists, not a single order.
+ *
+ * An order is a counter's record — who came in, what they left, what they paid
+ * — and it belongs to the laboratory that took it. Head office is measured on
+ * the network: the counts, the money and the commission, which are what the
+ * lists and the dashboard carry, and every one of those stays open to role 1.
+ *
+ * This is the opposite of what `docs/ROLES.md` said until now, and the reversal
+ * is deliberate — see the note there under *Three doors*. It applies to the two
+ * endpoints the order page is built from and to nothing else: the printed
+ * receipt and invoice still render for head office, because a document somebody
+ * asks head office for is not the same as head office browsing a counter.
+ *
+ * Not a permission check. `can()` is about what a role may *do*; this is about
+ * whose record it is, which is why it sits beside `scopeToLab` rather than in
+ * the permission matrix.
+ */
+function refuseSuperAdminTheOrderPage(user: Express.Request['user']): void {
+  if (user.roleId !== ROLE.SUPER) return;
+  throw forbidden(
+    'An order belongs to the laboratory that took it. Head office reads the order lists and the dashboard, not a single order’s page.',
+  );
 }
 
 orderRoutes.get(
@@ -168,6 +193,8 @@ orderRoutes.get(
   '/:id',
   numericId,
   wrap(async (req, res) => {
+    refuseSuperAdminTheOrderPage(req.user);
+
     const order = await live(db.selectFrom('orders').selectAll())
       .where('id', '=', Number(req.params.id))
       .executeTakeFirst();
@@ -382,6 +409,9 @@ orderRoutes.get(
   '/:id/quote',
   numericId,
   wrap(async (req, res) => {
+    // The money on the order page, so it closes with the page.
+    refuseSuperAdminTheOrderPage(req.user);
+
     const order = await live(db.selectFrom('orders'))
       .select(['id', 'lab_id', 'discount'])
       .where('id', '=', Number(req.params.id))

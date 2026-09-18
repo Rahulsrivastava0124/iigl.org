@@ -24,6 +24,7 @@ import {
   DialogTitle,
   IconButton,
   InputAdornment,
+  Link,
   Menu as MuiMenu,
   MenuItem,
   Paper,
@@ -42,6 +43,8 @@ import HideIcon from '@mui/icons-material/VisibilityOffOutlined';
 import HintIcon from '@mui/icons-material/InfoOutlined';
 import type { TextFieldProps } from '@mui/material';
 import type { PageMeta } from '../lib/api';
+import { useAuth } from '../lib/auth';
+import { isSuper } from '../lib/portal';
 import { BRAND_FILL, TONE } from '../lib/theme';
 import type { ToneName } from '../lib/theme';
 
@@ -832,6 +835,43 @@ export function OrderChip({ status, ready }: { status: string; ready?: boolean }
 
 export function YesNo({ on }: { on: boolean | number }) {
   return <StateChip {...flagState(on)} />;
+}
+
+/**
+ * An order number, as a link to the order — except for head office.
+ *
+ * An order belongs to the laboratory that took it. Head office still sees the
+ * lists, because the counts and the money on them are what the network is
+ * measured by, but the number is text there rather than a way in: the order
+ * itself is a counter's record, and role 1 has no counter.
+ *
+ * Written once here rather than four times at the call sites, because a rule
+ * repeated is a rule that drifts — the certificate list and the wallet both
+ * print an order number too, and a fix applied to one of the three is the kind
+ * of thing nobody notices until somebody finds the way round.
+ *
+ * This is the panel's half. `GET /api/orders/:id` still answers head office, so
+ * a typed URL still opens an order; closing that is a change to the API and to
+ * `docs/ROLES.md:250`, which states the opposite as a deliberate rule.
+ */
+export function OrderRef({
+  id,
+  children,
+}: {
+  /** The order's id. Null when the row does not name one. */
+  id: number | string | null | undefined;
+  /** What to print — the order number, not the id. */
+  children: ReactNode;
+}) {
+  const { user } = useAuth();
+
+  if (id == null || isSuper(user)) return <>{children}</>;
+
+  return (
+    <Link component={RouterLink} to={`/orders/${id}`} underline="hover">
+      {children}
+    </Link>
+  );
 }
 
 /**

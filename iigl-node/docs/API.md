@@ -215,7 +215,7 @@ Laboratories, staff and account administration.
 | GET | `/api/users/{id}` | session | — | — | 401, 403, 404 | Read one account |
 | PATCH | `/api/users/{id}` | session | — | fullname, mobile, email, role_id, is_active, commision, commission_type, registration_fee, +33 more | 400, 401, 403, 404, 409 | Update any account |
 | DELETE | `/api/users/{id}` | session | — | — | 400, 401, 403, 404, 409 | Delete an account |
-| PATCH | `/api/users/{id}/active` | session | — | is_active | 401, 403, 404 | Activate or deactivate an account |
+| PATCH | `/api/users/{id}/active` | session | — | is_active | 401, 403, 404, 409 | Activate or deactivate an account |
 | POST | `/api/users/{id}/employment` | session | — | **lab_id**, joining_date, salary, remark, week_off, working_hours, late_after, shift_start, +1 more | 400, 401, 403, 404, 409 | Attach a person to an employer |
 | PATCH | `/api/users/{id}/employment` | session | — | salary, joining_date, remark, week_off, working_hours, late_after, shift_start, shift_end | 400, 401, 403, 404 | Change the terms of a posting |
 | POST | `/api/users/{id}/employment/end` | session | — | leave_date, remark | 401, 403, 404 | End an employment |

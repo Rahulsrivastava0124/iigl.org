@@ -1,10 +1,8 @@
 import { useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
 import {
   Avatar,
   Button,
   Checkbox,
-  Link,
   Table,
   TableBody,
   TableCell,
@@ -14,7 +12,7 @@ import {
 } from '@mui/material';
 import PrintIcon from '@mui/icons-material/PrintOutlined';
 import { useFetch, useDebounced } from '../lib/useFetch';
-import { IconAction, DEFAULT_PER_PAGE, Pager, Panel, RowActions, SearchField, TableFrame } from '../components/ui';
+import { IconAction, DEFAULT_PER_PAGE, OrderRef, Pager, Panel, RowActions, SearchField, TableFrame } from '../components/ui';
 import type { Paged, Report } from '../lib/api';
 import { apiUrl, fileUrl } from '../lib/config';
 import FilePreview from '../components/FilePreview';
@@ -194,9 +192,7 @@ export default function Reports() {
                       panel calls 202608-484662. */}
                   <TableCell className="mono">
                     {r.order_id ? (
-                      <Link component={RouterLink} to={`/orders/${r.order_id}`} underline="hover">
-                        {r.order_number ?? `#${r.order_no}`}
-                      </Link>
+                      <OrderRef id={r.order_id}>{r.order_number ?? `#${r.order_no}`}</OrderRef>
                     ) : (
                       '—'
                     )}

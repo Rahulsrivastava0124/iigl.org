@@ -58,6 +58,36 @@ export function portalOf(req: Request): PortalName | null {
   return PORTALS.has(portal) ? (portal as PortalName) : null;
 }
 
+/**
+ * Which roles each door accepts.
+ *
+ * The same rule as `admits` in `iigl-admin/src/lib/portal.ts`, and it has to be
+ * written twice because the two packages share no code — so they are named the
+ * same thing, and `docs/ROLES.md` points at both. Change one and change the
+ * other.
+ *
+ * It is used at sign-in to say which of several accounts on one mobile number
+ * is the one standing at this door. `docs/ROLES.md` calls the door "not the
+ * security boundary", and that still holds: this narrows a set of accounts that
+ * have already proved the password, and every request afterwards is checked on
+ * the role rather than on where it came in.
+ *
+ * A role of `null` is admitted by no door, which is what the panel does too.
+ * That account holds only the grants in `user_permissions` and has no sign-in
+ * screen of its own yet.
+ */
+export function admits(portal: PortalName, roleId: number | string | null): boolean {
+  if (roleId === null || roleId === '') return false;
+  const role = Number(roleId);
+  if (!Number.isFinite(role)) return false;
+
+  // 1 head office, 2 a laboratory, 3 and up its staff — including the older
+  // roles 4 and 5, which are team by another name.
+  if (portal === 'super') return role === 1;
+  if (portal === 'admin') return role === 2;
+  return role >= 3;
+}
+
 export function sessionCookieFor(req: Request): string {
   const portal = portalOf(req);
   return portal ? `${SESSION_COOKIE}.${portal}` : SESSION_COOKIE;

@@ -10,6 +10,7 @@ import {
   TRANSACTION_TYPE,
   receivedIntoWallet,
 } from '../services/commission.service.js';
+import { cached, remember, scopeKey } from '../services/dashboard-cache.js';
 
 export const dashboardRoutes = Router();
 dashboardRoutes.use(requireLabScope);
@@ -39,6 +40,17 @@ const billed = (column = 'payable_amt') =>
 dashboardRoutes.get(
   '/summary',
   wrap(async (req, res) => {
+    /*
+      About fifty queries build what follows, and the database is not on this
+      machine, so the screen waits on fifty round trips rather than on fifty
+      pieces of work. Held for a minute, per caller — see dashboard-cache.ts for
+      why a minute is the right answer for a dashboard and the wrong one for
+      anything that has to be exact when it is read.
+    */
+    const key = scopeKey('summary', req.user);
+    const hit = cached(key);
+    if (hit !== undefined) return res.json(hit);
+
     const isAdmin = req.user.roleId === ROLE.SUPER;
     const labId = req.user.labId;
     const today = ddmmyyyy();
@@ -139,8 +151,27 @@ dashboardRoutes.get(
      */
     const itemCounts = async () => {
       const owed = sql`order_details.qty * (order_details.smart_card + order_details.classic_card)`;
+      /*
+        `cast(... as char)`, and it is the whole performance of this screen.
+
+        `reports.order_detail_id` is `varchar(255)` holding a number, and
+        `order_details.id` is `bigint`. Compared as they are, MySQL converts
+        every `order_detail_id` in the table to a number to test it — which it
+        cannot do through `idx_reports_order_detail`, so the index is skipped
+        and the subquery scans all 22,407 certificates once per order line.
+        Measured against this database: **34.5 seconds**, and it was all but the
+        whole of a 37-second `/dashboard/summary`.
+
+        Casting the *other* side instead leaves the indexed column untouched, so
+        the lookup is an index dive. Same two numbers out — 23,879 and 21,190 —
+        in **0.56 seconds**.
+
+        The column is the one `order.routes.ts` also notes as a varchar that
+        holds an id. Until it is a bigint, anything comparing it to a number
+        pays this, so compare it to text.
+      */
       const written = sql`(select count(*) from reports
-        where reports.order_detail_id = order_details.id)`;
+        where reports.order_detail_id = cast(order_details.id as char))`;
       let q = liveJoined(
         db
           .selectFrom('order_details')
@@ -823,7 +854,7 @@ dashboardRoutes.get(
     if (!isAdmin) reportsQuery = reportsQuery.where('lab_id', '=', labId);
     const reports = Number((await reportsQuery.executeTakeFirstOrThrow()).n);
 
-    res.json({
+    res.json(remember(key, {
       data: {
         orders: { total: orders, active, delivered, today: todayOrders, active_today: todayActive },
         // Pieces rather than orders: what the counter took in, how much of it
@@ -869,7 +900,7 @@ dashboardRoutes.get(
           customers_unregistered: unregisteredCustomers,
         },
       },
-    });
+    }));
   }),
 );
 
@@ -887,6 +918,13 @@ dashboardRoutes.get(
 dashboardRoutes.get(
   '/trend',
   wrap(async (req, res) => {
+    // Twelve months of counts. Both queries group over the whole of `orders`
+    // and `reports`, and the order one runs `str_to_date` on a text column, so
+    // neither can use an index. Held beside the summary, for the same minute.
+    const key = scopeKey('trend', req.user);
+    const hit = cached(key);
+    if (hit !== undefined) return res.json(hit);
+
     const isAdmin = req.user.roleId === ROLE.SUPER;
     const labId = req.user.labId ?? 0;
     const scope = (column: string) =>
@@ -932,6 +970,6 @@ dashboardRoutes.get(
       };
     });
 
-    res.json({ data });
+    res.json(remember(key, { data }));
   }),
 );
