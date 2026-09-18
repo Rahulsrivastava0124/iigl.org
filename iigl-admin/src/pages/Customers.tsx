@@ -186,6 +186,25 @@ export default function Customers() {
   };
 
 
+  /*
+    A customer known only from their orders has no record to publish. The
+    website's card is a company, a logo and a place, and an order carries none
+    of them — so the column offers registration, the same prefilled form Edit
+    opens, rather than a tick that would list a blank card.
+  */
+  const registerFrom = (r: Customer) =>
+    navigate('/customers/new', {
+      state: {
+        prefill: {
+          company_name: r.customer_name ?? '',
+          owner_name: r.customer_name ?? '',
+          mobile: r.mobile,
+          email: r.email ?? '',
+          gst_no: r.gst ?? '',
+        },
+      },
+    });
+
   const setTab = (next: Tab) => setParams(next === 'registered' ? {} : { tab: next });
   const setPage = (next: number) =>
     setParams(
@@ -334,8 +353,13 @@ export default function Customers() {
                           onChange={() => toggleSite(r)}
                           slotProps={{ input: { 'aria-label': `Show ${r.company_name} on the website` } }}
                         />
+                      ) : mayCreate ? (
+                        // Known only from orders: registering them is what gives
+                        // the website something to show, so say so here.
+                        <Button size="small" sx={{ minWidth: 0, px: 1 }} onClick={() => registerFrom(r)}>
+                          Register
+                        </Button>
                       ) : (
-                        // Known only from orders: register them first (Edit) to list them.
                         '—'
                       )}
                     </TableCell>
@@ -364,19 +388,7 @@ export default function Customers() {
                               <IconAction
                                 label="Edit customer"
                                 icon={EditIcon}
-                                onClick={() =>
-                                  navigate('/customers/new', {
-                                    state: {
-                                      prefill: {
-                                        company_name: r.customer_name ?? '',
-                                        owner_name: r.customer_name ?? '',
-                                        mobile: r.mobile,
-                                        email: r.email ?? '',
-                                        gst_no: r.gst ?? '',
-                                      },
-                                    },
-                                  })
-                                }
+                                onClick={() => registerFrom(r)}
                               />
                             )}
                       </RowActions>

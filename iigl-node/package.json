@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "tsx --test src/lib/money.test.ts",
+    "test": "tsx --test src/lib/money.test.ts src/services/geocode.test.ts",
     "dev": "nodemon",
     "build": "tsc && node scripts/copy-assets.mjs",
     "start": "node dist/server.js",

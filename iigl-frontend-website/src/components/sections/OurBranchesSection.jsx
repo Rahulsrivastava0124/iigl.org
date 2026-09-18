@@ -112,15 +112,44 @@ const STATE_ALIASES = {
   uttaranchal: 'uttarakhand',
 };
 
+/** Letters only: "West Bengal", "west bengal" and "Westbengal" are one word. */
+const letters = (v) => v.toLowerCase().replace(/[^a-z]/g, '');
+
+/** How many single-letter edits apart, counting no further than `cap`. */
+function editDistance(a, b, cap) {
+  if (Math.abs(a.length - b.length) > cap) return cap + 1;
+  let row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i += 1) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    if (Math.min(...next) > cap) return cap + 1;
+    row = next;
+  }
+  return row[b.length];
+}
+
 /**
  * The middle of a state, for a laboratory with no coordinates of its own: near
  * enough that the pin sits in the right place on a country-sized map. Null for
  * a state the map does not know, and that laboratory is listed without a pin.
+ *
+ * The state on a laboratory's record is typed by hand, so it is matched on its
+ * letters rather than its spelling — "Westbengal" and "UTTARPRADESH" are the
+ * states they plainly mean — and then on anything a letter or two out, which
+ * is how "Jarkhand" and "WESTBANGAL" find theirs. Nothing closer is accepted:
+ * no two Indian states are that near each other in spelling.
  */
 function stateCentre(state) {
   const key = state.trim().toLowerCase();
-  const wanted = STATE_ALIASES[key] ?? key;
-  return stateLabels.find((s) => s.name.toLowerCase() === wanted) ?? null;
+  const wanted = letters(STATE_ALIASES[key] ?? key);
+  if (!wanted) return null;
+  return (
+    stateLabels.find((s) => letters(s.name) === wanted) ??
+    stateLabels.find((s) => editDistance(letters(s.name), wanted, 2) <= 2) ??
+    null
+  );
 }
 
 /**

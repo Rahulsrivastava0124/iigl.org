@@ -52,7 +52,13 @@ function throttled<T>(task: () => Promise<T>): Promise<T> {
   return run;
 }
 
-async function search(params: Record<string, string>): Promise<Point | null> {
+interface Hit {
+  lat: string;
+  lon: string;
+  address?: { state?: string };
+}
+
+async function search(params: Record<string, string>): Promise<Hit[]> {
   const url = new URL('/search', env.geocoderUrl);
   for (const [k, v] of Object.entries({ format: 'jsonv2', limit: '1', countrycodes: 'in', ...params })) {
     url.searchParams.set(k, v);
@@ -64,12 +70,52 @@ async function search(params: Record<string, string>): Promise<Point | null> {
     }),
   );
   if (!response.ok) throw new Error(`geocoder answered ${response.status}`);
-  const rows = (await response.json()) as Array<{ lat: string; lon: string }>;
-  const first = rows[0];
-  if (!first) return null;
-  const lat = Number(first.lat);
-  const lon = Number(first.lon);
+  return (await response.json()) as Hit[];
+}
+
+function pointOf(hit: Hit | undefined): Point | null {
+  if (!hit) return null;
+  const lat = Number(hit.lat);
+  const lon = Number(hit.lon);
   return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
+}
+
+/** Letters only, lower case: "West Bengal", "west bengal" and "Westbengal" are one word. */
+const letters = (v: string) => v.toLowerCase().replace(/[^a-z]/g, '');
+
+/** How many single-letter edits apart, counting no further than `cap`. */
+function editDistance(a: string, b: string, cap: number): number {
+  if (Math.abs(a.length - b.length) > cap) return cap + 1;
+  let row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j++) {
+      next[j] = Math.min(
+        row[j] + 1,
+        next[j - 1] + 1,
+        row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    if (Math.min(...next) > cap) return cap + 1;
+    row = next;
+  }
+  return row[b.length];
+}
+
+/**
+ * Whether two spellings name the same state.
+ *
+ * The state on a laboratory's record is typed by hand and often is not the
+ * official spelling: "Westbengal", "WESTBANGAL", "Jarkhand", "UTTARPRADESH".
+ * Ignoring spaces and case settles most of them, and a letter or two out
+ * settles the rest — close enough to tell Jharkhand from Punjab, which is all
+ * this decides.
+ */
+export function sameState(a: string, b: string): boolean {
+  const x = letters(a);
+  const y = letters(b);
+  if (!x || !y) return false;
+  return x === y || editDistance(x, y, 2) <= 2;
 }
 
 /**
@@ -82,11 +128,23 @@ export async function geocodeCity(city: string, state: string): Promise<Point | 
   const s = state.trim();
   if (!c) return null;
   // Structured first: "city=Howrah&state=West Bengal" cannot match a shop.
-  const structured = await search({ city: c, ...(s ? { state: s } : {}) });
+  const structured = pointOf((await search({ city: c, ...(s ? { state: s } : {}) }))[0]);
   if (structured) return structured;
   // Then free text, still settlements only — catches towns Nominatim files as
   // `town` or `village` rather than `city`.
-  return search({ q: s ? `${c}, ${s}` : c, featureType: 'settlement' });
+  const free = pointOf((await search({ q: s ? `${c}, ${s}` : c, featureType: 'settlement' }))[0]);
+  if (free) return free;
+  /*
+    Both searches above pass the state through as the record spells it, and a
+    misspelt state makes them answer nothing at all — "Kolkata, Westbengal" is
+    not found, where "Kolkata" is. The city is the half that is usually right,
+    so ask for it alone, and keep the answer only if the state it comes back
+    with is the record's: "Brahampur" on its own is a village in Punjab, and a
+    pin in the wrong state is worse than the middle of the right one.
+  */
+  if (!s) return null;
+  const loose = await search({ q: c, featureType: 'settlement', addressdetails: '1', limit: '5' });
+  return pointOf(loose.find((hit) => sameState(hit.address?.state ?? '', s)));
 }
 
 interface LabGeo {
