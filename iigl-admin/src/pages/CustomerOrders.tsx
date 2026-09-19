@@ -1,20 +1,32 @@
+import { useMemo, useState } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import {
   Box,
   CircularProgress,
   Grid,
   Link,
+  MenuItem,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
+  TextField,
   Typography,
 } from '@mui/material';
 import { useFetch } from '../lib/useFetch';
 import { useAuth } from '../lib/auth';
 import { isSuper } from '../lib/portal';
-import { Notice, OrderChip, OrderRef, Panel, TableFrame, Tile, money } from '../components/ui';
+import {
+  Notice,
+  OrderChip,
+  OrderRef,
+  Panel,
+  SearchField,
+  TableFrame,
+  Tile,
+  money,
+} from '../components/ui';
 
 /**
  * Everything one customer has ordered, and what it came to.
@@ -59,8 +71,56 @@ export default function CustomerOrders() {
     `/customers/${encodeURIComponent(mobile)}/orders`,
   );
   const history = data?.data;
-  const totals = history?.totals;
   const orders = history?.orders ?? [];
+
+  /*
+    Filtered here rather than at the API.
+
+    A customer's whole history arrives in one response — it is one mobile
+    number's orders, 133 at the worst in this data — so narrowing it is a
+    property of what is already on the page. A round trip per keystroke would
+    buy nothing and lose the instant response.
+  */
+  const [search, setSearch] = useState('');
+  const [lab, setLab] = useState('');
+
+  /** The laboratories this customer has actually been to, in name order. */
+  const laboratories = useMemo(
+    () => [...new Set(orders.map((o) => o.laboratory).filter((l): l is string => !!l))].sort(),
+    [orders],
+  );
+
+  const term = search.trim().toLowerCase();
+  const shown = useMemo(
+    () =>
+      orders.filter(
+        (o) =>
+          (!term || o.order_no.toLowerCase().includes(term)) &&
+          (!lab || o.laboratory === lab),
+      ),
+    [orders, term, lab],
+  );
+
+  /*
+    The tiles count what is on the screen, not what the API summed.
+
+    Filter to one laboratory and read "Total orders 133" above two rows and the
+    page is telling you two different things at once. When nothing is filtered
+    these are the same four numbers the endpoint returns, computed the same way
+    — billed is `payable_amt` as stored, and due is never negative, because an
+    overpayment is somebody's change rather than a debt the order owes back.
+  */
+  const totals = useMemo(() => {
+    const billed = shown.reduce((n, o) => n + (Number(o.payable_amt) || 0), 0);
+    const paid = shown.reduce((n, o) => n + (Number(o.paid_amount) || 0), 0);
+    const due = shown.reduce(
+      (n, o) => n + Math.max(0, (Number(o.payable_amt) || 0) - (Number(o.paid_amount) || 0)),
+      0,
+    );
+    return { orders: shown.length, billed, paid, due };
+  }, [shown]);
+
+  const filtering = Boolean(term || lab);
 
   if (loading) {
     return (
@@ -73,23 +133,24 @@ export default function CustomerOrders() {
 
   return (
     <>
-      {/* The four figures the whole history adds up to, before the rows that
-          make them. Due is red only while something is owed. */}
+      {/* The four figures the rows below add up to — the whole history, or
+          whatever the filters have left of it. Due is red only while something
+          is owed. */}
       <Grid container spacing={1.5} sx={{ mb: 2 }}>
         <Grid size={CELL}>
-          <Tile label="Total orders" value={String(totals?.orders ?? 0)} fill="brand" />
+          <Tile label="Total orders" value={String(totals.orders)} fill="brand" />
         </Grid>
         <Grid size={CELL}>
-          <Tile label="Total amount" value={money(totals?.billed ?? 0)} fill="brand" />
+          <Tile label="Total amount" value={money(totals.billed)} fill="brand" />
         </Grid>
         <Grid size={CELL}>
-          <Tile label="Paid" value={money(totals?.paid ?? 0)} fill="settled" />
+          <Tile label="Paid" value={money(totals.paid)} fill="settled" />
         </Grid>
         <Grid size={CELL}>
           <Tile
             label="Due"
-            value={money(totals?.due ?? 0)}
-            fill={(totals?.due ?? 0) > 0 ? 'refused' : 'settled'}
+            value={money(totals.due)}
+            fill={totals.due > 0 ? 'refused' : 'settled'}
           />
         </Grid>
       </Grid>
@@ -97,13 +158,55 @@ export default function CustomerOrders() {
       <Panel
         title={history?.customer_name || 'Customer'}
         subtitle={mobile}
-        count={`${orders.length} ${orders.length === 1 ? 'order' : 'orders'}`}
+        count={
+          filtering
+            ? `${shown.length} of ${orders.length} ${orders.length === 1 ? 'order' : 'orders'}`
+            : `${orders.length} ${orders.length === 1 ? 'order' : 'orders'}`
+        }
+        actions={
+          <>
+            <SearchField
+              placeholder="Order number…"
+              value={search}
+              onChange={setSearch}
+              width={200}
+            />
+            {/*
+              Only head office, and only when there is a choice to make. A
+              laboratory's list is all its own, and a customer who has been to
+              one laboratory has nothing to filter by — a select with a single
+              option is a control that cannot change anything.
+            */}
+            {admin && laboratories.length > 1 && (
+              <TextField
+                select
+                label="Laboratory"
+                value={lab}
+                onChange={(e) => setLab(e.target.value)}
+                sx={{ width: 220 }}
+              >
+                <MenuItem value="">All laboratories</MenuItem>
+                {laboratories.map((name) => (
+                  <MenuItem key={name} value={name}>
+                    {name}
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
+          </>
+        }
       >
         <TableFrame
           loading={false}
           error={null}
-          empty={orders.length === 0}
-          emptyText="No order under this number is visible to you."
+          empty={shown.length === 0}
+          emptyText={
+            filtering
+              ? `Nothing under this number matches${term ? ` “${search.trim()}”` : ''}${
+                  lab ? `${term ? ' at ' : ' '}${lab}` : ''
+                }.`
+              : 'No order under this number is visible to you.'
+          }
         >
           <Table size="small">
             <TableHead>
@@ -118,7 +221,7 @@ export default function CustomerOrders() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {orders.map((o) => {
+              {shown.map((o) => {
                 const paid = Number(o.paid_amount ?? 0);
                 const due = Math.max(0, Number(o.payable_amt ?? 0) - paid);
                 return (

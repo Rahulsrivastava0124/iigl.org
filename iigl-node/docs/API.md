@@ -222,7 +222,7 @@ Laboratories, staff and account administration.
 | POST | `/api/users/{id}/password` | session | — | **password** | 400, 401, 403, 404 | Reset someone's password |
 | GET | `/api/users/laboratories` | session | — | — | 401, 403 | List laboratories |
 | GET | `/api/users/laboratories/{id}/agreement` | session | `format`, `blank` | — | 401, 403, 404 | The Franchise Agreement, the four pages after the form |
-| GET | `/api/users/laboratories/{id}/detail` | session | — | — | 401, 403, 404 | One laboratory, with its payments, staff and certificates |
+| GET | `/api/users/laboratories/{id}/detail` | session | `q` | — | 401, 403, 404 | One laboratory, with its payments, staff and certificates |
 | GET | `/api/users/laboratories/{id}/registration` | session | `format`, `blank` | — | 401, 403, 404 | The Franchisee Form, filled from the laboratory |
 | GET | `/api/users/me` | session | — | — | 401, 403 | Your account record |
 | PATCH | `/api/users/me` | session | — | fullname, owner_name, alt_mobile, office_tel, email, address, city, state, +24 more | 400, 401, 403, 409 | Update your own profile |

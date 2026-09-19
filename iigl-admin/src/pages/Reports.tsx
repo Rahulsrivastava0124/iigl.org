@@ -11,18 +11,14 @@ import {
   Typography,
 } from '@mui/material';
 import PrintIcon from '@mui/icons-material/PrintOutlined';
-import { useFetch, useDebounced } from '../lib/useFetch';
+import { useFetch, useDebounced, useUrlSearch } from '../lib/useFetch';
 import { IconAction, DEFAULT_PER_PAGE, OrderRef, Pager, Panel, RowActions, SearchField, TableFrame } from '../components/ui';
 import type { Paged, Report } from '../lib/api';
-import { apiUrl, fileUrl } from '../lib/config';
+import { apiUrl, fileUrl, printCard } from '../lib/config';
 import FilePreview from '../components/FilePreview';
 import SmartIcon from '@mui/icons-material/CreditCardOutlined';
 import ClassicIcon from '@mui/icons-material/DescriptionOutlined';
-
-/** Opens a card PDF in a new tab. The API streams it inline. */
-function printCard(id: number, kind: 'smart' | 'classic') {
-  window.open(apiUrl(`/cards/${kind}/${id}`), '_blank', 'noopener');
-}
+import HeaderCardIcon from '@mui/icons-material/BrandingWatermarkOutlined';
 
 export default function Reports() {
   const [page, setPage] = useState(1);
@@ -34,7 +30,9 @@ export default function Reports() {
   const [preview, setPreview] = useState<{ path: string; name: string } | null>(null);
 
   // Server-side: 22,000 certificates, 25 on screen.
-  const [search, setSearch] = useState('');
+  // Seeded from `?q=` so the header search, which navigates here with the
+  // certificate number, actually filters the list it lands on.
+  const [search, setSearch] = useUrlSearch();
   const term = useDebounced(search);
 
   const query = new URLSearchParams({ page: String(page), per_page: String(perPage) });
@@ -114,7 +112,19 @@ export default function Reports() {
           </>
         }
       >
-        <TableFrame loading={loading} error={error} empty={rows.length === 0}>
+        {/* Named, for the same reason the order list names it: an empty
+            filtered list and an empty list are different facts, and the header
+            search lands here with a certificate number in the box. */}
+        <TableFrame
+          loading={loading}
+          error={error}
+          empty={rows.length === 0}
+          emptyText={
+            term.trim()
+              ? `No certificate here matches “${term.trim()}”. A certificate belongs to the laboratory that issued it.`
+              : 'No certificates yet.'
+          }
+        >
           <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>
@@ -210,11 +220,22 @@ export default function Reports() {
                   <TableCell align="right">
                     <RowActions>
                       {r.smart_card && (
-                        <IconAction
-                          label="Print smart card"
-                          icon={SmartIcon}
-                          onClick={() => printCard(r.id, 'smart')}
-                        />
+                        <>
+                          <IconAction
+                            label="Print smart card"
+                            icon={SmartIcon}
+                            onClick={() => printCard(r.id, 'smart')}
+                          />
+                          {/* The same card carrying the customer's own name and
+                              mark. Offered always rather than only when the
+                              order asked for them, because which of the two to
+                              hand over is the counter's choice. */}
+                          <IconAction
+                            label="Print smart card with header"
+                            icon={HeaderCardIcon}
+                            onClick={() => printCard(r.id, 'smart-header')}
+                          />
+                        </>
                       )}
                       {r.classic_card && (
                         <IconAction

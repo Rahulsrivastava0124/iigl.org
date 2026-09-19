@@ -19,16 +19,32 @@ import type { CardChrome, CardData } from './card.service.js';
 
 const TEMPLATE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../templates');
 
-export type CardKind = 'smart' | 'classic';
+/**
+ * The three cards this laboratory prints.
+ *
+ *   smart          the small card, IIGL's logo alone
+ *   smart-header   the same card carrying the customer's own name and mark
+ *   classic        the A4 identification report
+ *
+ * The first two are Laravel's `smart.blade.php` and
+ * `smartCardwithheader.blade.php`, which were two files that shared everything
+ * but a block. They are one template here with a flag, because two copies of a
+ * card drift: a correction made to the certificate rows of one would sooner or
+ * later not be in the other, and nobody would notice until a customer held
+ * both.
+ */
+export type CardKind = 'smart' | 'smart-header' | 'classic';
 
 const TEMPLATES: Record<CardKind, string> = {
   smart: path.join(TEMPLATE_DIR, 'smart-card.ejs'),
+  'smart-header': path.join(TEMPLATE_DIR, 'smart-card.ejs'),
   classic: path.join(TEMPLATE_DIR, 'classic-card.ejs'),
 };
 
 /** Page setup per card type. Sizes match the printed stock. */
 const PAGE: Record<CardKind, { width: string; height: string } | { format: 'A4' }> = {
   smart: { width: '7.2in', height: '2.5in' },
+  'smart-header': { width: '7.2in', height: '2.5in' },
   classic: { format: 'A4' },
 };
 
@@ -86,7 +102,13 @@ export async function renderCardsHtml(
   cards: CardData[],
   chrome: CardChrome,
 ): Promise<string> {
-  return ejs.renderFile(TEMPLATES[kind], { cards, chrome }, { async: true });
+  // `header` is what separates the two smart cards; the classic template
+  // ignores it.
+  return ejs.renderFile(
+    TEMPLATES[kind],
+    { cards, chrome, header: kind === 'smart-header' },
+    { async: true },
+  );
 }
 
 export async function renderCardsPdf(

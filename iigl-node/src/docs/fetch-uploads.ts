@@ -71,9 +71,17 @@ async function main() {
     process.exit(1);
   }
 
+  /*
+    One key per line — and the first tab-separated field of it.
+
+    `fetch-failures.txt` is written `key<TAB>reason`, and this script tells you
+    to run again with it to retry. Taking the whole line made that instruction
+    false: the reason went into the URL, the server answered 404, and the file
+    was recorded as gone from the server rather than retried.
+  */
   const all = (await readFile(KEYS_FILE, 'utf8'))
     .split('\n')
-    .map((s) => s.trim())
+    .map((line) => line.split('\t')[0]!.trim())
     .filter(Boolean);
   const keys = LIMIT > 0 ? all.slice(0, LIMIT) : all;
 

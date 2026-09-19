@@ -35,7 +35,11 @@
     "check:uploads": "tsx src/docs/check-uploads.ts",
     "fetch:uploads": "tsx src/docs/fetch-uploads.ts",
     "check:dashboard": "tsx src/docs/check-dashboard-speed.ts",
-    "check:order-scope": "tsx src/docs/check-order-page-scope.ts"
+    "check:order-scope": "tsx src/docs/check-order-page-scope.ts",
+    "check:search": "tsx src/docs/check-header-search.ts",
+    "check:customer-scope": "tsx src/docs/check-customer-scope.ts",
+    "cards:preview": "tsx scripts/card-preview.mjs",
+    "check:cards": "tsx src/docs/check-cards.ts"
   },
   "keywords": [],
   "author": "",

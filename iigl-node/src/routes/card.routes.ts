@@ -16,8 +16,8 @@ cardRoutes.use(requireLabScope);
 const MAX_CARDS = 50;
 
 function kindFrom(raw: string): CardKind {
-  if (raw === 'smart' || raw === 'classic') return raw;
-  throw badRequest('Card type must be smart or classic.');
+  if (raw === 'smart' || raw === 'smart-header' || raw === 'classic') return raw;
+  throw badRequest('Card type must be smart, smart-header or classic.');
 }
 
 /** Loads reports the caller is allowed to print, preserving the requested order. */

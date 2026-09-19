@@ -214,10 +214,16 @@ orderRoutes.get(
 
     // Reached through order_details.id — reports.order_no holds the order id,
     // not the order number, so joining on the number finds nothing.
+    //
+    // `item_image` rides along so the pricing table can show the stone beside
+    // the line it is being billed for. It belongs here rather than on the
+    // quote: a quote answers what an order costs, and a photograph is not part
+    // of that answer — the certificate list is where a certificate's own
+    // details live, and this is that list.
     const reports = items.length
       ? await db
           .selectFrom('reports')
-          .select(['id', 'report_no', 'order_detail_id'])
+          .select(['id', 'report_no', 'order_detail_id', 'item_image'])
           .where(
             'order_detail_id',
             'in',

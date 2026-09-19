@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Avatar,
+  Box,
   Button,
   Checkbox,
   Grid,
@@ -20,7 +21,7 @@ import EditIcon from '@mui/icons-material/EditOutlined';
 import CommissionIcon from '@mui/icons-material/PercentOutlined';
 import PaidIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
 import DuesIcon from '@mui/icons-material/PendingActionsOutlined';
-import { useFetch } from '../lib/useFetch';
+import { useDebounced, useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { fileUrl } from '../lib/config';
 import { messageOf, useAuth } from '../lib/auth';
@@ -31,6 +32,7 @@ import { StatementsTable } from '../components/Statements';
 import {
   Notice,
   Panel,
+  SearchField,
   StateChip,
   StatusChip,
   TableFrame,
@@ -118,7 +120,23 @@ export default function LaboratoryView() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<'payments' | 'staff' | 'reports' | 'statements'>('payments');
 
-  const source = useFetch<{ data: Detail }>(`/users/laboratories/${id}/detail`);
+  /*
+    The certificate search, on the server.
+
+    This tab shows the fifty most recent of however many the laboratory has
+    issued, so a box that filtered what had already arrived would search fifty
+    of 1,811 and answer "nothing matches" about the other 1,761. The term goes
+    to the endpoint, which filters and counts under the same condition.
+
+    Debounced, because each keystroke is otherwise a `LIKE '%…%'` over a
+    laboratory's whole certificate history.
+  */
+  const [certSearch, setCertSearch] = useState('');
+  const certTerm = useDebounced(certSearch).trim();
+
+  const source = useFetch<{ data: Detail }>(
+    `/users/laboratories/${id}/detail${certTerm ? `?q=${encodeURIComponent(certTerm)}` : ''}`,
+  );
   const d = source.data?.data;
   const lab = d?.laboratory;
 
@@ -224,16 +242,46 @@ export default function LaboratoryView() {
       </Grid>
 
       <Panel>
-        <Tabs
-          value={tab}
-          onChange={(_, v) => setTab(v)}
-          sx={{ mb: 1, borderBottom: 1, borderColor: 'divider' }}
+        {/*
+          The tabs, and the one control that belongs beside them.
+
+          On the row rather than above the table: it filters what the tab is
+          showing, and the tabs line is the only full-width row this panel has.
+          `alignItems: flex-end` sits the field on the tabs' own baseline
+          instead of centring it against their taller box.
+        */}
+        <Box
+          sx={{
+            mb: 1,
+            borderBottom: 1,
+            borderColor: 'divider',
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'space-between',
+            gap: 2,
+            flexWrap: 'wrap',
+          }}
         >
-          <Tab value="payments" label={`Payments (${d?.counts.payments ?? 0})`} />
-          <Tab value="staff" label={`Staff (${d?.counts.staff ?? 0})`} />
-          <Tab value="reports" label={`Certificates (${d?.counts.reports ?? 0})`} />
-          <Tab value="statements" label="Statements" />
-        </Tabs>
+          <Tabs value={tab} onChange={(_, v) => setTab(v)}>
+            <Tab value="payments" label={`Payments (${d?.counts.payments ?? 0})`} />
+            <Tab value="staff" label={`Staff (${d?.counts.staff ?? 0})`} />
+            <Tab value="reports" label={`Certificates (${d?.counts.reports ?? 0})`} />
+            <Tab value="statements" label="Statements" />
+          </Tabs>
+
+          {/* Only on the tab it filters. A search box over the payments list
+              that searches certificates is a control that lies about itself. */}
+          {tab === 'reports' && (
+            <Box sx={{ pb: 1 }}>
+              <SearchField
+                placeholder="Certificate number…"
+                value={certSearch}
+                onChange={setCertSearch}
+                width={220}
+              />
+            </Box>
+          )}
+        </Box>
 
         {tab === 'payments' && (
           <TableFrame
@@ -314,7 +362,11 @@ export default function LaboratoryView() {
               loading={source.loading}
               error={source.error}
               empty={reports.length === 0}
-              emptyText="This laboratory has issued no certificates."
+              emptyText={
+              certTerm
+                ? `No certificate of this laboratory matches “${certTerm}”.`
+                : 'This laboratory has issued no certificates.'
+            }
             >
               <Table size="small">
                 <TableHead>
@@ -413,6 +465,24 @@ export default function LaboratoryView() {
                 </TableBody>
               </Table>
             </TableFrame>
+
+            {/*
+              The list is capped, and says so.
+
+              Fifty rows under a tab labelled 1,811 invites the reading that
+              1,761 certificates have gone missing. The cap is deliberate — the
+              full history has a screen of its own — but it has to be stated,
+              and the more so now that a search runs against all of them while
+              only the newest fifty matches come back.
+            */}
+            {(d?.counts.reports ?? 0) > (d?.shown ?? 0) && (
+              <Typography variant="body2" sx={{ px: 2, py: 1.5, color: 'text.secondary' }}>
+                Showing the {d?.shown} most recent of{' '}
+                {(d?.counts.reports ?? 0).toLocaleString()}
+                {certTerm ? ' matching' : ''}. Narrow the search, or open the
+                certificate list for the whole history.
+              </Typography>
+            )}
           </>
         )}
 

@@ -55,7 +55,6 @@ import { BRAND, TONE } from '../lib/theme';
 import { useAuth } from '../lib/auth';
 import { CrumbSlotContext } from '../lib/crumbActions';
 import { ROLE, ROLE_NAMES } from '../lib/portal';
-import { api } from '../lib/api';
 import { useFetch, useLiveRefresh } from '../lib/useFetch';
 import { fileUrl } from '../lib/config';
 import { useBreadcrumbs } from '../lib/breadcrumbs';
@@ -470,9 +469,13 @@ export default function Shell() {
    */
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [menu, setMenu] = useState<null | HTMLElement>(null);
+  /*
+    Just the term. There is no `searching` or `searchError` any more: the search
+    navigates to a list with the term in the URL, which is synchronous and
+    cannot fail. What used to fail was the `/public/verify` lookup it did first,
+    and the list says "nothing found" better than a red line under the box did.
+  */
   const [query, setQuery] = useState('');
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
 
   // Head office runs the business; a laboratory (role 2) is its own admin and
   // runs a counter. The menu follows that split, not a rank.
@@ -569,30 +572,40 @@ export default function Shell() {
   });
 
   /**
-   * Twelve digits is a certificate number, so it opens that certificate.
-   * Anything else is treated as a customer and filters the order list.
+   * Where a typed number belongs, by its shape.
+   *
+   *   040100002111    twelve digits      a certificate    → the certificate list
+   *   202108-225523   yyyymm-nnnnnn      an order         → the order list
+   *   anything else                      a customer       → the order list
+   *
+   * Both shapes are exact across the live data: all 22,407 certificate numbers
+   * are twelve digits and all 9,759 order numbers are six digits, a hyphen and
+   * six more, so neither pattern can be mistaken for the other.
+   *
+   * This navigates rather than filters, and the term goes in the URL — which is
+   * the half that was missing. It used to send a certificate to
+   * `/reports?highlight=<id>`, a parameter no page has ever read, and a
+   * customer to `/orders?q=`, which both lists held in component state and
+   * ignored. The navigation worked and the search did nothing: you arrived at
+   * page one of 22,407 certificates, or of 9,759 orders. `useUrlSearch` now
+   * seeds each list from `?q=`.
+   *
+   * The certificate no longer goes through `/public/verify` first. That was a
+   * round trip to resolve a number to an id nothing then used, and it answered
+   * as the public site does — so a certificate hidden from the website would
+   * have been unfindable by the staff who hid it. The list is asked directly,
+   * and says for itself when there is nothing.
    */
-  const search = async (e: React.FormEvent) => {
+  const ORDER_NO = /^\d{6}-\d{6}$/;
+  const CERTIFICATE_NO = /^\d{12}$/;
+
+  const search = (e: React.FormEvent) => {
     e.preventDefault();
     const q = query.trim();
     if (!q) return;
-    setSearchError(null);
 
-    if (/^\d{12}$/.test(q)) {
-      setSearching(true);
-      try {
-        const r = await api.get<{ data: { id: number } }>(`/public/verify/${q}`);
-        navigate(`/reports?highlight=${r.data.id}`);
-        setQuery('');
-      } catch {
-        setSearchError(`No certificate numbered ${q}.`);
-      } finally {
-        setSearching(false);
-      }
-      return;
-    }
-
-    navigate(`/orders?q=${encodeURIComponent(q)}`);
+    const to = CERTIFICATE_NO.test(q) && !ORDER_NO.test(q) ? '/reports' : '/orders';
+    navigate(`${to}?q=${encodeURIComponent(q)}`);
     setQuery('');
   };
 
@@ -961,21 +974,28 @@ export default function Shell() {
               onSubmit={search}
               sx={{
                 flex: 1,
-                maxWidth: 520,
+                /*
+                  360, not 520. The box is a jump-to, not a place to compose a
+                  query — what goes in it is a certificate number, an order
+                  number or a name — and at 520 it took the middle third of the
+                  bar to hold one short line of text.
+                */
+                maxWidth: 360,
                 mx: 'auto',
                 display: isStaff ? 'none' : { xs: 'none', md: 'block' },
               }}
             >
               <TextField
-                placeholder="Search a certificate number, or a customer…"
+                /*
+                  Short enough to fit the field it sits in. The long
+                  form — "Search a certificate number, an order number,
+                  or a customer" — was already being clipped mid-word at
+                  520, and a prompt cut off in the middle tells you less
+                  than a brief one that finishes.
+                */
+                placeholder="Certificate, order or customer…"
                 value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setSearchError(null);
-                }}
-                error={Boolean(searchError)}
-                helperText={searchError}
-                disabled={searching}
+                onChange={(e) => setQuery(e.target.value)}
                 slotProps={{
                   input: {
                     startAdornment: (

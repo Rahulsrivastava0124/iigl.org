@@ -4,8 +4,29 @@
     {
       "name": "website",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "iigl-frontend-website", "run", "dev", "--", "--port", "5180", "--strictPort"],
+      "runtimeArgs": [
+        "--prefix",
+        "iigl-frontend-website",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5180",
+        "--strictPort"
+      ],
       "port": 5180
+    },
+    {
+      "name": "cards",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "iigl-node",
+        "run",
+        "cards:preview"
+      ],
+      "port": 5190,
+      "url": "http://localhost:5190"
     }
   ]
 }

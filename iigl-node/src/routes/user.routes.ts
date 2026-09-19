@@ -349,6 +349,21 @@ userRoutes.get(
     const labId = Number(req.params.id);
     const RECENT = 50;
 
+    /*
+      A certificate number to look for, or none.
+
+      The Certificates tab shows the fifty most recent of however many the
+      laboratory has issued — 1,811 for the largest — so the search has to
+      happen here. Filtering the fifty in the browser would search a
+      twenty-seventh of them and report "no match" about the rest, which is a
+      worse answer than no search at all.
+
+      The cap still applies, after the filter rather than before it, and
+      `counts.reports` then reports how many matched so the tab can say fifty
+      *of what*.
+    */
+    const q = String(req.query.q ?? '').trim();
+
     const lab = await db
       .selectFrom('users')
       .select([
@@ -447,6 +462,7 @@ userRoutes.get(
           'hidden_on_site',
         ])
         .where('lab_id', '=', labId)
+        .$if(q !== '', (qb) => qb.where('report_no', 'like', `%${q}%`))
         .orderBy('id', 'desc')
         .limit(RECENT)
         .execute(),
@@ -458,10 +474,13 @@ userRoutes.get(
           .select(({ fn }) => fn.countAll<number>().as('n'))
           .where('send_by', '=', labId)
           .executeTakeFirstOrThrow(),
+        // Counted under the same filter as the list, so the tab's number and
+        // its rows are answers to one question.
         db
           .selectFrom('reports')
           .select(({ fn }) => fn.countAll<number>().as('n'))
           .where('lab_id', '=', labId)
+          .$if(q !== '', (qb) => qb.where('report_no', 'like', `%${q}%`))
           .executeTakeFirstOrThrow(),
       ]),
     ]);

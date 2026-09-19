@@ -278,6 +278,12 @@ const document = {
                     id: { type: 'integer' },
                     report_no: { type: 'string' },
                     order_detail_id: { type: 'string' },
+                    item_image: {
+                      type: ['string', 'null'],
+                      description:
+                        'The stone, as the stored path — `public/uploads/report/x.jpg`. Served through `/api/files`. Null where none was uploaded, and a path here is not a promise the file exists: some certificates written by the Laravel application name files that are no longer anywhere.',
+                      examples: ['public/uploads/report/1789713199main.jpg'],
+                    },
                   },
                 },
               },
@@ -910,7 +916,7 @@ const document = {
         summary: 'Print one certificate',
         description: 'Renders the card in headless Chrome from the same HTML and CSS the Laravel views produced, so the printed layout is unchanged. Add format=html to get the markup instead, which is what to compare against the Laravel output when checking for visual drift.',
         parameters: [
-          { name: 'kind', in: 'path', required: true, schema: { type: 'string', enum: ['smart', 'classic'] } },
+          { name: 'kind', in: 'path', required: true, schema: { type: 'string', enum: ['smart', 'smart-header', 'classic'] }, description: '`smart` is the small card with IIGL’s logo alone; `smart-header` is the same card carrying the customer’s own name and mark, where their order asked for them; `classic` is the A4 identification report.' },
           { name: 'id', in: 'path', required: true, schema: { type: 'integer' } },
           { name: 'format', in: 'query', schema: { type: 'string', enum: ['html'] }, description: 'Return HTML rather than PDF.' },
         ],
@@ -935,7 +941,7 @@ const document = {
         summary: 'Print several certificates as one PDF',
         description: 'For a print run. Certificates appear in the order requested. Capped at 50 per request so one job cannot tie up the renderer.',
         parameters: [
-          { name: 'kind', in: 'path', required: true, schema: { type: 'string', enum: ['smart', 'classic'] } },
+          { name: 'kind', in: 'path', required: true, schema: { type: 'string', enum: ['smart', 'smart-header', 'classic'] }, description: '`smart` is the small card with IIGL’s logo alone; `smart-header` is the same card carrying the customer’s own name and mark, where their order asked for them; `classic` is the A4 identification report.' },
           { name: 'format', in: 'query', schema: { type: 'string', enum: ['html'] } },
         ],
         requestBody: {

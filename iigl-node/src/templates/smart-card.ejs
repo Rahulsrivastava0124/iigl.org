@@ -40,21 +40,32 @@
     flex: 0 0 auto;
   }
 
-  .panel.front {
+  /*
+    The diamond ground and the corner rules, on the headed card only.
+
+    This is not a preference — it is the difference between the two blades.
+    `smartCardwithheader` sets `background:url(bg.png)` on every `section` at
+    130px, centred, and draws four 15px corner rules to trim along.
+    `multsmart` sets neither: its sections carry no background and the
+    `:before`/`:after` rules are simply absent from its stylesheet.
+
+    So the plain card stays bare, which is what it is, and the headed card gets
+    both back.
+  */
+  .panel.front.headed {
     background-position: center center;
-    background-size: 110px 110px;
+    background-size: 130px 130px;
   }
 
-  .panel.back {
+  .panel.back.headed {
     background-position: 200px -20px;
     background-size: 180px 180px;
   }
 
-  /* Corner crop marks, as in the original. */
-  .panel.front::before,
-  .panel.front::after,
-  .panel.front .corners::before,
-  .panel.front .corners::after {
+  .panel.headed::before,
+  .panel.headed::after,
+  .panel.headed .corners::before,
+  .panel.headed .corners::after {
     position: absolute;
     width: 15px;
     height: 15px;
@@ -62,14 +73,28 @@
     border-style: solid;
     content: ' ';
   }
-  .panel.front::before { top: 0; left: 0; border-width: 1px 0 0 1px; }
-  .panel.front::after { top: 0; right: 0; border-width: 1px 1px 0 0; }
-  .panel.front .corners::before { top: 195px; left: 310px; border-width: 0 1px 1px 0; }
-  .panel.front .corners::after { top: 195px; left: -2px; border-width: 0 0 1px 1px; }
+  .panel.headed::before { top: 0; left: 0; border-width: 1px 0 0 1px; }
+  .panel.headed::after { top: 0; right: 0; border-width: 1px 1px 0 0; }
+  .panel.headed .corners::before { top: 195px; left: 315px; border-width: 0 1px 1px 0; }
+  .panel.headed .corners::after { top: 195px; left: 0; border-width: 0 0 1px 1px; }
+
 
   .inner { padding: 0.5rem; }
 
+  /*
+    The header row: IIGL's logo, and the customer's own name and mark beside
+    it. Laid out as Laravel's `smartCardwithheader` laid it out — the logo
+    takes a fixed 2.3in so the customer's block cannot push it off the card,
+    and that block is centred in what is left.
+  */
+  .header { display: flex; align-items: center; height: 8.5mm; }
+  .header .brand { width: 2.3in; }
   .logo { height: 38px; }
+
+  .customer { text-align: center; min-width: 65px; flex: 1; }
+  .customer .name { font-size: 10px; margin: 0; }
+  /* The customer's mark, at the size the Laravel card gave it. */
+  .customer .mark { width: 65px; height: 30px; object-fit: contain; }
 
   .body-row { display: flex; }
 
@@ -87,16 +112,29 @@
     vertical-align: top;
   }
 
+  /*
+    Black, which is what the blades actually print.
+
+    Neither smart blade sets a colour on these rows. They load Bootstrap and
+    inherit its body colour, `#212529` — so the gold this card was set in for a
+    while was wrong, and read as washed out on paper besides. The gold belongs
+    to the band at the foot of the back panel, and nowhere else.
+
+    Two rows are still coloured, both on purpose: the comment, which the blade
+    sets green itself, and nothing else.
+  */
   th {
     width: 40%;
     text-transform: uppercase;
     font-weight: 400;
     white-space: nowrap;
+    color: #212529;
   }
   th::after { content: ':'; position: absolute; right: 0; }
 
-  td { padding-left: 5px; }
+  td { padding-left: 5px; color: #212529; }
 
+  /* The one row the blade colours itself, and it is not gold. */
   .comment { color: rgb(19, 80, 19); font-weight: 700; }
 
   .side {
@@ -107,11 +145,13 @@
   .qr, .item { height: 50px; width: 50px; }
   .sign { height: 25px; width: 60px; }
 
+  /* Bottom left of the front panel, in the same black as the rows above it. */
   .footer {
     position: absolute;
     top: 192px;
-    left: 100px;
+    left: 8px;
     font-size: 9px;
+    color: #212529;
   }
   .footer p { margin: 0; }
 
@@ -119,6 +159,30 @@
   .panel.back ul { margin: 0; padding-left: 14px; }
   .panel.back li { margin-bottom: 2px; }
   .back-logo { height: 40px; width: 100%; }
+
+  /* The address sits in the gap `2.png` leaves under the name. */
+  .back-block { position: relative; }
+  .block-address {
+    position: absolute;
+    top: 20px;
+    left: 50px;
+    width: 67%;
+    margin: 0 auto;
+    text-align: center;
+    font-size: 7px;
+  }
+
+  /* The plain card's back: no notes, no band — the laboratory's address, sat
+     low on the panel where `multsmart` puts it. */
+  .panel.back.plain { border: 0; }
+  .panel.back.plain .drop { height: 3.95cm; }
+  .lab-address {
+    margin: 0 auto;
+    width: 68%;
+    font-size: 7px;
+    text-align: center;
+    color: #000;
+  }
 
   .band {
     position: absolute;
@@ -138,16 +202,41 @@
 <% for (const card of cards) { %>
   <div class="sheet">
 
-    <section class="panel front" <% if (chrome.watermark) { %>style="background-image:url('<%= chrome.watermark %>')"<% } %>>
-      <div class="corners"></div>
+    <section class="panel front<%= header ? ' headed' : '' %>"
+      <% if (header && chrome.watermark) { %>style="background-image:url('<%= chrome.watermark %>')"<% } %>>
+      <% if (header) { %><div class="corners"></div><% } %>
       <div class="inner">
-        <% if (chrome.cardLogo) { %><img class="logo" src="<%= chrome.cardLogo %>" alt="IIGL"><% } %>
+        <%
+          /*
+            The header row, and what `header` decides.
+
+            Both Laravel blades have this row and both print the customer's own
+            name and mark in it. What the plain card leaves out is IIGL's logo:
+            `multsmart` keeps the 2.3in the logo would occupy as an empty
+            spacer, so the customer's block sits in the same place on both
+            cards, and the one that is handed over with a customer's own
+            branding is not laid out differently from the one that is not.
+          */
+        %>
+        <div class="header">
+          <div class="brand">
+            <% if (header && chrome.cardLogo) { %><img class="logo" src="<%= chrome.cardLogo %>" alt="IIGL"><% } %>
+          </div>
+          <% if (card.customer_name || card.customer_image) { %>
+            <div class="customer">
+              <% if (card.customer_name) { %><p class="name"><%= card.customer_name %></p><% } %>
+              <% if (card.customer_image) { %><img class="mark" src="<%= card.customer_image %>" alt=""><% } %>
+            </div>
+          <% } %>
+        </div>
 
         <div class="body-row">
           <table>
             <tbody>
               <tr><th>Report No</th><td><b><%= card.report_no %></b></td></tr>
-              <tr><th>Gross Wt</th><td><%= card.gross_weight %><%= card.gross_wt_unit ? ' ' + card.gross_wt_unit : '' %></td></tr>
+              <% if (card.gross_weight) { %>
+                <tr><th>Gross Wt</th><td><%= card.gross_weight %><%= card.gross_wt_unit ? ' ' + card.gross_wt_unit : '' %></td></tr>
+              <% } %>
               <tr><th>Carat Wt</th><td><%= card.carat_weight %><%= card.stone_wt_unit ? ' ' + card.stone_wt_unit : '' %></td></tr>
               <% for (const attr of card.smart_attributes) { %>
                 <tr><th><%= attr.name %></th><td><%= attr.value %></td></tr>
@@ -165,25 +254,61 @@
           </div>
         </div>
 
-        <div class="footer">
-          <p>&copy; IIGL <%= new Date().getFullYear() %> &mdash; terms at www.iigl.org</p>
-        </div>
+        <% /* The terms line belongs to the headed card alone. */ %>
+        <% if (header) { %>
+          <div class="footer">
+            <p>@ IIGL <%= new Date().getFullYear() %> For Term &amp; Condition Visit: www.iigl.org</p>
+          </div>
+        <% } %>
       </div>
     </section>
 
-    <section class="panel back" <% if (chrome.watermark) { %>style="background-image:url('<%= chrome.watermark %>')"<% } %>>
-      <div class="inner">
-        <h6 class="back-title">Important Information</h6>
-        <ul>
-          <li>IIGL laboratory examines each gem, jewellery item and diamond using advanced equipment. Experienced gemologists grade characteristics according to the international system. A report issued by an IIGL gemologist may differ from others.</li>
-          <li>We do not claim other reports to be false.</li>
-          <li>Our services do not determine the price of any gemstone.</li>
-          <li>For more information contact www.iigl.org or info@iigl.org</li>
-        </ul>
-        <% if (chrome.backLogo) { %><img class="back-logo" src="<%= chrome.backLogo %>" alt=""><% } %>
-      </div>
-      <div class="band">Giving an Identity of Pureness</div>
-    </section>
+    <%
+      /*
+        The back, which is where the two cards differ most.
+
+        The headed card carries the notes, the IIGL block and the gold band —
+        `smartCardwithheader`. The plain one carries the issuing laboratory's
+        address and nothing else, low on the panel, which is what `multsmart`
+        prints: a blank 3.95cm and then the address, centred.
+      */
+    %>
+    <% if (header) { %>
+      <section class="panel back headed"
+        <% if (chrome.watermark) { %>style="background-image:url('<%= chrome.watermark %>')"<% } %>>
+        <div class="corners"></div>
+        <div class="inner">
+          <h6 class="back-title">Important Information</h6>
+          <ul>
+            <li>IIGL laboratory examines each gem, jewellery item and diamond using advanced equipment. Experienced gemologists grade characteristics according to the international system. A report issued by an IIGL gemologist may differ from others.</li>
+            <li>We do not claim other reports to be false.</li>
+            <li>Our services do not determine the price of any gemstone.</li>
+            <li>For more information contact www.iigl.org or info@iigl.org</li>
+          </ul>
+          <%
+            /*
+              The IIGL block, with the issuing laboratory's address over it.
+
+              `2.png` leaves a gap under the name for exactly this; the address
+              is the laboratory's, not head office's, which is why the card
+              cannot use the block that has an address printed into it.
+            */
+          %>
+          <div class="back-block">
+            <% if (chrome.backBlock) { %><img class="back-logo" src="<%= chrome.backBlock %>" alt=""><% } %>
+            <% if (card.lab_address) { %><p class="block-address"><%= card.lab_address %></p><% } %>
+          </div>
+        </div>
+        <div class="band">Giving an Identity of Pureness</div>
+      </section>
+    <% } else { %>
+      <section class="panel back plain">
+        <div class="inner">
+          <div class="drop"></div>
+          <% if (card.lab_address) { %><p class="lab-address"><%= card.lab_address %></p><% } %>
+        </div>
+      </section>
+    <% } %>
 
   </div>
 <% } %>

@@ -7,6 +7,7 @@ import {
   Link as RouterLink,
 } from 'react-router-dom';
 import {
+  Avatar,
   Box,
   Button,
   Chip,
@@ -24,6 +25,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useToast } from '../components/Toast';
+import FilePreview from '../components/FilePreview';
 import { useDebounced, useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
@@ -41,9 +43,12 @@ import {
   Tile,
   TILE_CELL,
 } from '../components/ui';
-import { apiUrl } from '../lib/config';
+import { apiUrl, fileUrl, printCard } from '../lib/config';
 import { CrumbActions } from '../lib/crumbActions';
 import PrintIcon from '@mui/icons-material/PrintOutlined';
+import SmartIcon from '@mui/icons-material/CreditCardOutlined';
+import ClassicIcon from '@mui/icons-material/DescriptionOutlined';
+import HeaderCardIcon from '@mui/icons-material/BrandingWatermarkOutlined';
 import BackIcon from '@mui/icons-material/ArrowBackOutlined';
 import EditIcon from '@mui/icons-material/EditOutlined';
 
@@ -126,6 +131,48 @@ export default function OrderDetail() {
 
   const o = order.data?.data;
   const q = quote.data?.data;
+
+  /*
+    What the pricing table needs about each certificate, by report id.
+
+    The quote says what a line costs and nothing else about it. The stone and
+    the order line it belongs to are on the order's own payload — `reports`
+    carries `item_image` and `order_detail_id`, `items` carries which card
+    kinds that line was bought with — so both are resolved here rather than
+    asked of the API a second time.
+
+    A certificate whose line has gone offers both cards rather than neither:
+    the card exists and somebody may still need to reprint it. Same reading as
+    the certificate list.
+  */
+  const kindOf = new Map<number, { smart_card: number; classic_card: number }>(
+    (o?.items ?? []).map((i: { id: number; smart_card: number; classic_card: number }) => [
+      Number(i.id),
+      i,
+    ]),
+  );
+
+  const certificateOf = new Map<
+    number,
+    { image: string | null; smart: boolean; classic: boolean }
+  >(
+    (o?.reports ?? []).map(
+      (r: { id: number; item_image: string | null; order_detail_id: string }) => {
+        const line = kindOf.get(Number(r.order_detail_id));
+        return [
+          Number(r.id),
+          {
+            image: r.item_image,
+            smart: line ? Number(line.smart_card) === 1 : true,
+            classic: line ? Number(line.classic_card) === 1 : true,
+          },
+        ];
+      },
+    ),
+  );
+
+  /** The stone being looked at full size, or none. */
+  const [preview, setPreview] = useState<{ path: string; name: string } | null>(null);
 
   /**
    * How far the order has been certified.
@@ -393,6 +440,9 @@ export default function OrderDetail() {
             <Table size="small">
               <TableHead>
                 <TableRow>
+                  {/* The stone, so a line of money is checked against the thing
+                      it was charged for without opening the certificate. */}
+                  <TableCell sx={{ width: 56 }} />
                   <TableCell>Certificate</TableCell>
                   <TableCell align="right">Carat</TableCell>
                   <TableCell>Band</TableCell>
@@ -408,7 +458,7 @@ export default function OrderDetail() {
                     {/* Table cells are nowrap by theme, which ran this sentence
                         off the right edge of the panel. */}
                     <TableCell
-                      colSpan={7}
+                      colSpan={8}
                       sx={{ py: 3, color: 'text.secondary', whiteSpace: 'normal' }}
                     >
                       Nothing to price yet: an order is billed per certificate, and the weight band
@@ -416,8 +466,37 @@ export default function OrderDetail() {
                     </TableCell>
                   </TableRow>
                 )}
-                {q.certificates.map((c) => (
+                {q.certificates.map((c) => {
+                  const cert = certificateOf.get(Number(c.report_id));
+                  const stone = cert?.image ?? null;
+                  return (
                   <TableRow key={c.report_id} hover>
+                    {/*
+                      Avatar rather than a bare <img>: it draws its own fallback
+                      when the file is missing, and some of the older
+                      certificates were written by the Laravel application
+                      against files that are no longer anywhere.
+                    */}
+                    <TableCell>
+                      <Avatar
+                        variant="rounded"
+                        src={fileUrl(stone) ?? undefined}
+                        alt=""
+                        onClick={stone ? () => setPreview({ path: stone, name: c.report_no }) : undefined}
+                        // The whole stone, not a square crop of it.
+                        slotProps={{ img: { sx: { objectFit: 'contain' } } }}
+                        sx={{
+                          width: 36,
+                          height: 36,
+                          bgcolor: 'action.hover',
+                          color: 'text.secondary',
+                          fontSize: 12,
+                          cursor: stone ? 'zoom-in' : 'default',
+                        }}
+                      >
+                        —
+                      </Avatar>
+                    </TableCell>
                     <TableCell className="mono">{c.report_no}</TableCell>
                     <TableCell align="right" className="tabular">
                       {c.carat_weight}
@@ -453,10 +532,41 @@ export default function OrderDetail() {
                           icon={EditIcon}
                           to={`/reports/${c.report_id}/edit`}
                         />
+                        {/* The printed card, of whichever kinds this line was
+                            bought with. Opened in a tab, which the API streams
+                            inline — the same two controls the certificate list
+                            carries, so a card is printed the same way wherever
+                            you found the certificate. */}
+                        {(cert?.smart ?? true) && (
+                          <>
+                            <IconAction
+                              label="Print smart card"
+                              icon={SmartIcon}
+                              onClick={() => printCard(Number(c.report_id), 'smart')}
+                            />
+                            {/* The same card carrying the customer's own name
+                                and mark. Offered always rather than only when
+                                the order asked for them, because which of the
+                                two to hand over is the counter's choice. */}
+                            <IconAction
+                              label="Print smart card with header"
+                              icon={HeaderCardIcon}
+                              onClick={() => printCard(Number(c.report_id), 'smart-header')}
+                            />
+                          </>
+                        )}
+                        {(cert?.classic ?? true) && (
+                          <IconAction
+                            label="Print classic card"
+                            icon={ClassicIcon}
+                            onClick={() => printCard(Number(c.report_id), 'classic')}
+                          />
+                        )}
                       </RowActions>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
 
@@ -640,6 +750,15 @@ export default function OrderDetail() {
             </TextField>
           </Stack>
         </Dialog>
+      )}
+
+      {/* The stone at full size. Same dialog the certificate list opens. */}
+      {preview && (
+        <FilePreview
+          stored={preview.path}
+          title={preview.name}
+          onClose={() => setPreview(null)}
+        />
       )}
     </>
   );

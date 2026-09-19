@@ -214,10 +214,12 @@
           <tbody>
             <tr><th>Date of issue</th><td><%= card.issued_on %></td></tr>
             <% if (card.subcategory) { %><tr><th>Identification</th><td><%= card.subcategory %></td></tr><% } %>
-            <tr>
-              <th>Gross weight</th>
-              <td><%= card.is_approx ? 'approx. ' : '' %><%= card.gross_weight %><%= card.gross_wt_unit ? ' ' + card.gross_wt_unit : '' %></td>
-            </tr>
+            <% if (card.gross_weight) { %>
+              <tr>
+                <th>Gross weight</th>
+                <td><%= card.is_approx ? 'approx. ' : '' %><%= card.gross_weight %><%= card.gross_wt_unit ? ' ' + card.gross_wt_unit : '' %></td>
+              </tr>
+            <% } %>
             <tr>
               <th>Stone weight</th>
               <td><%= card.carat_weight %><%= card.stone_wt_unit ? ' ' + card.stone_wt_unit : '' %></td>

@@ -17,7 +17,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useToast } from '../components/Toast';
-import { useFetch, useDebounced } from '../lib/useFetch';
+import { useFetch, useDebounced, useUrlSearch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
 import { isSuper } from '../lib/portal';
@@ -71,7 +71,9 @@ export default function Orders() {
   // The term is held for 150ms so a typed word is one query rather than eight,
   // and `useFetch` discards all but the newest response — a debounce shortens
   // the queue but does not stop two from overlapping.
-  const [search, setSearch] = useState('');
+  // Seeded from `?q=` so the header search, which navigates here with a
+  // customer's name, mobile or an order number, filters the list it lands on.
+  const [search, setSearch] = useUrlSearch();
   const term = useDebounced(search);
 
   const query = new URLSearchParams({ page: String(page), per_page: String(perPage) });
@@ -151,7 +153,31 @@ export default function Orders() {
           </>
         }
       >
-        <TableFrame loading={loading} error={error} empty={rows.length === 0}>
+        {/*
+          An empty list says which emptiness it is.
+
+          "Nothing here yet" over a filtered list is a lie that costs somebody
+          an afternoon: a laboratory searched an order number, read it as "this
+          laboratory has no orders", and reported the panel as broken — while
+          the same account had 793 orders one cleared search box away. The
+          search term is named, and so is the scope, because an order belongs to
+          the laboratory that took it and the commonest reason a number is not
+          found here is that another laboratory took it.
+        */}
+        <TableFrame
+          loading={loading}
+          error={error}
+          empty={rows.length === 0}
+          emptyText={
+            term.trim()
+              ? opensOrders
+                ? `No order at this laboratory matches “${term.trim()}”. An order belongs to the laboratory that took it.`
+                : `No order matches “${term.trim()}”.`
+              : status || dues
+                ? 'No orders in this state.'
+                : 'No orders yet.'
+          }
+        >
           <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>

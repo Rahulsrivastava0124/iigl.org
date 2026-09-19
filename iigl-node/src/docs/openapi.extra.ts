@@ -2412,8 +2412,17 @@ export const extraPaths: Record<string, unknown> = {
       tags: ['Users'],
       summary: 'One laboratory, with its payments, staff and certificates',
       description:
-        'The laboratory page: the laboratory with its commission accrued, paid and due, the payments it has sent, who works there, and the certificates it has issued — three lists in one reply, because the page opens all three tabs at once. The money is computed here rather than carried from the list row, so the page stands on its own when opened from a bookmark or a reload. Each list is capped at the 50 most recent and `counts` carries the real totals, which are not the length of the lists. The full history lives on the screens that own it: Account for transactions, Employee Management for staff, Certificates for reports. Administrators only.',
-      parameters: [idParam],
+        'The laboratory page: the laboratory with its commission accrued, paid and due, the payments it has sent, who works there, and the certificates it has issued — three lists in one reply, because the page opens all three tabs at once. The money is computed here rather than carried from the list row, so the page stands on its own when opened from a bookmark or a reload. Each list is capped at the 50 most recent and `counts` carries the real totals, which are not the length of the lists. The full history lives on the screens that own it: Account for transactions, Employee Management for staff, Certificates for reports. Administrators only.\n\n`q` searches the certificate numbers of this laboratory. It is applied in the query rather than to the capped list, so it reaches every certificate the laboratory has issued and not just the fifty on the page; `counts.reports` is then how many matched, and the list is still the fifty most recent of those.',
+      parameters: [
+        idParam,
+        {
+          name: 'q',
+          in: 'query',
+          schema: { type: 'string' },
+          description: 'Part of a certificate number. Filters the certificate list and its count; the payments and staff lists are unaffected.',
+          examples: { partial: { value: '042600' } },
+        },
+      ],
       responses: {
         200: ok('The laboratory, its recent payments, its staff and its certificates.'),
         404: err('Laboratory not found.'),

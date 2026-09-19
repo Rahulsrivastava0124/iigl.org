@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api, API_WRITE_EVENT } from './api';
 import { messageOf } from './auth';
 
@@ -101,4 +102,35 @@ export function useDebounced<T>(value: T, delay = 150): T {
   }, [value, delay]);
 
   return settled;
+}
+
+/**
+ * A list's search box, seeded from `?q=` in the URL and kept in step with it.
+ *
+ * The header search navigates rather than filters — it sends you to the list
+ * that holds the answer with the term in the URL — and both lists used to hold
+ * their search in component state alone, so the term arrived and was ignored.
+ * Searching a certificate number landed you on page one of 22,407 certificates
+ * with the one you asked for nowhere on it; searching a customer landed you on
+ * page one of 9,759 orders. The navigation worked and the search did nothing.
+ *
+ * The URL is the right home for it anyway: a filtered list is a place, so it
+ * can be linked to, reloaded and gone back to.
+ *
+ * Typing does not push history. `replace` keeps one entry for the whole of a
+ * typed word, so Back leaves the list rather than walking the term backwards a
+ * letter at a time.
+ */
+export function useUrlSearch(): [string, (next: string) => void] {
+  const [params, setParams] = useSearchParams();
+  const term = params.get('q') ?? '';
+
+  const set = (next: string) => {
+    const copy = new URLSearchParams(params);
+    if (next) copy.set('q', next);
+    else copy.delete('q');
+    setParams(copy, { replace: true });
+  };
+
+  return [term, set];
 }

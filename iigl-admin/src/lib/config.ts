@@ -74,3 +74,22 @@ if (import.meta.env.DEV && IS_CROSS_ORIGIN) {
       `or every request will be blocked by the browser.`,
   );
 }
+
+/** The three cards a certificate can be printed as. */
+export type CardKind = 'smart' | 'smart-header' | 'classic';
+
+/**
+ * Opens a printed card in a new tab. The API streams the PDF inline.
+ *
+ * One helper rather than a copy on each screen that prints one: the smart card
+ * gained a second form — with the customer's own name and mark on it — and
+ * that is the kind of change that reaches one copy and not the other.
+ *
+ *   smart          IIGL's logo alone
+ *   smart-header   the customer's name and mark beside it, when their order
+ *                  asked for them
+ *   classic        the A4 identification report
+ */
+export function printCard(id: number, kind: CardKind) {
+  window.open(apiUrl(`/cards/${kind}/${id}`), '_blank', 'noopener');
+}

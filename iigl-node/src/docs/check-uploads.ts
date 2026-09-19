@@ -19,6 +19,7 @@
  *
  * Read-only. Missing files are printed, grouped by folder, with an example.
  */
+import { writeFile } from 'node:fs/promises';
 import { ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { sql } from 'kysely';
 import { db } from '../db/index.js';
@@ -182,7 +183,28 @@ async function main() {
     console.log(`  ${String(list.length).padStart(6)}  ${folder.padEnd(24)} e.g. ${list[0]} (${first.where} #${first.id})`);
   }
 
-  console.log('\nCopy them with `npm run sync:uploads`.');
+  /*
+    `--write=<file>` puts the missing keys where `fetch:uploads` can read them.
+
+    The two scripts compose on purpose: this one says what is missing, that one
+    goes and gets it from the live site, and running this again afterwards is
+    how you know it worked. Writing the list here rather than having the fetch
+    work it out keeps one answer to "what is missing" instead of two.
+  */
+  const writeTo = process.argv
+    .slice(2)
+    .find((a) => a.startsWith('--write='))
+    ?.slice('--write='.length);
+
+  if (writeTo) {
+    await writeFile(writeTo, [...missing.keys()].sort().join('\n') + '\n', 'utf8');
+    console.log(`\n${missing.size} keys written to ${writeTo}.`);
+    console.log(`Fetch them with: npm run fetch:uploads -- --keys=${writeTo}`);
+  } else {
+    console.log('\nFrom a local copy of the Laravel public directory: npm run sync:uploads');
+    console.log('From the live site: re-run with --write=<file>, then npm run fetch:uploads.');
+  }
+
   process.exitCode = 1;
 }
 
