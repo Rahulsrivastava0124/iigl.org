@@ -1,269 +1,199 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8">
 <title>IIGL Classic Card</title>
 <style>
   /*
-    Ported from resources/views/common/card/classic2.blade.php.
-    A single A4 portrait certificate rather than the pocket card: more
-    attributes, the item photograph at size, and the verification QR.
+    The classic card, as `classic2.blade.php` prints it.
+
+    This document is **overprinting**. The card is pre-printed stock — the
+    letterhead, the border, the grading artwork and the IIGL marks are already
+    on the card before it goes into the printer — so what is rendered here is
+    the certificate's own data and nothing else, positioned to land in the
+    blank areas of that stock. That is why there is no logo, no watermark and
+    no rule anywhere below: printing one would put a second letterhead on top of
+    the one already there.
+
+    The page is 280mm x 213mm, the size of the stock, and the two columns are
+    absolutely placed at the measurements the blade uses. Nothing here is a
+    layout decision; every number is the one the card is already printed to.
   */
   @page {
-    size: A4 portrait;
-    margin: 12mm;
+    size: 280mm 213mm;
+    margin: 0;
   }
 
   * { box-sizing: border-box; }
 
-  body {
+  html, body {
     margin: 0;
-    font-family: Roboto, "Helvetica Neue", Arial, sans-serif;
-    color: #1c1c1c;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    padding: 0;
+    background: #fff;
+    /* Bootstrap's body colour, which is what the blade inherits. */
+    color: #212529;
+    font-family: Roboto, Arial, Helvetica, sans-serif;
   }
 
-  .certificate {
+  .page {
     position: relative;
-    border: 2px solid #bc8f53;
-    padding: 10mm;
-    min-height: 265mm;
+    width: 280mm;
+    height: 213mm;
+    overflow: hidden;
     page-break-after: always;
   }
-  .certificate:last-child { page-break-after: auto; }
+  .page:last-child { page-break-after: auto; }
 
-  .watermark {
+  /* The left column: what the stone is. */
+  .col-data {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 90mm;
-    transform: translate(-50%, -50%);
-    opacity: 0.06;
-    pointer-events: none;
-  }
-
-  header {
+    top: 0;
+    left: 0;
+    width: 93.5mm;
+    height: 213mm;
+    padding: 48mm 10mm 30mm 10mm;
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    border-bottom: 1px solid #bc8f53;
-    padding-bottom: 5mm;
+    flex-direction: column;
+    justify-content: space-evenly;
   }
 
-  header img { height: 22mm; }
-
-  .title {
-    text-align: right;
-  }
-  .title h1 {
-    margin: 0;
-    font-size: 16pt;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: #bc8f53;
-  }
-  .title p {
-    margin: 2mm 0 0;
-    font-size: 9pt;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: #555;
+  /* The right column: the stone, the way to verify it, and who signed it. */
+  .col-proof {
+    position: absolute;
+    top: 0;
+    left: 93.5mm;
+    width: 93.5mm;
+    height: 213mm;
+    padding: 47mm 10mm 25mm 10mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly;
   }
 
-  .report-no {
-    margin-top: 4mm;
-    font-size: 11pt;
-    font-weight: 700;
-    letter-spacing: 0.04em;
+  .block { width: 100%; margin: 0; padding: 0; }
+
+  .row {
+    display: flex;
+    font-size: 15px;
+    font-weight: 500;
   }
-  .report-no span {
-    font-weight: 400;
-    text-transform: uppercase;
-    font-size: 8pt;
-    letter-spacing: 0.12em;
-    color: #666;
+  .row .label { width: 30mm; }
+  .row .value { width: auto; }
+
+  /*
+    An attribute row is lower-cased and then capitalised, which is what the
+    blade's `.capti` does — and it does it to the whole row, not just the label.
+    The catalogue holds both shouted: REFRCT INDEX, and TRASPARENT NO INCLUSION
+    for its value. The card prints them as words on both sides of the colon.
+  */
+  .row.attribute { text-transform: capitalize; }
+
+  .col-proof .row {
     display: block;
-  }
-
-  .content {
-    display: flex;
-    gap: 8mm;
-    margin-top: 6mm;
-  }
-
-  .details { flex: 1 1 auto; }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  th, td {
-    font-size: 9.5pt;
-    text-align: left;
-    padding: 1.6mm 2mm;
-    border-bottom: 1px solid #eceae5;
-    vertical-align: top;
-  }
-
-  th {
-    width: 42%;
-    font-weight: 400;
-    text-transform: uppercase;
-    font-size: 8pt;
-    letter-spacing: 0.06em;
-    color: #666;
-  }
-
-  td { font-weight: 500; }
-  td small { display: block; font-weight: 400; color: #777; font-size: 7.5pt; }
-
-  .media {
-    flex: 0 0 42mm;
+    font-size: 14px;
+    font-weight: 700;
     text-align: center;
   }
-  .media img.item {
-    width: 42mm;
-    height: 42mm;
-    object-fit: cover;
-    border: 1px solid #e3ded4;
+
+  .comment-title {
+    margin: 3mm 0 0;
+    font-weight: bold;
+    color: #4d423f;
+    text-align: center;
   }
-  .media img.qr {
-    width: 26mm;
-    height: 26mm;
-    margin-top: 5mm;
-  }
-  .media p {
-    margin: 2mm 0 0;
-    font-size: 7pt;
-    color: #777;
-    word-break: break-all;
+  .comment-body {
+    margin-bottom: 0;
+    text-transform: capitalize;
+    font-weight: bold;
+    color: #3f425c;
+    text-align: center;
   }
 
-  .comments {
-    margin-top: 6mm;
-    padding: 4mm;
-    background: #faf8f4;
-    border-left: 3px solid #bc8f53;
-    font-size: 9.5pt;
-  }
-  .comments strong {
-    display: block;
-    font-size: 8pt;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #666;
-    margin-bottom: 1mm;
-    font-weight: 400;
-  }
-
-  footer {
-    position: absolute;
-    left: 10mm;
-    right: 10mm;
-    bottom: 10mm;
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    border-top: 1px solid #bc8f53;
-    padding-top: 4mm;
-  }
-
-  .disclaimer {
-    font-size: 7pt;
-    color: #777;
-    max-width: 110mm;
-    line-height: 1.5;
-  }
-
-  .signature { text-align: center; }
-  .signature img { height: 14mm; }
-  .signature p {
-    margin: 1mm 0 0;
-    font-size: 7.5pt;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #666;
-    border-top: 1px solid #ccc;
-    padding-top: 1mm;
-  }
+  .stone { width: 200px; height: 200px; margin-top: 3mm; object-fit: contain; }
+  .qr-title { margin: 3mm 0 0; font-weight: bold; color: #31408f; }
+  .qr { width: 100px; height: 100px; }
+  .sign { height: 40px; width: 80px; margin-top: 3mm; }
 </style>
 </head>
 <body>
 <% for (const card of cards) { %>
-  <div class="certificate">
-    <% if (chrome.watermark) { %><img class="watermark" src="<%= chrome.watermark %>" alt=""><% } %>
+  <div class="page">
 
-    <header>
-      <% if (chrome.cardLogo) { %><img src="<%= chrome.cardLogo %>" alt="IIGL"><% } %>
-      <div class="title">
-        <h1>Identification Report</h1>
-        <p>International Institute of Gemology &amp; Laboratory</p>
-      </div>
-    </header>
-
-    <div class="report-no">
-      <span>Report number</span>
-      <%= card.report_no %>
-    </div>
-
-    <div class="content">
-      <div class="details">
-        <table>
-          <tbody>
-            <tr><th>Date of issue</th><td><%= card.issued_on %></td></tr>
-            <% if (card.subcategory) { %><tr><th>Identification</th><td><%= card.subcategory %></td></tr><% } %>
-            <% if (card.gross_weight) { %>
-              <tr>
-                <th>Gross weight</th>
-                <td><%= card.is_approx ? 'approx. ' : '' %><%= card.gross_weight %><%= card.gross_wt_unit ? ' ' + card.gross_wt_unit : '' %></td>
-              </tr>
-            <% } %>
-            <tr>
-              <th>Stone weight</th>
-              <td><%= card.carat_weight %><%= card.stone_wt_unit ? ' ' + card.stone_wt_unit : '' %></td>
-            </tr>
-            <% if (card.size) { %><tr><th>Dimensions</th><td><%= card.size %></td></tr><% } %>
-            <% for (const attr of card.classic_attributes) { %>
-              <tr>
-                <th><%= attr.name %></th>
-                <td>
-                  <%= attr.value %>
-                  <% if (attr.description) { %><small><%= attr.description %></small><% } %>
-                </td>
-              </tr>
-            <% } %>
-          </tbody>
-        </table>
+    <div class="col-data">
+      <div class="block">
+        <div class="row"><div class="label">Dated on</div><div class="value">: <%= card.issued_on_ddmmyyyy %></div></div>
       </div>
 
-      <div class="media">
-        <% if (card.item_image) { %><img class="item" src="<%= card.item_image %>" alt=""><% } %>
-        <img class="qr" src="<%= card.qr %>" alt="Verify <%= card.report_no %>">
-        <p><%= card.verify_url %></p>
+      <div class="block">
+        <div class="row"><div class="label">Report ID No.</div><div class="value">: <b><%= card.report_no %></b></div></div>
+      </div>
+
+      <% /* Left off when the certificate records none — see `measured`. */ %>
+      <% if (card.gross_weight) { %>
+        <div class="block">
+          <div class="row">
+            <div class="label">Gross Weight</div>
+            <div class="value">: <%= card.gross_weight %><%= card.gross_wt_unit ? ' ' + card.gross_wt_unit : '' %><%= card.is_approx ? ' apx.' : '' %></div>
+          </div>
+        </div>
+      <% } %>
+
+      <div class="block">
+        <div class="row">
+          <div class="label">Carat Weight</div>
+          <div class="value">: <%= card.carat_weight %><%= card.stone_wt_unit ? ' ' + card.stone_wt_unit : '' %></div>
+        </div>
+      </div>
+
+      <% if (card.size) { %>
+        <div class="block">
+          <div class="row"><div class="label">Measurement</div><div class="value">: <%= card.size %></div></div>
+        </div>
+      <% } %>
+
+      <% for (const attr of card.classic_attributes) { %>
+        <div class="block">
+          <div class="row attribute">
+            <div class="label"><%= attr.name.toLowerCase() %></div>
+            <div class="value">: <%= attr.value %></div>
+          </div>
+        </div>
+      <% } %>
+
+      <div class="block">
+        <div class="row" style="display: block">
+          <h5 class="comment-title">Comment</h5>
+          <p class="comment-body"><%= card.comments %></p>
+        </div>
       </div>
     </div>
 
-    <% if (card.comments) { %>
-      <div class="comments">
-        <strong>Comments</strong>
-        <%= card.comments %>
+    <div class="col-proof">
+      <%
+        /* `GRADING SCALES` is in the blade and `display:none` in both screen
+           and print, because the scales are printed on the stock. Not carried
+           over: a heading that is never shown is a heading nobody maintains. */
+      %>
+      <div class="block">
+        <div class="row">
+          <% if (card.item_image) { %><img class="stone" src="<%= card.item_image %>" alt=""><% } %>
+        </div>
       </div>
-    <% } %>
 
-    <footer>
-      <div class="disclaimer">
-        IIGL examines each gem, jewellery item and diamond using advanced equipment, and grades
-        characteristics according to the international system. This report describes the item at
-        the date of issue and does not determine its price. Verify this certificate at
-        <%= card.verify_url %>
+      <div class="block">
+        <div class="row">
+          <h5 class="qr-title">Online QR Code</h5>
+          <img class="qr" src="<%= card.qr %>" alt="Verify <%= card.report_no %>">
+        </div>
       </div>
-      <div class="signature">
-        <% if (card.signature) { %><img src="<%= card.signature %>" alt=""><% } %>
-        <p>Authorised gemologist</p>
+
+      <div class="block">
+        <div class="row">
+          <% if (card.signature) { %><img class="sign" src="<%= card.signature %>" alt=""><% } %>
+        </div>
       </div>
-    </footer>
+    </div>
+
   </div>
 <% } %>
 </body>

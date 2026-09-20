@@ -74,6 +74,8 @@ export interface CardData {
   is_approx: boolean;
   subcategory: string | null;
   issued_on: string;
+  /** The same day as `issued_on`, written `dd-mm-yyyy` as the classic card prints it. */
+  issued_on_ddmmyyyy: string;
   item_image: string | null;
   signature: string | null;
   /** The customer's name, when their order asked for it on the card. */
@@ -281,6 +283,15 @@ export async function cardDataFor(reportIds: number[]): Promise<CardData[]> {
       is_approx: Boolean(report.is_approx),
       subcategory: subById.get(Number(report.subcategory_id)) ?? null,
       issued_on: report.created_at ? String(report.created_at).slice(0, 10) : '',
+      /*
+        The same date the classic card prints, `d-m-Y` — which is how the card
+        has always shown it and how every other date in this panel is written.
+        Kept beside the ISO one rather than formatted in the template, so the
+        two cannot disagree about which day a certificate was issued.
+      */
+      issued_on_ddmmyyyy: report.created_at
+        ? String(report.created_at).slice(0, 10).split('-').reverse().join('-')
+        : '',
       item_image: itemImage,
       signature,
       /*
