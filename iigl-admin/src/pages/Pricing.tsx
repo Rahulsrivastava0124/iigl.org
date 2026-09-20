@@ -25,6 +25,7 @@ import {
   RowActions,
   SearchField,
   TableFrame,
+  hint,
   money,
 } from '../components/ui';
 
@@ -55,6 +56,30 @@ const BLANK = {
 };
 
 type PriceWithCategory = Price & { category_name?: string };
+
+/**
+ * The top of an open-ended band.
+ *
+ * A ladder of bands has to end somewhere, and whatever number it ends on is
+ * the weight that bills as zero the first time a heavier stone arrives —
+ * gemstone bands stopped at 20 and 339 certificates fell past them. So the
+ * last band is written with no upper bound: `max_wt` is the largest figure the
+ * column holds, which no stone can reach, and it reads "and above" wherever a
+ * band's range is shown.
+ *
+ * Stored as a number rather than NULL because `prices.max_wt` is NOT NULL and
+ * every comparison against it — the overlap check, the band lookup — already
+ * works on a number. A nullable column would mean teaching all of them what
+ * "no upper bound" is, for the same answer.
+ *
+ * Seven nines, with nothing after the point: `max_wt` is a FLOAT(10,3), and a
+ * value carrying decimals up there is rounded to something other than what was
+ * sent. The heaviest weight in the live data is four figures.
+ */
+const OPEN_TOP = 9999999;
+const openEnded = (max: number) => Number(max) >= OPEN_TOP;
+/** A band's upper bound as it is read out: a weight, or "and above". */
+const topOf = (max: number) => (openEnded(max) ? 'and above' : String(max));
 
 export default function Pricing() {
   const toast = useToast();
@@ -111,7 +136,8 @@ export default function Pricing() {
     try {
       const body = {
         min_wt: Number(form.min_wt),
-        max_wt: Number(form.max_wt),
+        // Blank: nothing heavier is priced separately, so this band takes it all.
+        max_wt: form.max_wt.trim() === '' ? OPEN_TOP : Number(form.max_wt),
         smart_price: Number(form.smart_price),
         classic_price: Number(form.classic_price),
         // One of the two. The API clears whichever was not chosen, so the
@@ -198,9 +224,11 @@ export default function Pricing() {
               type="number"
               value={form.max_wt}
               onChange={(e) => setForm({ ...form, max_wt: e.target.value })}
-              slotProps={{ htmlInput: { min: 0, step: 0.001 } }}
+              slotProps={{
+                htmlInput: { min: 0, step: 0.001 },
+                ...hint('Leave blank for the last band: anything heavier is priced here.'),
+              }}
               sx={{ flex: 1 }}
-              required
             />
           </Box>
           <TextField
@@ -292,7 +320,7 @@ export default function Pricing() {
                     {p.min_wt}
                   </TableCell>
                   <TableCell align="right" className="tabular">
-                    {p.max_wt}
+                    {topOf(p.max_wt)}
                   </TableCell>
                   <TableCell align="right" className="tabular">
                     {money(p.smart_price)}
@@ -318,7 +346,7 @@ export default function Pricing() {
                             id: p.id,
                             category_id: String(p.category_id),
                             min_wt: String(p.min_wt),
-                            max_wt: String(p.max_wt),
+                            max_wt: openEnded(p.max_wt) ? '' : String(p.max_wt),
                             smart_price: String(p.smart_price),
                             classic_price: String(p.classic_price),
                             gst_id: p.gst_id ? String(p.gst_id) : '',
@@ -344,7 +372,9 @@ export default function Pricing() {
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
         A band covers weights from its lower bound up to but not including its upper bound. Bands
         may not overlap — a weight matching two bands would be priced by whichever row happened to
-        be created first.
+        be created first. Leave the top band's <strong>To</strong> blank: it then reads “and above”
+        and covers every heavier stone, where a ladder that stops at a number bills anything past
+        it as zero.
       </Typography>
 
       <ConfirmDialog
@@ -352,7 +382,11 @@ export default function Pricing() {
         title="Delete Price Band"
         message={
           <>
-            Delete the price band for <strong>{deleting?.category_name}</strong> ({deleting?.min_wt}–{deleting?.max_wt} carat)?
+            Delete the price band for <strong>{deleting?.category_name}</strong> (
+            {deleting && openEnded(deleting.max_wt)
+              ? `${deleting.min_wt} carat and above`
+              : `${deleting?.min_wt}–${deleting?.max_wt} carat`}
+            )?
           </>
         }
         warning="This action cannot be undone."
