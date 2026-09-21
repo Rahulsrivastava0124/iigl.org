@@ -104,3 +104,13 @@
 .rich-content strong, .rich-content b { font-weight: 600; }
 .rich-content ul { margin: 0 0 0.9em; padding-left: 1.25em; list-style: disc; }
 .rich-content ol { margin: 0 0 0.9em; padding-left: 1.25em; list-style: decimal; }
+
+/* On a phone these are set against a 375px screen rather than a column of a
+   page, and a heading written for the wide layout wraps: "Welcome to
+   IIGL-BHUBANESWAR" came out over two lines, the branch's own name broken
+   across them. Each step down keeps the order of the three intact. */
+@media (max-width: 640px) {
+  .rich-content h1 { font-size: 22px; }
+  .rich-content h2 { font-size: 19px; }
+  .rich-content h3 { font-size: 17px; }
+}

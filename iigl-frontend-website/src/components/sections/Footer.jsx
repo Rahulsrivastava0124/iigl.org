@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
-import { ArrowRight, ChevronRight, Gem, Mail, MapPin, Phone } from 'lucide-react';
+import { ArrowRight, ChevronRight, Gem } from 'lucide-react';
 import markUrl from '../../../Assets/footer-mark.png';
-import { getPublic } from '../../lib/api.js';
+import { contactOf, contactRows, useSite } from '../../lib/site.js';
 import { SocialIcon, socialLinks } from '../socials.jsx';
 
 /**
@@ -57,28 +56,22 @@ const columns = [
   },
 ];
 
-export const contact = [
-  {
-    icon: MapPin,
-    lines: ['15A, Gurudwara Road, Karol Bagh,', 'New Delhi - 110005, India'],
-  },
-  { icon: Mail, lines: ['info@iigl.education'], href: 'mailto:info@iigl.education' },
-  { icon: Phone, lines: ['+91 11 4567 8900'], href: 'tel:+911145678900' },
-];
-
 export default function Footer() {
-  // Head office's social links, set in the panel under Website Setup › Head Office Page.
-  const [links, setLinks] = useState([]);
-  useEffect(() => {
-    const controller = new AbortController();
-    getPublic('/public/site', { signal: controller.signal })
-      .then((site) => setLinks(socialLinks(site)))
-      .catch(() => {});
-    return () => controller.abort();
-  }, []);
+  /*
+    One request for both: the social links are head office's page row, the
+    address and the numbers are Settings › Company, and `/public/site` answers
+    with both. Until it answers, `contactOf` gives back the address and number
+    this footer printed before either was a setting, so the block is never
+    blank and never half-filled.
+  */
+  const site = useSite();
+  const links = socialLinks(site);
+  const details = contactOf(site);
+
+  const contact = contactRows(details);
 
   return (
-    <footer className="relative overflow-hidden bg-[#061948] px-5 pt-14 pb-0 text-white sm:px-8 lg:px-12">
+    <footer className="relative overflow-hidden bg-[#061948] px-4 pt-14 pb-0 text-white sm:px-8 lg:px-12">
       {/*
         The mark again, whole, in the bottom right.
 
@@ -195,14 +188,21 @@ export default function Footer() {
             </nav>
           ))}
 
-          {/* ------------------------------------------------ stay updated */}
-          <div>
+          {/*
+            Stay Updated, the full width of a phone.
+
+            In one of the two phone columns the subscribe field was about 150px
+            across and the placeholder came out as "Enter your ema" — a box too
+            narrow to hold the thing it is asking for. It keeps its own column
+            on a desktop, where there is room for five.
+          */}
+          <div className="col-span-2 lg:col-span-1">
             <h2 className="m-0 text-[12px] font-medium uppercase tracking-[0.14em] text-white">
               Stay Updated
             </h2>
             <span aria-hidden className="mt-2 block h-px w-9 bg-white/60" />
 
-            <p className="mt-5 max-w-[300px] text-[13px] font-normal leading-[1.7] text-white/70">
+            <p className="mt-5 max-w-[300px] text-[13px] font-normal leading-[1.7] text-white/70 max-[640px]:max-w-none">
               Subscribe to our newsletter and stay updated with the latest courses, insights and
               offers.
             </p>
@@ -214,7 +214,7 @@ export default function Footer() {
               nothing is worse than one that plainly does not work yet.
             */}
             <form
-              className="mt-5 flex h-[46px] w-full items-center overflow-hidden rounded-md border border-white/15 bg-white/[0.04] focus-within:border-white/60"
+              className="mt-5 flex h-[46px] w-full max-w-[420px] items-center overflow-hidden rounded-md border border-white/15 bg-white/[0.04] focus-within:border-white/60 max-[640px]:max-w-none"
               onSubmit={(event) => event.preventDefault()}
             >
               <label className="sr-only" htmlFor="footer-newsletter">

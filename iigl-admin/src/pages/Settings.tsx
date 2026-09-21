@@ -8,9 +8,11 @@ import {
   Tab,
   Tabs,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/SaveOutlined';
+import InfoIcon from '@mui/icons-material/InfoOutlined';
 import { useToast } from '../components/Toast';
 import { useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
@@ -38,7 +40,7 @@ interface Setting {
   key: string;
   group: string;
   label: string;
-  kind: 'text' | 'number' | 'email' | 'url' | 'multiline';
+  kind: 'text' | 'number' | 'email' | 'url' | 'multiline' | 'phone';
   help: string | null;
   value: string;
   secret: boolean;
@@ -206,74 +208,118 @@ export default function Settings() {
               '& > *': { width: '100%' },
             }}
           >
-            {shown.map((s) => (
-              <TextField
-                key={s.key}
-                label={s.label}
-                /*
-                  A stored secret comes back empty — the API never sends one to
-                  the browser — and an empty box after saving reads as a save
-                  that did not happen. The badge says otherwise, in the field
-                  itself rather than in helper text under it.
-                */
-                slotProps={
-                  s.key === 'mail.smtp_url'
-                    ? {
-                        input: {
-                          endAdornment: (
-                            <InputAdornment position="end">
-                              {/*
-                                Testing is offered before saving, and on the
-                                stored one afterwards: an empty box with the
-                                button still live is how somebody checks a
-                                connection that was working last month.
-                              */}
-                              <Button
-                                size="small"
-                                onClick={() => void testSmtp(draft[s.key] ?? '')}
-                                disabled={testing || busy}
-                              >
-                                {testing ? 'Testing…' : 'Test'}
-                              </Button>
-                              {s.set && <StateChip tone="settled" label="Stored" />}
-                            </InputAdornment>
-                          ),
-                        },
-                      }
-                    : undefined
-                }
-                type={s.kind === 'number' ? 'number' : s.kind === 'email' ? 'email' : 'text'}
-                value={draft[s.key] ?? ''}
-                onChange={(e) => {
-                  setDraft((d) => ({ ...d, [s.key]: e.target.value }));
-                  if (s.key === 'mail.smtp_url') setSmtp(null);
-                }}
-                // The red mark the mail server earned, on the field that
-                // caused it rather than in a toast that is gone by the time
-                // somebody looks back at the box.
-                error={s.key === 'mail.smtp_url' && smtp?.ok === false}
-                disabled={!mayEdit}
-                multiline={s.kind === 'multiline'}
-                minRows={s.kind !== 'multiline' ? undefined : s.key === 'holidays.list' ? 10 : 2}
-                sx={s.kind === 'multiline' ? { gridColumn: '1 / -1' } : undefined}
-                helperText={
-                  // What the mail server said wins the space: it is the thing
-                  // that has to be acted on, and the standing description is
-                  // still true underneath it.
-                  s.key === 'mail.smtp_url' && smtp
-                    ? smtp.message
-                    : s.secret
-                    ? s.set
-                      ? // What is stored, minus the password. The box stays
-                        // empty because the password itself never leaves the
-                        // server; this says which server and account it names.
-                        `Stored: ${s.preview} — type a new one to replace it, or leave blank to keep this.`
-                      : (s.help ?? 'Not set.')
-                    : (s.help ?? undefined)
-                }
-                placeholder={s.secret && s.set ? '••••••••' : s.fallback || undefined}
-              />
-            ))}
+            {shown.map((s) => {
+              /*
+                The standing description sits in the (i) rather than under the
+                box. It is the same sentence either way, but under the box it is
+                read on every visit whether or not anybody wanted it, and a
+                sentence under one field in a three-column grid pushes its
+                neighbours out of line. Under the box now: only what has changed
+                or gone wrong.
+              */
+              const info = s.help ? (
+                <Tooltip title={s.help} placement="top">
+                  <InfoIcon
+                    sx={{ fontSize: 18, color: 'text.disabled', cursor: 'help', ml: 0.5 }}
+                  />
+                </Tooltip>
+              ) : null;
+
+              const isSmtp = s.key === 'mail.smtp_url';
+
+              const end =
+                isSmtp || info ? (
+                  <InputAdornment position="end">
+                    {isSmtp && (
+                      <>
+                        {/*
+                          Testing is offered before saving, and on the stored one
+                          afterwards: an empty box with the button still live is
+                          how somebody checks a connection that was working last
+                          month.
+                        */}
+                        <Button
+                          size="small"
+                          onClick={() => void testSmtp(draft[s.key] ?? '')}
+                          disabled={testing || busy}
+                        >
+                          {testing ? 'Testing…' : 'Test'}
+                        </Button>
+                        {/*
+                          A stored secret comes back empty — the API never sends
+                          one to the browser — and an empty box after saving
+                          reads as a save that did not happen. The badge says
+                          otherwise, in the field itself.
+                        */}
+                        {s.set && <StateChip tone="settled" label="Stored" />}
+                      </>
+                    )}
+                    {info}
+                  </InputAdornment>
+                ) : undefined;
+
+              return (
+                <TextField
+                  key={s.key}
+                  label={s.label}
+                  slotProps={{
+                    input: {
+                      /*
+                        A phone number wears its country code rather than being
+                        told about it: the +91 is there while you type, so what
+                        the box will store is what the box shows.
+                      */
+                      ...(s.kind === 'phone'
+                        ? {
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                <Box component="span" sx={{ color: 'text.secondary' }}>
+                                  +91
+                                </Box>
+                              </InputAdornment>
+                            ),
+                          }
+                        : null),
+                      ...(end ? { endAdornment: end } : null),
+                    },
+                    ...(s.kind === 'phone' ? { htmlInput: { inputMode: 'tel' as const } } : null),
+                  }}
+                  type={s.kind === 'number' ? 'number' : s.kind === 'email' ? 'email' : 'text'}
+                  value={draft[s.key] ?? ''}
+                  onChange={(e) => {
+                    setDraft((d) => ({ ...d, [s.key]: e.target.value }));
+                    if (isSmtp) setSmtp(null);
+                  }}
+                  // The red mark the mail server earned, on the field that
+                  // caused it rather than in a toast that is gone by the time
+                  // somebody looks back at the box.
+                  error={isSmtp && smtp?.ok === false}
+                  disabled={!mayEdit}
+                  multiline={s.kind === 'multiline'}
+                  minRows={s.kind !== 'multiline' ? undefined : s.key === 'holidays.list' ? 10 : 2}
+                  sx={s.kind === 'multiline' ? { gridColumn: '1 / -1' } : undefined}
+                  helperText={
+                    /*
+                      Only news. What the mail server said last, and whether a
+                      secret is stored at all — both are state, and state is
+                      worth the line under the box. The description is not: it
+                      is the same every visit, and it is on the (i).
+                    */
+                    isSmtp && smtp
+                      ? smtp.message
+                      : s.secret
+                      ? s.set
+                        ? // What is stored, minus the password. The box stays
+                          // empty because the password itself never leaves the
+                          // server; this says which server and account it names.
+                          `Stored: ${s.preview} — type a new one to replace it, or leave blank to keep this.`
+                        : 'Not set.'
+                      : undefined
+                  }
+                  placeholder={s.secret && s.set ? '••••••••' : s.fallback || undefined}
+                />
+              );
+            })}
           </Box>
 
           {/*

@@ -255,10 +255,16 @@ function BranchDetailCard({ branch }) {
   return (
     <aside
       /*
-        Bottom right of the map. On a narrow screen it spans the foot instead,
-        because 240px beside a phone-width map leaves neither readable.
+        Bottom right of the map on a wide screen, and **under** it on a phone.
+
+        It used to stretch across the foot of the map and stay absolute, which
+        on a 390px screen left the card as tall as the map and sitting on top
+        of it: everything below Ladakh was covered, so the country the section
+        exists to show could not be seen at all. Static below 640px gives the
+        map its full height and the card its full width, and neither crops the
+        other.
       */
-      className="absolute bottom-3 right-3 z-10 w-[240px] rounded-xl border border-[#e6e8ee] bg-white/95 p-4 text-left shadow-[0_18px_44px_rgba(6,25,72,0.16)] backdrop-blur-sm max-[640px]:left-3 max-[640px]:w-auto"
+      className="absolute bottom-3 right-3 z-10 w-[240px] rounded-xl border border-[#e6e8ee] bg-white/95 p-4 text-left shadow-[0_18px_44px_rgba(6,25,72,0.16)] backdrop-blur-sm max-[640px]:static max-[640px]:mt-4 max-[640px]:w-full max-[640px]:bg-white max-[640px]:shadow-none"
       aria-label={`${branch.name} branch details`}
     >
       <div className="flex min-w-0 items-center gap-3">
@@ -352,7 +358,7 @@ export default function OurBranchesSection() {
   const detailBranch = branches.find((branch) => branch.page === shown) ?? null;
 
   return (
-    <section id="branches" className="bg-[#f8f9fb] px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
+    <section id="branches" className="bg-[#f8f9fb] px-4 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[1390px]">
         <div className="mx-auto max-w-[820px] text-center">
           <SectionLabel>Our Branches</SectionLabel>
@@ -389,15 +395,27 @@ export default function OurBranchesSection() {
               {found.map((branch) => {
                 const active = branch.page === shown;
                 return (
-                  <li key={branch.page}>
+                  <li
+                    key={branch.page}
+                    /*
+                      Two controls on the row, because it answers two different
+                      questions: the row itself moves the map to the branch, and
+                      Read opens the branch's own page. They were one control
+                      before, and the way to the page was the card's button
+                      alone — which on a phone is below the map and easy to miss
+                      entirely. A link inside a button is not markup a browser
+                      accepts, so the row is a flex container holding both.
+                    */
+                    className={`flex items-stretch gap-2 rounded-lg border transition-colors ${
+                      active
+                        ? 'border-[#d58a2b] bg-[#fdf7ef]'
+                        : 'border-[#e6e8ee] bg-white hover:border-[#d0d5e0]'
+                    }`}
+                  >
                     <button
                       type="button"
                       onClick={() => setSelected(branch.page)}
-                      className={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition-colors ${
-                        active
-                          ? 'border-[#d58a2b] bg-[#fdf7ef]'
-                          : 'border-[#e6e8ee] bg-white hover:border-[#d0d5e0]'
-                      }`}
+                      className="flex min-w-0 flex-1 items-center gap-3 rounded-l-lg py-3 pl-3 pr-1 text-left sm:pr-3"
                     >
                       <BranchMark branch={branch} size={40} active={active} />
                       <span className="min-w-0 flex-1">
@@ -408,11 +426,33 @@ export default function OurBranchesSection() {
                           {[placeOf(branch), branch.blurb].filter(Boolean).join(' · ')}
                         </span>
                       </span>
+                      {/*
+                        Decorative, and the first thing to go when the row gets
+                        tight: the selected branch is already said by the row's
+                        own border and ground, so on a phone this pin was only
+                        taking width off the name — which is the one thing on
+                        the row somebody is reading.
+                      */}
                       <MapPin
                         aria-hidden
-                        className={`h-4 w-4 shrink-0 ${active ? 'text-[#bd7724]' : 'text-[#c3c9d6]'}`}
+                        className={`hidden h-4 w-4 shrink-0 sm:block ${active ? 'text-[#bd7724]' : 'text-[#c3c9d6]'}`}
                       />
                     </button>
+
+                    <a
+                      href={`/branches/${branch.id}`}
+                      aria-label={`Read about ${branch.name}`}
+                      /*
+                        Filled navy, the same button the branch card ends with.
+                        Outlined amber on a white row read as a label rather
+                        than a control — it is the one thing on the row that
+                        leaves the page, so it is the one thing that should
+                        look like a button.
+                      */
+                      className="my-2 mr-2 inline-flex shrink-0 items-center self-center rounded-lg bg-[#061948] px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-white transition-colors hover:bg-[#10285e] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d58a2b]"
+                    >
+                      Read
+                    </a>
                   </li>
                 );
               })}

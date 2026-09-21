@@ -15,8 +15,9 @@ import {
   ShieldCheck,
   X,
 } from 'lucide-react';
+import verifyHero from '../../../Assets/hero/verify.jpg';
 import { apiUrl, getPublic } from '../../lib/api.js';
-import { contact } from './Footer.jsx';
+import { contactOf, useSite } from '../../lib/site.js';
 
 /**
  * Verify Report, at /verify-report: a grading report checked against the
@@ -264,10 +265,11 @@ function Found({ data }) {
   );
 }
 
-const email = contact.find((c) => c.href?.startsWith('mailto:'));
-const phone = contact.find((c) => c.href?.startsWith('tel:'));
-
 function Problem({ status, no }) {
+  // Where to write when a report will not verify — the panel's address and
+  // number, the same pair the footer prints.
+  const details = contactOf(useSite());
+
   const text = {
     missing: (
       <>
@@ -279,13 +281,18 @@ function Problem({ status, no }) {
           'No report matches this QR code.'
         )}{' '}
         A report can also be withheld from public verification — if yours will not verify, contact us at{' '}
-        <a className="font-medium underline" href={email?.href}>
-          {email?.lines[0]}
-        </a>{' '}
-        or{' '}
-        <a className="font-medium underline" href={phone?.href}>
-          {phone?.lines[0]}
+        <a className="font-medium underline" href={details.emailHref}>
+          {details.email}
         </a>
+        {details.phone ? (
+          <>
+            {' '}
+            or{' '}
+            <a className="font-medium underline" href={details.phone.href}>
+              {details.phone.text}
+            </a>
+          </>
+        ) : null}
         .
       </>
     ),
@@ -389,18 +396,20 @@ export default function VerifyReportPage({ id }) {
 
   return (
     <main className="bg-[#f8f9fb] text-[#2c3b64]">
-      <section className="bg-linear-to-b from-[#0b2a63] to-[#061948] px-5 pb-28 pt-14 text-center text-white sm:px-8 lg:px-12">
-        <div className="mx-auto max-w-[820px]">
+      <section className="relative overflow-hidden bg-[#061948] px-4 pb-28 pt-14 text-center text-white sm:px-8 lg:px-12">
+        <img src={verifyHero} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover" />
+        <span aria-hidden className="absolute inset-0 bg-linear-to-b from-[#0b2a63]/72 to-[#061948]/92" />
+        <div className="relative mx-auto max-w-[820px]">
           <p className="m-0 text-[12px] font-medium uppercase tracking-[0.14em] text-[#e3b447]">Trust &amp; Authenticity</p>
           <h1 className={`m-0 mt-4 ${serif} text-[48px] font-medium leading-[1.08] max-[640px]:text-[24px]`}>Verify Report</h1>
-          <p className="mx-auto mt-4 max-w-[640px] text-[16px] leading-[1.7] text-white/80">
+          <p className="mx-auto mt-4 max-w-[640px] text-[16px] leading-[1.7] text-white/80 max-[640px]:mt-2.5 max-[640px]:text-[12.5px] max-[640px]:leading-[1.55]">
             Check any IIGL grading report against the laboratory’s own record — type the report number, or scan the QR
             code printed on it.
           </p>
         </div>
       </section>
 
-      <section className="px-5 sm:px-8 lg:px-12">
+      <section className="px-4 sm:px-8 lg:px-12">
         <div className="mx-auto -mt-20 max-w-[900px]">
           <form
             className="rounded-xl border border-[#e6e8ee] bg-white p-6 shadow-[0_22px_52px_rgba(6,25,72,0.16)] sm:p-8"
@@ -469,7 +478,7 @@ export default function VerifyReportPage({ id }) {
         </div>
       </section>
 
-      <section className="px-5 py-14 sm:px-8 lg:px-12">
+      <section className="px-4 py-14 sm:px-8 lg:px-12">
         <div className="mx-auto max-w-[1180px]">
           <h2 className={`m-0 text-center ${serif} text-[36px] font-medium leading-[1.08] text-[#061948] max-[640px]:text-[24px]`}>
             How to Verify a <span className="text-[#bd7724]">Report</span>

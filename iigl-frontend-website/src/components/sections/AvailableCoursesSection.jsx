@@ -171,7 +171,7 @@ export default function AvailableCoursesSection() {
       : list.filter((course) => course.categories.some((name) => name.toLowerCase() === current));
 
   return (
-    <section id="courses" className="bg-white px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
+    <section id="courses" className="bg-white px-4 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[1390px]">
         <div className="mx-auto max-w-[820px] text-center">
           <SectionLabel>IIGL Education</SectionLabel>

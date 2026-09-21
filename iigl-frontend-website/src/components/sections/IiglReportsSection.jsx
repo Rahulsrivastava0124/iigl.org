@@ -6,7 +6,7 @@ export default function IiglReportsSection() {
     <section className="bg-white py-12 text-[#2c3b64]">
       {/* The heading and blurb keep the page's column; the report image below
           breaks out of it to run edge to edge across the screen. */}
-      <div className="mx-auto max-w-[1390px] px-5 sm:px-8 lg:px-12">
+      <div className="mx-auto max-w-[1390px] px-4 sm:px-8 lg:px-12">
         <div className="grid items-end gap-8 lg:grid-cols-[0.88fr_1.12fr] lg:gap-14">
           <div>
             <h2 className="m-0 flex flex-wrap items-end gap-x-4 gap-y-2 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[36px] font-medium leading-[1.08] tracking-normal text-[#061948] max-[640px]:text-[24px]">

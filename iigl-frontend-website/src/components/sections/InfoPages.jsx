@@ -8,11 +8,15 @@ import {
   MessageCircle,
   Phone,
   ShieldCheck,
-  Sparkles,
 } from 'lucide-react';
+import aboutHero from '../../../Assets/hero/about.jpg';
+import affiliationHero from '../../../Assets/hero/affiliation.jpg';
+import certificateHero from '../../../Assets/hero/certificate.jpg';
+import contactHero from '../../../Assets/hero/contact.jpg';
 import SectionLabel from '../SectionLabel.jsx';
+import EnquiryForm from '../EnquiryForm.jsx';
 import OurBranchesSection from './OurBranchesSection.jsx';
-import { contact } from './Footer.jsx';
+import { contactOf, useSite } from '../../lib/site.js';
 
 /**
  * The standing information pages carried over from the old iigl.org: About Us,
@@ -26,13 +30,24 @@ import { contact } from './Footer.jsx';
 const serif = "font-['Playfair_Display',Georgia,'Times_New_Roman',serif]";
 
 /** The navy band every one of these pages opens on. */
-function PageHero({ label, title, intro }) {
+/**
+ * A page's navy header, with a photograph behind it.
+ *
+ * The picture is decorative: it sits under a navy wash dark enough that the
+ * label, the heading and the intro keep their contrast whatever the photograph
+ * is doing underneath, and it carries an empty alt because it says nothing the
+ * heading does not. The wash is the gradient this header used to be, so a page
+ * given no picture looks exactly as it did.
+ */
+function PageHero({ label, title, intro, image }) {
   return (
-    <section className="bg-linear-to-b from-[#0b2a63] to-[#061948] px-5 py-16 text-center text-white sm:px-8 lg:px-12">
-      <div className="mx-auto max-w-[860px]">
+    <section className="relative overflow-hidden bg-[#061948] px-4 py-16 text-center text-white sm:px-8 lg:px-12">
+      {image && <img src={image} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover" />}
+      <span aria-hidden className="absolute inset-0 bg-linear-to-b from-[#0b2a63]/72 to-[#061948]/92" />
+      <div className="relative mx-auto max-w-[860px]">
         <p className="m-0 text-[12px] font-medium uppercase tracking-[0.14em] text-[#e3b447] max-[640px]:text-[11px]">{label}</p>
         <h1 className={`m-0 mt-4 ${serif} text-[44px] font-medium leading-[1.1] max-[640px]:mt-3 max-[640px]:text-[27px]`}>{title}</h1>
-        {intro && <p className="mx-auto mt-4 max-w-[680px] text-[16px] leading-[1.7] text-white/80 max-[640px]:mt-3 max-[640px]:text-[13.5px] max-[640px]:leading-[1.6]">{intro}</p>}
+        {intro && <p className="mx-auto mt-4 max-w-[680px] text-[16px] leading-[1.7] text-white/80 max-[640px]:mt-2.5 max-[640px]:text-[12.5px] max-[640px]:leading-[1.55]">{intro}</p>}
       </div>
     </section>
   );
@@ -58,10 +73,11 @@ export function AboutPage() {
     <main className="bg-[#f8f9fb] text-[#2c3b64]">
       <PageHero
         label="Who We Are"
+        image={aboutHero}
         title="About IIGL"
         intro="An ISO 9001:2015 certified, MSME-registered gemological laboratory, testing and certifying gems, diamonds, jewellery and rudraksha across India."
       />
-      <section className="px-5 py-14 sm:px-8 lg:px-12">
+      <section className="px-4 py-14 sm:px-8 lg:px-12">
         <div className="mx-auto grid max-w-[1000px] gap-6">
           <Prose label="Introduction" title="Seventeen years of gemology, made independent">
             <p>
@@ -151,10 +167,11 @@ export function AffiliationPage() {
     <main className="bg-[#f8f9fb] text-[#2c3b64]">
       <PageHero
         label="Trust & Credibility"
+        image={affiliationHero}
         title="Affiliations"
         intro="When it comes to something as precious as gemstones, trust and credibility matter most. These affiliations are why you can place your trust in IIGL."
       />
-      <section className="px-5 py-14 sm:px-8 lg:px-12">
+      <section className="px-4 py-14 sm:px-8 lg:px-12">
         <div className="mx-auto max-w-[1100px]">
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {AFFILIATIONS.map(({ icon: Icon, title, text }) => (
@@ -216,10 +233,11 @@ export function ImportancePage() {
     <main className="bg-[#f8f9fb] text-[#2c3b64]">
       <PageHero
         label="Why It Matters"
+        image={certificateHero}
         title="Importance of a Certificate"
         intro="A gem’s true worth lies beyond its beauty, in its composition and quality. Testing, verification and certification are the key to unlocking that worth."
       />
-      <section className="px-5 py-14 sm:px-8 lg:px-12">
+      <section className="px-4 py-14 sm:px-8 lg:px-12">
         <div className="mx-auto max-w-[1100px]">
           <p className="mx-auto max-w-[820px] text-center text-[15.5px] leading-[1.8] text-[#3c4252] max-[640px]:text-[13.5px] max-[640px]:leading-[1.7]">
             Whether it is a dazzling diamond ring or a lustrous sapphire pendant, the allure of a precious stone is
@@ -256,46 +274,94 @@ export function ImportancePage() {
 
 // --------------------------------------------------------------------- Contact
 
-const CHANNELS = [
-  { icon: Phone, label: 'Call us', value: contact[2]?.lines[0] ?? '', href: contact[2]?.href },
-  { icon: MessageCircle, label: 'WhatsApp', value: 'Chat on WhatsApp', href: 'https://api.whatsapp.com/send?phone=9570702777' },
-  { icon: Mail, label: 'Email us', value: contact[1]?.lines[0] ?? '', href: contact[1]?.href },
-  { icon: MapPin, label: 'Visit a lab', value: 'Find your nearest branch', href: '/#branches' },
-];
-
 export function ContactPage() {
+  /*
+    Every channel here was a constant in this file, including a WhatsApp number
+    that was nobody's setting and a telephone number read out of the footer's
+    array by index. They are the panel's now.
+  */
+  const details = contactOf(useSite());
+
+  const channels = [
+    details.phone && { icon: Phone, label: 'Call us', value: details.phone.text, href: details.phone.href },
+    details.whatsapp && {
+      icon: MessageCircle,
+      label: 'WhatsApp',
+      value: 'Chat on WhatsApp',
+      href: details.whatsapp,
+    },
+    { icon: Mail, label: 'Email us', value: details.email, href: details.emailHref },
+    /*
+      Not on a phone. The branch list it points at is on this same page, a
+      screen further down, so on a narrow screen the card is a link to what
+      the reader is already scrolling towards — and it was pushing the three
+      channels that do something into a column four cards long.
+    */
+    { icon: MapPin, label: 'Visit a lab', value: 'Find your nearest branch', href: '/#branches', wide: false, phone: false },
+  ].filter(Boolean);
+
+  /*
+    Two to a row on a phone. An odd one out spans the pair rather than sitting
+    half-width beside a gap.
+  */
+  const onPhone = channels.filter((c) => c.phone !== false);
+  const lastOnPhone = onPhone.length % 2 === 1 ? onPhone[onPhone.length - 1] : null;
+
   return (
     <main className="bg-[#f8f9fb] text-[#2c3b64]">
       <PageHero
         label="Get In Touch"
+        image={contactHero}
         title="Contact Us"
         intro="To verify the authenticity of your diamonds, gemstones, jewellery or rudraksha, reach us through any of the channels below — or visit your nearest laboratory."
       />
-      <section className="px-5 py-14 sm:px-8 lg:px-12">
-        <div className="mx-auto max-w-[1100px]">
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {CHANNELS.map(({ icon: Icon, label, value, href }) => (
-              <a
-                key={label}
-                href={href}
-                className="flex flex-col items-center rounded-xl border border-[#e6e8ee] bg-white p-6 text-center shadow-[0_15px_38px_rgba(44,59,100,0.08)] transition-colors hover:border-[#d58a2b]"
-              >
-                <span className="icon-gold-outline inline-flex h-14 w-14">
-                  <Icon className="h-7 w-7" strokeWidth={1.5} />
-                </span>
-                <span className={`mt-4 ${serif} text-[17px] font-medium text-[#061948]`}>{label}</span>
-                <span className="mt-1 text-[13.5px] leading-[1.5] text-[#4a5265]">{value}</span>
-              </a>
-            ))}
+      <section className="px-4 py-14 sm:px-8 lg:px-12">
+        {/*
+          One row on a desktop: the channels down the left, the form beside
+          them. Stacked, the four cards were a band across the top with a tall
+          white form under it and nothing in the right half of the page — the
+          same shape the education page solved this way. On a phone they go
+          back to two cards to a row with the form underneath.
+        */}
+        <div className="mx-auto grid max-w-[1100px] items-start gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.3fr)]">
+          <div className="grid grid-cols-2 gap-3 sm:gap-5">
+            {channels.map((channel) => {
+              const { icon: Icon, label, value, href } = channel;
+              return (
+                <a
+                  key={label}
+                  href={href}
+                  className={[
+                    'flex flex-col items-center rounded-xl border border-[#e6e8ee] bg-white p-4 text-center shadow-[0_15px_38px_rgba(44,59,100,0.08)] transition-colors hover:border-[#d58a2b] sm:p-6',
+                    channel.phone === false ? 'max-[640px]:hidden' : '',
+                    channel === lastOnPhone ? 'max-[640px]:col-span-2' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                >
+                  <span className="icon-gold-outline inline-flex h-12 w-12 sm:h-14 sm:w-14">
+                    <Icon className="h-6 w-6 sm:h-7 sm:w-7" strokeWidth={1.5} />
+                  </span>
+                  <span className={`mt-3 ${serif} text-[15px] font-medium text-[#061948] sm:mt-4 sm:text-[17px]`}>
+                    {label}
+                  </span>
+                  <span className="mt-1 text-[12.5px] leading-[1.5] text-[#4a5265] sm:text-[13.5px]">{value}</span>
+                </a>
+              );
+            })}
           </div>
 
-          <div className="mt-6 flex items-start gap-4 rounded-xl border border-[#e6e8ee] bg-white p-6">
-            <Sparkles className="h-6 w-6 shrink-0 text-[#d58a2b]" strokeWidth={1.6} />
-            <p className="m-0 text-[14.5px] leading-[1.7] text-[#3c4252] max-[640px]:text-[13.5px]">
-              To test, identify or obtain the grading report of a gemstone or jewellery, visit the local address of one
-              of our franchise and branch laboratories. Every centre is listed on the map below.
-            </p>
-          </div>
+          {/*
+            The message goes to Student › Enquiry in the panel, source Website,
+            the same place a course enquiry lands — so a question asked from
+            the contact page is on somebody's list rather than in an inbox.
+          */}
+          <EnquiryForm
+            heading="Send us a message"
+            intro="Leave your details and we will call you back."
+            button="Send message"
+            received="message"
+          />
         </div>
       </section>
 

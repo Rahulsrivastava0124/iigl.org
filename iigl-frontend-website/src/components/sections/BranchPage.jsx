@@ -41,7 +41,7 @@ export default function BranchPage({ id }) {
 
   if (status !== 'ready') {
     return (
-      <main className="bg-[#f8f9fb] px-5 py-24 text-center text-[#2c3b64]">
+      <main className="bg-[#f8f9fb] px-4 py-24 text-center text-[#2c3b64]">
         {status === 'loading' ? (
           <p className="m-0 text-[15px] text-[#4a5265]">Loading the branch…</p>
         ) : (
@@ -68,13 +68,16 @@ export default function BranchPage({ id }) {
 
   return (
     <main className="bg-white text-[#2c3b64]">
-      {branch.banner ? (
+      {/*
+        The banner, when the branch has one. A branch that has not set one
+        shows nothing here: the empty navy band that used to stand in its place
+        said nothing and pushed the name and the logo down the page for it.
+      */}
+      {branch.banner && (
         <img className="h-[clamp(220px,32vw,480px)] w-full object-cover" src={fileUrl(branch.banner)} alt="" />
-      ) : (
-        <div className="h-[clamp(140px,18vw,220px)] w-full bg-linear-to-b from-[#0b2a63] to-[#061948]" />
       )}
 
-      <section className="px-5 py-10 sm:px-8 lg:px-12">
+      <section className="px-4 py-10 sm:px-8 lg:px-12">
         <div className="mx-auto max-w-[1100px]">
           <a className="inline-flex items-center gap-2 text-[13px] font-medium text-[#bd7724] hover:underline" href="/#branches">
             <ArrowLeft className="h-4 w-4" /> Our branches

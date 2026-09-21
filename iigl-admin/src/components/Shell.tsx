@@ -288,8 +288,8 @@ const ADMIN_GROUPS: Group[] = [
       { to: '/content?tab=gallery', label: 'Course Gallery', perm: 'website_home' },
       { to: '/content?tab=testimonials', label: 'Testimonials', perm: 'website_home' },
       { to: '/content?tab=articles', label: 'Blog', perm: 'website_blog' },
-      // Head office's own: the footer's social links, and its picture gallery.
-      { to: '/site/social', label: 'Social Media' },
+      // Head office's own picture gallery. Its social links are company
+      // details and sit with the rest of them, in Settings -> Company.
       { to: '/site/gallery', label: 'Gallery' },
     ],
   },

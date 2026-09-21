@@ -3,6 +3,7 @@ import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { ROLE } from '../middleware/auth.js';
+import { setting } from '../services/settings.service.js';
 
 /**
  * A website page's own settings: head office's, and each laboratory's branch
@@ -41,17 +42,99 @@ const galleryOf = (v: unknown): string[] => {
   }
 };
 
-/** One page's settings, or the empty page when nothing has been saved yet. */
+/**
+ * One page's settings, or the empty page when nothing has been saved yet.
+ *
+ * Head office's three social links are the exception: they are company details
+ * and live in Settings, under `company.whatsapp` and the two beside it, rather
+ * than in this table. They are read back in here so that everything reading a
+ * page — the website footer, the course enquiry link — goes on asking one
+ * endpoint for one shape and does not have to know where a given page keeps
+ * them. A laboratory's own links are its row's, as they always were.
+ */
 export async function siteProfile(labId: number): Promise<SiteProfile> {
   const row = await db.selectFrom('site_profiles').selectAll().where('lab_id', '=', labId).executeTakeFirst();
+
+  const social =
+    labId === HEAD_OFFICE
+      ? await (async () => {
+          const [whatsapp, facebook, instagram] = await Promise.all([
+            setting('company.whatsapp'),
+            setting('company.facebook'),
+            setting('company.instagram'),
+          ]);
+          return {
+            whatsapp: whatsapp || null,
+            facebook: facebook || null,
+            instagram: instagram || null,
+          };
+        })()
+      : {
+          whatsapp: row?.whatsapp ?? null,
+          facebook: row?.facebook ?? null,
+          instagram: row?.instagram ?? null,
+        };
+
   return {
     banner: row?.banner ?? null,
     content: row?.content ?? '',
     gallery: galleryOf(row?.gallery),
-    whatsapp: row?.whatsapp ?? null,
-    facebook: row?.facebook ?? null,
-    instagram: row?.instagram ?? null,
+    ...social,
     updated_at: row?.updated_at ?? null,
+  };
+}
+
+/**
+ * The company's own contact details, as the public website prints them.
+ *
+ * Settings, not this table: they are the company's, not a page's, and the
+ * panel keeps them under Settings → Company beside the name that goes on a
+ * certificate. The website used to carry its own copy of every one of these
+ * — an address in the footer, one telephone number in the footer and a
+ * different one on the contact page, a third in a WhatsApp link — so a change
+ * of number meant a code change, and the numbers had already drifted apart.
+ *
+ * Blank is null rather than an empty string, so a caller can fall back to what
+ * it printed before instead of showing a heading with nothing under it.
+ */
+export interface CompanyDetails {
+  name: string;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  pincode: string | null;
+  /** The office line, the one printed on certificates and invoices. */
+  phone: string | null;
+  /** What the website tells a visitor to ring, when that is a different one. */
+  contact_number: string | null;
+  email: string | null;
+  website: string | null;
+}
+
+export async function companyDetails(): Promise<CompanyDetails> {
+  const [name, address, city, state, pincode, phone, contactNumber, email, website] =
+    await Promise.all([
+      setting('company.name'),
+      setting('company.address'),
+      setting('company.city'),
+      setting('company.state'),
+      setting('company.pincode'),
+      setting('company.phone'),
+      setting('company.contact_number'),
+      setting('company.email'),
+      setting('company.website'),
+    ]);
+
+  return {
+    name,
+    address: address || null,
+    city: city || null,
+    state: state || null,
+    pincode: pincode || null,
+    phone: phone || null,
+    contact_number: contactNumber || null,
+    email: email || null,
+    website: website || null,
   };
 }
 

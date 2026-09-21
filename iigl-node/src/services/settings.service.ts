@@ -18,7 +18,12 @@ import { badRequest } from '../lib/errors.js';
  * quote, every certificate and every mail, and they change a few times a year.
  */
 
-export type SettingKind = 'text' | 'number' | 'email' | 'url' | 'multiline';
+/**
+ * `phone` is stored as digits and shown behind a `+91`, so the country code is
+ * a thing on the screen rather than a sentence under the box explaining that
+ * it will be added.
+ */
+export type SettingKind = 'text' | 'number' | 'email' | 'url' | 'multiline' | 'phone';
 
 export interface SettingSpec {
   key: string;
@@ -31,7 +36,41 @@ export interface SettingSpec {
   secret?: boolean;
   /** Refuses a value the readers could not use. */
   check?: (value: string) => void;
+  /**
+   * Tidies a value before it is stored.
+   *
+   * `check` can only refuse. A WhatsApp number typed `+91 98765 43210` is not
+   * wrong — `wa.me` simply wants it as digits — so it is corrected rather than
+   * rejected, and the stored value is the one every reader can use.
+   */
+  clean?: (value: string) => string;
 }
+
+/**
+ * A phone number as a link wants it: digits, with the country code.
+ *
+ * The same rule `site.routes.ts` applies to a laboratory's WhatsApp, so a
+ * number typed on either screen is stored the same way and the `wa.me` or `tel:`
+ * link built from it works either way.
+ *
+ * Ten digits on their own are an Indian mobile and get 91 in front. That is not
+ * said on the screen any more — the box shows `+91` in front of what is being
+ * typed, which is the same fact without a sentence.
+ */
+const phoneNumber = (value: string): string => {
+  const digits = value.replace(/[\s()+.-]/g, '');
+  if (!/^\d{10,15}$/.test(digits)) {
+    throw badRequest('WhatsApp is a phone number with its country code — 91 98765 43210.');
+  }
+  return digits.length === 10 ? `91${digits}` : digits;
+};
+
+/** A full link, so the footer does not print one the browser cannot follow. */
+const link = (label: string) => (value: string) => {
+  if (!/^https?:\/\//i.test(value)) {
+    throw badRequest(`${label} is a full link, starting http:// or https://.`);
+  }
+};
 
 const number = (label: string, min: number, max: number) => (value: string) => {
   const n = Number(value);
@@ -57,7 +96,29 @@ export const SETTINGS: SettingSpec[] = [
   { key: 'company.city', label: 'City', kind: 'text', fallback: () => '' },
   { key: 'company.state', label: 'State', kind: 'text', fallback: () => '' },
   { key: 'company.pincode', label: 'Pincode', kind: 'text', fallback: () => '' },
-  { key: 'company.phone', label: 'Phone', kind: 'text', fallback: () => '' },
+  {
+    key: 'company.phone',
+    label: 'Phone',
+    kind: 'phone',
+    fallback: () => '',
+    help: 'Printed on certificates and invoices.',
+    clean: phoneNumber,
+  },
+  {
+    /*
+      The number the website tells a visitor to ring, which is not always the
+      one printed on an invoice: the office line goes on paper and the counter
+      or the sales mobile answers the website. Both exist because both were
+      hardcoded in the site until now — an invoice number in the footer and a
+      different one on the contact page.
+    */
+    key: 'company.contact_number',
+    label: 'Contact us number',
+    kind: 'phone',
+    fallback: () => '',
+    help: 'What the website tells a visitor to call.',
+    clean: phoneNumber,
+  },
   { key: 'company.email', label: 'Email', kind: 'email', fallback: () => '' },
   {
     key: 'company.gstin',
@@ -72,6 +133,43 @@ export const SETTINGS: SettingSpec[] = [
     kind: 'url',
     fallback: () => env.publicSiteUrl,
     help: 'Also the origin printed QR codes resolve against.',
+  },
+
+  /*
+    Head office's own social links, which the public website prints in its
+    footer and beside a course enquiry.
+
+    They were on Website Setup, on a screen of their own — `/site/social` —
+    because they are stored beside head office's banner and gallery in
+    `site_profiles`. That is where they sit in the data and not where anybody
+    looks for them: they are the company's own contact details, the same kind
+    of thing as its phone number and its address, and those are here.
+
+    A **laboratory's** links are not these. Each branch page keeps its own, on
+    the branch page's own screen, because they are that laboratory's.
+  */
+  {
+    key: 'company.whatsapp',
+    label: 'WhatsApp',
+    kind: 'phone',
+    fallback: () => '',
+    clean: phoneNumber,
+  },
+  {
+    key: 'company.facebook',
+    label: 'Facebook',
+    kind: 'url',
+    fallback: () => '',
+    help: 'The page’s full link, on facebook.com.',
+    check: link('Facebook'),
+  },
+  {
+    key: 'company.instagram',
+    label: 'Instagram',
+    kind: 'url',
+    fallback: () => '',
+    help: 'The profile’s full link, on instagram.com.',
+    check: link('Instagram'),
   },
 
   // ---------------------------------------------------------- session and mail
@@ -215,13 +313,16 @@ export async function saveSettings(
       continue;
     }
 
-    spec.check?.(value);
+    // Tidy first, then refuse: a value corrected into shape should not then be
+    // judged on the shape it arrived in.
+    const cleaned = spec.clean ? spec.clean(value) : value;
+    spec.check?.(cleaned);
 
     await db
       .insertInto('settings')
       .values({
         key,
-        value,
+        value: cleaned,
         updated_by: userId,
         created_at: new Date(),
         updated_at: new Date(),

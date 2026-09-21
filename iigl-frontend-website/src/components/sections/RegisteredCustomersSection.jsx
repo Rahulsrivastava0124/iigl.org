@@ -240,7 +240,7 @@ export default function RegisteredCustomersSection() {
   }, [canScroll, paused, page, pages]);
 
   return (
-    <section id="customers" className="bg-[#f8f9fb] px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
+    <section id="customers" className="bg-[#f8f9fb] px-4 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[1390px]">
         <div className="mx-auto max-w-[820px] text-center">
           <SectionLabel>Trusted By Many</SectionLabel>
@@ -308,7 +308,7 @@ export default function RegisteredCustomersSection() {
         as the heading and filters above, so the row lines up with them.
       */}
       <div
-        className="-mx-5 mt-6 bg-[#0b1f4b] px-5 py-6 shadow-[0_20px_46px_rgba(6,25,72,0.22)] sm:-mx-8 sm:px-8 lg:-mx-12 lg:px-12"
+        className="-mx-4 mt-6 bg-[#0b1f4b] px-4 py-6 shadow-[0_20px_46px_rgba(6,25,72,0.22)] sm:-mx-8 sm:px-8 lg:-mx-12 lg:px-12"
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
         onTouchStart={() => setPaused(true)}

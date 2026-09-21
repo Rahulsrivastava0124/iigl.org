@@ -1092,7 +1092,7 @@ const document = {
         tags: ['Public'],
         summary: "Head office's website settings",
         description:
-          'Banner, content (HTML), gallery (picture paths in uploads/banner) and WhatsApp, Facebook and Instagram links for the main site and its footer. Empty values when nothing is set. Readable from any origin.',
+          'Banner, content (HTML), gallery (picture paths in uploads/banner) and WhatsApp, Facebook and Instagram links for the main site and its footer, plus `company` — the name, address, city, state, pincode, phone, contact_number, email and website the site prints, null where unset. Empty values when nothing is set. Readable from any origin.',
         security: [],
         responses: { 200: { description: 'The settings.' } },
       },

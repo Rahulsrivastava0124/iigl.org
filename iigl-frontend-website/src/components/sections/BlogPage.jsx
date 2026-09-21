@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ArrowRight, CalendarDays, Clock, Search, UserRound } from 'lucide-react';
 import SectionLabel from '../SectionLabel.jsx';
+import blogHero from '../../../Assets/hero/blog.jpg';
 import { fileUrl, getPublic } from '../../lib/api.js';
 import { cleanHtml } from '../../lib/html.js';
 import card1 from '../../../Assets/card1.png';
@@ -121,11 +122,13 @@ function ArticleCard({ article }) {
 
 function Hero({ title, intro }) {
   return (
-    <section className="bg-linear-to-b from-[#0b2a63] to-[#061948] px-5 py-16 text-center text-white sm:px-8 lg:px-12">
-      <div className="mx-auto max-w-[860px]">
+    <section className="relative overflow-hidden bg-[#061948] px-4 py-16 text-center text-white sm:px-8 lg:px-12">
+      <img src={blogHero} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover" />
+      <span aria-hidden className="absolute inset-0 bg-linear-to-b from-[#0b2a63]/72 to-[#061948]/92" />
+      <div className="relative mx-auto max-w-[860px]">
         <p className="m-0 text-[12px] font-medium uppercase tracking-[0.14em] text-[#e3b447]">IIGL Blog</p>
         <h1 className={`m-0 mt-4 ${serif} text-[48px] font-medium leading-[1.08] max-[640px]:text-[24px]`}>{title}</h1>
-        <p className="mx-auto mt-4 max-w-[680px] text-[16px] leading-[1.7] text-white/80">{intro}</p>
+        <p className="mx-auto mt-4 max-w-[680px] text-[16px] leading-[1.7] text-white/80 max-[640px]:mt-2.5 max-[640px]:text-[12.5px] max-[640px]:leading-[1.55]">{intro}</p>
       </div>
     </section>
   );
@@ -185,7 +188,7 @@ export default function BlogPage() {
         intro="Guides, grading explained and news from the laboratory — written by the IIGL team to help you buy, sell and learn with confidence."
       />
 
-      <section className="bg-[#f8f9fb] px-5 py-12 sm:px-8 lg:px-12">
+      <section className="bg-[#f8f9fb] px-4 py-12 sm:px-8 lg:px-12">
         <div className="mx-auto max-w-[1240px]">
           {failed ? (
             <Notice title="The blog could not be loaded" text="Please check your connection and try again in a moment." />
@@ -321,7 +324,7 @@ export function BlogArticlePage({ slug }) {
 
   if (status !== 'ready') {
     return (
-      <main className="bg-[#f8f9fb] px-5 text-[#2c3b64]">
+      <main className="bg-[#f8f9fb] px-4 text-[#2c3b64]">
         {status === 'loading' ? (
           <p className="m-0 py-24 text-center text-[15px] text-[#4a5265]">Loading the article…</p>
         ) : (
@@ -352,7 +355,7 @@ export function BlogArticlePage({ slug }) {
             <div className="absolute inset-0 bg-linear-to-t from-[#061948] via-[#061948]/80 to-[#061948]/40" />
           </>
         )}
-        <div className="relative mx-auto max-w-[860px] px-5 pb-12 pt-10 sm:px-8 lg:pt-16">
+        <div className="relative mx-auto max-w-[860px] px-4 pb-12 pt-10 sm:px-8 lg:pt-16">
           <a className="inline-flex items-center gap-2 text-[13px] font-medium text-[#e3b447] hover:underline" href="/blog">
             <ArrowLeft className="h-4 w-4" /> All articles
           </a>
@@ -367,7 +370,7 @@ export function BlogArticlePage({ slug }) {
         </div>
       </section>
 
-      <article className="px-5 py-12 sm:px-8">
+      <article className="px-4 py-12 sm:px-8">
         <div
           className="rich-content mx-auto max-w-[760px] text-[16px] leading-[1.85] text-[#3c4252]"
           dangerouslySetInnerHTML={{ __html: content || '<p>This article has no text yet.</p>' }}
@@ -381,7 +384,7 @@ export function BlogArticlePage({ slug }) {
       </article>
 
       {more.length > 0 && (
-        <section className="bg-[#f8f9fb] px-5 py-14 sm:px-8 lg:px-12">
+        <section className="bg-[#f8f9fb] px-4 py-14 sm:px-8 lg:px-12">
           <div className="mx-auto max-w-[1240px]">
             <div className="text-center">
               <SectionLabel>Keep Reading</SectionLabel>

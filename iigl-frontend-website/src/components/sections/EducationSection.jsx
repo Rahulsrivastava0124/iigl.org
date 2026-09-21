@@ -27,7 +27,7 @@ const educationHighlights = [
 
 export default function EducationSection() {
   return (
-    <section id="education" className="bg-[#f8f9fb] px-5 py-10 text-[#2c3b64] sm:px-8 lg:px-12">
+    <section id="education" className="bg-[#f8f9fb] px-4 py-10 text-[#2c3b64] sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[1390px]">
         <div className="relative min-h-[560px] overflow-hidden rounded-[26px] bg-white shadow-[0_18px_50px_rgba(44,59,100,0.10)] ring-1 ring-[#e6e8ee] max-[1180px]:min-h-[640px] max-[760px]:min-h-0 max-[760px]:rounded-2xl">
           <img
@@ -66,17 +66,22 @@ export default function EducationSection() {
               ))}
             </div>
 
-            <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-4">
+            {/*
+              Side by side, including on a phone. Wrapping put Explore Courses
+              on its own line under the button, which read as a stray link
+              rather than the quieter half of a pair; both shrink instead.
+            */}
+            <div className="mt-8 flex items-center gap-x-6 max-[640px]:mt-6 max-[640px]:gap-x-4">
               <a
-                className="inline-flex h-12 items-center justify-center gap-3 rounded-lg bg-[#061948] px-6 text-[16px] font-medium leading-none text-white shadow-[0_14px_22px_rgba(6,25,72,0.18)] transition duration-200 hover:bg-[#10285e] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#d58a2b] max-[760px]:text-[14px]"
+                className="inline-flex h-12 shrink-0 items-center justify-center gap-3 whitespace-nowrap rounded-lg bg-[#061948] px-6 text-[16px] font-medium leading-none text-white shadow-[0_14px_22px_rgba(6,25,72,0.18)] transition duration-200 hover:bg-[#10285e] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#d58a2b] max-[760px]:text-[14px] max-[640px]:h-10 max-[640px]:gap-2 max-[640px]:px-4 max-[640px]:text-[13px]"
                 href="/education#contact"
               >
                 <span>Enroll Now</span>
-                <ArrowRight className="h-[18px] w-[18px]" strokeWidth={2} />
+                <ArrowRight className="h-[18px] w-[18px] max-[640px]:h-[15px] max-[640px]:w-[15px]" strokeWidth={2} />
               </a>
 
               <a
-                className="inline-flex flex-col text-[14px] font-medium leading-none text-[#061948] transition duration-200 hover:text-[#bd7724]"
+                className="inline-flex shrink-0 flex-col whitespace-nowrap text-[14px] font-medium leading-none text-[#061948] transition duration-200 hover:text-[#bd7724] max-[640px]:text-[13px]"
                 href="/education#courses"
               >
                 <span>Explore Courses</span>

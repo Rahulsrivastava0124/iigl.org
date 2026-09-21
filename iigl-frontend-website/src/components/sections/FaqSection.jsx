@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import SectionLabel from '../SectionLabel.jsx';
+import { contactOf, useSite } from '../../lib/site.js';
 import {
   ArrowRight,
   Clock,
@@ -62,19 +63,28 @@ const faqs = [
   },
 ];
 
-const contact = [
-  { icon: Mail, label: 'Email Us', value: 'support@iiglabs.com', href: 'mailto:support@iiglabs.com' },
-  { icon: Phone, label: 'Call Us', value: '+91 12345 67890', href: 'tel:+911234567890' },
-  { icon: Clock, label: 'Support Hours', value: 'Mon – Sat : 9:30 AM – 6:30 PM (IST)' },
-];
-
 export default function FaqSection() {
   // The first answer is open on arrival: an accordion with everything shut
   // looks like a list of headings nobody thought to fill in.
   const [open, setOpen] = useState(0);
 
+  /*
+    The email and the number are the panel's. They were written in here as
+    support@iiglabs.com and +91 12345 67890 — a domain the company does not
+    own and a placeholder number — which is what "hardcoded" turns into once
+    nobody remembers the file. Support hours stay here: nothing stores them.
+  */
+  const details = contactOf(useSite());
+  const contact = [
+    { icon: Mail, label: 'Email Us', value: details.email, href: details.emailHref },
+    ...(details.phone
+      ? [{ icon: Phone, label: 'Call Us', value: details.phone.text, href: details.phone.href }]
+      : []),
+    { icon: Clock, label: 'Support Hours', value: details.hours },
+  ];
+
   return (
-    <section id="faq" className="bg-white px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
+    <section id="faq" className="bg-white px-4 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[1390px]">
         <div className="mx-auto max-w-[820px] text-center">
           <SectionLabel>FAQ</SectionLabel>

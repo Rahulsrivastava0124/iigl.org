@@ -15,7 +15,7 @@ import { expandAttributes } from '../services/report.service.js';
 import { cardDataFor, loadChrome } from '../services/card.service.js';
 import { renderCardsPdf, type CardKind } from '../services/pdf.service.js';
 import { numericId, numericParams } from '../middleware/params.js';
-import { HEAD_OFFICE, siteProfile } from './site.routes.js';
+import { HEAD_OFFICE, companyDetails, siteProfile } from './site.routes.js';
 
 export const publicRoutes = Router();
 
@@ -139,11 +139,18 @@ publicRoutes.get(
  * way `/api/files` serves it (legacy disk first, then storage), by handing the
  * request on with its path rewritten.
  */
-/** Head office's own website settings: the footer's social links, its gallery and content. */
+/**
+ * Head office's own website settings: the footer's social links, its gallery
+ * and content — and, under `company`, the address, telephone numbers and
+ * email the site prints. One endpoint because the website asks one question:
+ * "how do people reach IIGL". The two halves are stored apart (a page's row,
+ * and Settings) and that is this end's problem, not the website's.
+ */
 publicRoutes.get(
   '/site',
   wrap(async (_req, res) => {
-    res.json({ data: await siteProfile(HEAD_OFFICE) });
+    const [page, company] = await Promise.all([siteProfile(HEAD_OFFICE), companyDetails()]);
+    res.json({ data: { ...page, company } });
   }),
 );
 

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import { fileUrl, getPublic } from '../../lib/api.js';
+import { useState } from 'react';
+import { fileUrl } from '../../lib/api.js';
+import { useSite } from '../../lib/site.js';
 import SectionLabel from '../SectionLabel.jsx';
 
 /** How many pictures show before "Show all". Two rows on a wide screen. */
@@ -12,22 +13,15 @@ const FIRST = 8;
  * empty frame titled Gallery would be a section with nothing in it.
  */
 export default function GallerySection() {
-  const [pictures, setPictures] = useState([]);
+  const site = useSite();
+  const pictures = Array.isArray(site?.gallery) ? site.gallery : [];
   const [all, setAll] = useState(false);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    getPublic('/public/site', { signal: controller.signal })
-      .then((site) => setPictures(Array.isArray(site?.gallery) ? site.gallery : []))
-      .catch(() => {});
-    return () => controller.abort();
-  }, []);
 
   if (pictures.length === 0) return null;
   const shown = all ? pictures : pictures.slice(0, FIRST);
 
   return (
-    <section id="gallery" className="bg-white px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
+    <section id="gallery" className="bg-white px-4 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[1390px]">
         <div className="mx-auto max-w-[820px] text-center">
           <SectionLabel>Inside IIGL</SectionLabel>

@@ -11,11 +11,12 @@ import card1 from '../../../Assets/card1.png';
 import card2 from '../../../Assets/card2.png';
 import card3 from '../../../Assets/card3.png';
 import card4 from '../../../Assets/card4.png';
+import educationHero from '../../../Assets/hero/education.jpg';
 import SectionLabel from '../SectionLabel.jsx';
 import EnquiryForm from '../EnquiryForm.jsx';
 import AvailableCoursesSection from './AvailableCoursesSection.jsx';
 import ReviewsSection from './ReviewsSection.jsx';
-import { contact } from './Footer.jsx';
+import { contactOf, contactRows, useSite } from '../../lib/site.js';
 import { fileUrl, getPublic, usePublic } from '../../lib/api.js';
 
 /**
@@ -44,13 +45,15 @@ function Heading({ label, title, intro }) {
 
 function Hero() {
   return (
-    <section className="bg-linear-to-b from-[#0b2a63] to-[#061948] px-5 py-16 text-center text-white sm:px-8 lg:px-12">
-      <div className="mx-auto max-w-[860px]">
+    <section className="relative overflow-hidden bg-[#061948] px-4 py-16 text-center text-white sm:px-8 lg:px-12">
+      <img src={educationHero} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover" />
+      <span aria-hidden className="absolute inset-0 bg-linear-to-b from-[#0b2a63]/72 to-[#061948]/92" />
+      <div className="relative mx-auto max-w-[860px]">
         <p className="m-0 text-[12px] font-medium uppercase tracking-[0.14em] text-[#e3b447]">IIGL Education</p>
         <h1 className={`m-0 mt-4 ${serif} text-[48px] font-medium leading-[1.08] max-[640px]:text-[24px]`}>
           Your Journey to Excellence Starts Here
         </h1>
-        <p className="mx-auto mt-4 max-w-[680px] text-[16px] leading-[1.7] text-white/80">
+        <p className="mx-auto mt-4 max-w-[680px] text-[16px] leading-[1.7] text-white/80 max-[640px]:mt-2.5 max-[640px]:text-[12.5px] max-[640px]:leading-[1.55]">
           Expert-led courses in gemology, diamonds and jewellery, taught in the classroom and the laboratory, with a
           certificate anyone can verify.
         </p>
@@ -113,7 +116,7 @@ function MethodCard({ icon: Icon, title, text, index }) {
 
 function LearningMethods() {
   return (
-    <section id="learning-methods" className="bg-[#f8f9fb] px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
+    <section id="learning-methods" className="bg-[#f8f9fb] px-4 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[1390px]">
         <Heading
           label="How You Learn"
@@ -170,7 +173,7 @@ function CourseGallery() {
   const shown = all ? pictures : pictures.slice(0, FIRST);
 
   return (
-    <section id="course-gallery" className="bg-white px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
+    <section id="course-gallery" className="bg-white px-4 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[1390px]">
         <Heading
           label="Inside Our Classes"
@@ -261,7 +264,7 @@ function VerifyCertificate() {
   const found = result.status === 'found' ? result.data : null;
 
   return (
-    <section id="verify-certificate" className="scroll-mt-[80px] bg-[#f8f9fb] px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
+    <section id="verify-certificate" className="scroll-mt-[80px] bg-[#f8f9fb] px-4 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[1180px]">
         <Heading
           label="Trust & Authenticity"
@@ -353,8 +356,11 @@ function VerifyCertificate() {
 // --------------------------------------------------------------- contact us
 
 function ContactUs() {
+  // The panel's address, email and number — the same rows the footer prints.
+  const contact = contactRows(contactOf(useSite()));
+
   return (
-    <section id="contact" className="scroll-mt-[80px] bg-white px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
+    <section id="contact" className="scroll-mt-[80px] bg-white px-4 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[1180px]">
         <Heading
           label="Get In Touch"

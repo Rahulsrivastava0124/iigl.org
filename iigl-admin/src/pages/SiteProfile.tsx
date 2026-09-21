@@ -36,12 +36,22 @@ const toForm = (p: Profile): Form => ({
 });
 
 /** Which part of a page a screen edits. A branch page is all of it. */
-type Section = 'all' | 'social' | 'gallery';
+type Section = 'all' | 'gallery';
 
+/*
+  There is no 'social' section any more.
+
+  Head office used to edit its three social links here, on a screen of its own,
+  because they are stored beside its banner and gallery. They are company
+  details — the same kind of thing as the company's phone number — so they live
+  in Settings -> Company now, and `/site/social` redirects there.
+
+  A **laboratory** still edits its own on its branch page, which is what the
+  'all' section is: those links are that laboratory's, not the company's.
+*/
 /** The fields each section saves. Only those are sent: the API changes what it is sent. */
 const SAVES: Record<Section, Array<keyof Form>> = {
   all: ['banner', 'content', 'gallery', 'whatsapp', 'facebook', 'instagram'],
-  social: ['whatsapp', 'facebook', 'instagram'],
   gallery: ['gallery'],
 };
 
@@ -88,17 +98,16 @@ export default function SiteProfile({ section = 'all' }: { section?: Section }) 
   };
 
   const title =
-    section === 'social'
-      ? 'Social Media'
-      : section === 'gallery'
-        ? 'Gallery'
-        : labId
-          ? `Website page — ${lab?.fullname ?? 'Laboratory'}`
-          : 'Branch page';
+    section === 'gallery'
+      ? 'Gallery'
+      : labId
+        ? `Website page — ${lab?.fullname ?? 'Laboratory'}`
+        : 'Branch page';
   const shows = (part: Section) => section === 'all' || section === part;
 
-  // Head office has no branch page of its own: its settings are the two screens.
-  if (section === 'all' && !labId && isSuper(user)) return <Navigate to="/site/social" replace />;
+  // Head office has no branch page of its own: its gallery is a screen here and
+  // its social links are in Settings.
+  if (section === 'all' && !labId && isSuper(user)) return <Navigate to="/site/gallery" replace />;
 
   return (
     <Panel title={title}>
@@ -207,7 +216,12 @@ export default function SiteProfile({ section = 'all' }: { section?: Section }) 
               </Box>
             )}
 
-            {shows('social') && (
+            {/*
+              A laboratory's own links, on its branch page. Head office's three
+              are in Settings -> Company — `section` is never 'social' now, so
+              this shows on the branch page and on head office editing one.
+            */}
+            {section === 'all' && (
             <>
             <TextField
               label="WhatsApp number"

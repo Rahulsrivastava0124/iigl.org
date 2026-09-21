@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Award, BarChart3, Clock, MessageCircle, UserPlus, X } from 'lucide-react';
 import logoUrl from '../../../Assets/logo-text.png';
 import { fileUrl, getPublic } from '../../lib/api.js';
+import { getSite } from '../../lib/site.js';
 import EnquiryForm from '../EnquiryForm.jsx';
 import RegistrationForm from '../RegistrationForm.jsx';
 import { cleanHtml } from '../../lib/html.js';
@@ -108,7 +109,7 @@ export default function CoursePage({ id }) {
         if (error.name !== 'AbortError') setStatus('missing');
       });
     // Head office's WhatsApp, for "Ask about this course". None set, no button.
-    getPublic('/public/site', { signal: controller.signal })
+    getSite()
       .then((site) => setWhatsapp(site?.whatsapp ?? null))
       .catch(() => {});
     return () => controller.abort();
@@ -116,7 +117,7 @@ export default function CoursePage({ id }) {
 
   if (status !== 'ready') {
     return (
-      <main className="bg-[#f8f9fb] px-5 py-24 text-center text-[#2c3b64]">
+      <main className="bg-[#f8f9fb] px-4 py-24 text-center text-[#2c3b64]">
         {status === 'loading' ? (
           <p className="m-0 text-[15px] text-[#4a5265]">Loading the course…</p>
         ) : (
@@ -152,7 +153,7 @@ export default function CoursePage({ id }) {
   return (
     <main className="bg-white text-[#2c3b64]">
       {/* ------------------------------------------------------------ header */}
-      <section className="bg-[#f8f9fb] px-5 py-10 sm:px-8 lg:px-12">
+      <section className="bg-[#f8f9fb] px-4 py-10 sm:px-8 lg:px-12">
         <div className="mx-auto max-w-[1180px]">
           <a className="inline-flex items-center gap-2 text-[13px] font-medium text-[#bd7724] hover:underline" href="/#courses">
             <ArrowLeft className="h-4 w-4" /> All courses
@@ -229,7 +230,7 @@ export default function CoursePage({ id }) {
 
       {/* -------------------------------------------------------------- body */}
       {(description || details || syllabus.length > 0) && (
-        <section className="px-5 py-12 sm:px-8 lg:px-12">
+        <section className="px-4 py-12 sm:px-8 lg:px-12">
           <div className="mx-auto grid max-w-[1180px] gap-10 lg:grid-cols-[1.4fr_1fr]">
             <div className="min-w-0">
               {description && (
@@ -272,7 +273,7 @@ export default function CoursePage({ id }) {
       )}
 
       {/* A question about the course, beside what finishing it earns. Registering itself is the modal below. */}
-      <section id="enquire" className="scroll-mt-[80px] bg-[#f8f9fb] px-5 py-12 sm:px-8 lg:px-12">
+      <section id="enquire" className="scroll-mt-[80px] bg-[#f8f9fb] px-4 py-12 sm:px-8 lg:px-12">
         <div className="mx-auto grid max-w-[1180px] items-center gap-8 lg:grid-cols-2">
           <div>
             <SampleCertificate course={title} />

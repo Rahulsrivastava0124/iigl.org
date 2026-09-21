@@ -50,7 +50,7 @@ function ReasonCard({ title, description, icon: Icon }) {
 export default function WhyChooseSection() {
   return (
     <section
-      className="bg-cover bg-center bg-no-repeat px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12"
+      className="bg-cover bg-center bg-no-repeat px-4 py-12 text-[#2c3b64] sm:px-8 lg:px-12"
       style={{ backgroundImage: `url(${whyChooseBg})` }}
     >
       <div className="mx-auto max-w-[1390px]">

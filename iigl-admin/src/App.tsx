@@ -402,15 +402,13 @@ function Routed() {
             </OwnerOnly>
           }
         />
-        {/* Head office's own: its social links and its gallery, each a screen. */}
-        <Route
-          path="/site/social"
-          element={
-            <AdminOnly>
-              <SiteProfile section="social" />
-            </AdminOnly>
-          }
-        />
+        {/*
+          Head office's social links moved to Settings, where the rest of its
+          company details are. The path stays and redirects: it was the sidebar
+          entry for months and is somebody's bookmark.
+        */}
+        <Route path="/site/social" element={<Navigate to="/settings?tab=company" replace />} />
+        {/* Head office's own gallery is still a screen of its own. */}
         <Route
           path="/site/gallery"
           element={

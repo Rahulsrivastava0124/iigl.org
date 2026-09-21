@@ -147,7 +147,7 @@ export default function ReviewsSection({ kind = 'client' }) {
   const reviews = live?.length ? live : copy.builtIn;
 
   return (
-    <section id={copy.id} className="bg-white px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
+    <section id={copy.id} className="bg-white px-4 py-12 text-[#2c3b64] sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[1390px]">
         <div className="mx-auto max-w-[820px] text-center">
           <SectionLabel>{copy.label}</SectionLabel>

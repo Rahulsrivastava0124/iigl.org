@@ -115,7 +115,7 @@ export default function CompanyCertificatesSection() {
   return (
     <section
       id="certificates"
-      className="relative overflow-hidden bg-linear-to-b from-white to-[#fbf8f3] px-5 py-12 text-[#2c3b64] sm:px-8 lg:px-12"
+      className="relative overflow-hidden bg-linear-to-b from-white to-[#fbf8f3] px-4 py-12 text-[#2c3b64] sm:px-8 lg:px-12"
     >
       {/* The handwritten flourish in the corner. Decoration, so hidden from screen readers. */}
       <p

@@ -35,7 +35,7 @@ export default function StatsSection() {
   if (tiles.length === 0) return null;
 
   return (
-    <section className="bg-linear-to-b from-[#0b2a63] to-[#061948] px-5 py-10 text-white sm:px-8 lg:px-12">
+    <section className="bg-linear-to-b from-[#0b2a63] to-[#061948] px-4 py-10 text-white sm:px-8 lg:px-12">
       <dl className="mx-auto grid max-w-[1390px] grid-cols-2 gap-x-6 gap-y-8 md:grid-cols-4">
         {tiles.map(({ key, icon: Icon, label }) => (
           <div
