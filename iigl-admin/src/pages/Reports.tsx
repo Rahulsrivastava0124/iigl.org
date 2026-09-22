@@ -122,10 +122,12 @@ export default function Reports() {
               }}
               width={250}
             />
-            {selected.length > 0 && (
-              <Typography variant="body2" color={selected.length > 50 ? 'error' : 'text.secondary'}>
-                {selected.length} selected
-                {selected.length > 50 && ' — the cap is 50 per print run'}
+            {/* Only the one thing worth saying: that the selection is past the
+                print cap. The plain count read as clutter, "0 selected" most of
+                all. */}
+            {selected.length > 50 && (
+              <Typography variant="body2" color="error">
+                {selected.length} selected — the cap is 50 per print run
               </Typography>
             )}
             <Button

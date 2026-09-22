@@ -5,203 +5,322 @@
 <title><%= kind === 'invoice' ? 'Invoice' : 'Receipt' %> <%= order.order_no %></title>
 <style>
   /*
-    Counter paperwork: the receipt handed over when an order is taken, and the
-    invoice raised when it is settled. Same document, different totals block.
-    A4 so it prints on ordinary office stock.
+    Counter paperwork: the receipt handed over when items are taken in, and the
+    tax invoice raised when the order is settled. The invoice is two pages in one
+    file — the bill, then the certificate-by-certificate report details.
   */
   @page { size: A4 portrait; margin: 14mm; }
-
   * { box-sizing: border-box; }
-
   body {
     margin: 0;
     font-family: "IBM Plex Sans", Arial, sans-serif;
-    font-size: 11pt;
+    font-size: 10.5pt;
     color: #3c4252;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
-  /* Under the letterhead now, which carries the company and its rule: this
-     row is only what the document is, its number and its date. */
-  header {
-    display: flex;
-    justify-content: flex-end;
-    align-items: flex-start;
-    margin-top: 5mm;
-  }
-
+  /* ---------------------------------------------------------------- receipt */
+  header { display: flex; justify-content: flex-end; align-items: flex-start; margin-top: 5mm; }
   .title { text-align: right; }
-  .title h1 {
-    margin: 0;
-    font-size: 15pt;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: #061948;
-  }
+  .title h1 { margin: 0; font-size: 15pt; letter-spacing: 0.06em; text-transform: uppercase; color: #061948; }
   .title .no { margin-top: 2mm; font-size: 10pt; font-weight: 600; }
   .title .date { font-size: 9pt; color: #4a5265; }
-
-  .parties {
-    display: flex;
-    gap: 10mm;
-    margin-top: 6mm;
-  }
+  .parties { display: flex; gap: 10mm; margin-top: 6mm; }
   .party { flex: 1; }
-  .party h2 {
-    margin: 0 0 1.5mm;
-    font-size: 8pt;
-    text-transform: uppercase;
-    letter-spacing: 0.09em;
-    color: #4a5265;
-    font-weight: 500;
-  }
+  .party h2 { margin: 0 0 1.5mm; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.09em; color: #4a5265; font-weight: 500; }
   .party p { margin: 0; line-height: 1.5; }
   .party strong { display: block; font-size: 11.5pt; color: #061948; }
-
   table { width: 100%; border-collapse: collapse; margin-top: 7mm; }
   th, td { padding: 2.5mm 3mm; text-align: left; border-bottom: 1px solid #e6e8ee; }
-  th {
-    background: #f8f9fb;
-    font-size: 8pt;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    color: #4a5265;
-    font-weight: 500;
-  }
+  th { background: #f8f9fb; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.07em; color: #4a5265; font-weight: 500; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-
-  .totals { margin-top: 6mm; margin-left: auto; width: 78mm; }
-  .totals tr td { border: 0; padding: 1.5mm 3mm; }
-  .totals tr td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
-  .totals tr.grand td {
-    border-top: 2px solid #061948;
-    font-weight: 700;
-    font-size: 12pt;
-    color: #061948;
-    padding-top: 2.5mm;
-  }
-  .totals tr.dues td { color: #97293f; font-weight: 600; }
-
-  .note {
-    margin-top: 8mm;
-    padding: 4mm;
-    background: #f8f9fb;
-    border-left: 3px solid #d58a2b;
-    font-size: 9pt;
-  }
-
-  footer {
-    margin-top: 12mm;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    border-top: 1px solid #e6e8ee;
-    padding-top: 4mm;
-    font-size: 8.5pt;
-    color: #4a5265;
-  }
+  .note { margin-top: 8mm; padding: 4mm; background: #f8f9fb; border-left: 3px solid #d58a2b; font-size: 9pt; }
+  footer { margin-top: 12mm; display: flex; justify-content: space-between; align-items: flex-end; border-top: 1px solid #e6e8ee; padding-top: 4mm; font-size: 8.5pt; color: #4a5265; }
   .sign { text-align: center; }
   .sign img { height: 13mm; display: block; margin: 0 auto 1mm; }
   .sign span { border-top: 1px solid #c9cdd8; padding-top: 1mm; display: block; }
+
+  /* ---------------------------------------------------------------- invoice */
+  .inv-page { min-height: 251mm; display: flex; flex-direction: column; }
+  .inv-page + .inv-page { page-break-before: always; }
+
+  .inv-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8mm; }
+  .inv-brand { display: flex; align-items: flex-start; gap: 3mm; max-width: 105mm; }
+  .inv-brand img { height: 15mm; }
+  .inv-brand .co { font-family: "Playfair Display", Georgia, serif; font-size: 13.5pt; font-weight: 700; line-height: 1.15; color: #061948; }
+  .inv-brand .tag { margin-top: 1mm; font-size: 6.6pt; letter-spacing: 0.04em; text-transform: uppercase; color: #6b7285; line-height: 1.5; }
+  .inv-bank { font-size: 8.5pt; line-height: 1.55; text-align: left; min-width: 46mm; }
+  .inv-bank b { color: #061948; }
+  .inv-bank .h { font-weight: 700; color: #061948; margin-bottom: 1mm; }
+
+  .inv-rule { border: 0; border-top: 1px solid #e6e8ee; margin: 4mm 0; }
+
+  .inv-lab { display: flex; justify-content: space-between; gap: 8mm; }
+  .inv-lab .sup { max-width: 95mm; }
+  .inv-lab .lbl { font-size: 7.5pt; letter-spacing: 0.08em; text-transform: uppercase; color: #6b7285; }
+  .inv-lab .sup .nm { margin-top: 1mm; font-weight: 700; color: #061948; line-height: 1.4; }
+  .inv-lab .sup .ad { margin-top: 1.5mm; line-height: 1.5; }
+  .inv-meta { font-size: 8.7pt; line-height: 1.75; white-space: nowrap; }
+  .inv-meta b { color: #061948; display: inline-block; min-width: 20mm; }
+
+  .inv-h1 { text-align: center; font-size: 14pt; letter-spacing: 0.1em; font-weight: 700; color: #1b2440; margin: 7mm 0 5mm; }
+
+  .inv-cust { display: flex; justify-content: space-between; gap: 8mm; }
+  .inv-cust .who .nm { font-weight: 700; color: #061948; font-size: 11.5pt; }
+  .inv-cust .who p { margin: 1mm 0 0; line-height: 1.55; }
+  .inv-cust .ord { font-size: 9.5pt; line-height: 1.85; }
+  .inv-cust .ord b { color: #061948; display: inline-block; min-width: 24mm; }
+
+  table.inv { width: 100%; border-collapse: collapse; margin-top: 6mm; font-size: 9.5pt; }
+  table.inv th { background: transparent; border-bottom: 1px solid #cfd4de; color: #8b93a7; font-weight: 600; font-size: 8pt; letter-spacing: 0.04em; text-transform: uppercase; padding: 2mm 3mm; text-align: left; }
+  table.inv td { border-bottom: 1px solid #eef0f4; padding: 2.6mm 3mm; }
+  table.inv .r { text-align: right; font-variant-numeric: tabular-nums; }
+  table.inv tr.tot td { border-bottom: 1px solid #cfd4de; color: #6b7285; }
+
+  .inv-sum { margin-top: 5mm; margin-left: auto; width: 92mm; }
+  .inv-sum tr td { padding: 2mm 3mm; border-bottom: 1px solid #eef0f4; }
+  .inv-sum tr td:first-child { text-align: right; font-weight: 600; color: #1b2440; }
+  .inv-sum tr td:last-child { text-align: right; font-variant-numeric: tabular-nums; width: 34mm; }
+  .inv-sum tr.grand td { color: #8b93a7; }
+
+  .inv-foot { margin-top: auto; padding-top: 8mm; text-align: center; font-size: 8.5pt; color: #6b7285; }
+
+  .rep-list { display: grid; grid-template-columns: 1fr auto; gap: 6mm; margin-top: 6mm; align-items: start; }
+  .rep-sum td { padding: 1.6mm 4mm; font-size: 10.5pt; }
+  .rep-sum td:first-child { text-align: right; color: #1b2440; }
+  .rep-sum td:nth-child(2) { text-align: center; color: #8b93a7; }
+  .rep-sum td:last-child { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 </style>
 </head>
 <body>
 
-<%- letterhead %>
+<% if (kind === 'invoice') {
+     const gst = totals ? (totals.amount_with_gst - totals.payable_amount) : 0;
+     const smartTotal = reportLines.reduce((n, r) => n + r.smart, 0);
+     const classicTotal = reportLines.reduce((n, r) => n + r.classic, 0);
+     const wt = (v) => (v && Number(v) > 0 ? v : '—');
+%>
 
-<header>
-  <div class="title">
-    <h1><%= kind === 'invoice' ? 'Tax Invoice' : 'Receipt' %></h1>
-    <div class="no"><%= order.order_no %></div>
-    <div class="date"><%= kind === 'invoice' ? (order.delivery_date || order.order_date) : order.order_date %></div>
-  </div>
-</header>
+  <!-- ===================================================== page 1: tax invoice -->
+  <section class="inv-page">
+    <div class="inv-top">
+      <div class="inv-brand">
+        <% if (company.logo) { %><img src="<%= company.logo %>" alt=""><% } %>
+        <div>
+          <div class="co"><%= company.name %></div>
+          <div class="tag">Scientific laboratory for the identification<br>and grading of diamonds and colored stones<br>Educational programs</div>
+        </div>
+      </div>
+      <% if (lab && (lab.bank_name || lab.account_no)) { %>
+        <div class="inv-bank">
+          <div class="h">Bank Details</div>
+          <% if (lab.bank_name) { %><b><%= lab.bank_name %></b><br><% } %>
+          <% if (lab.bank_branch) { %>Branch : <%= lab.bank_branch %><br><% } %>
+          <% if (lab.ifsc_code) { %>IFSC Code : <b><%= lab.ifsc_code %></b><br><% } %>
+          <% if (lab.account_no) { %>Account NO : <b><%= lab.account_no %></b><% } %>
+        </div>
+      <% } %>
+    </div>
 
-<div class="parties">
-  <div class="party">
-    <h2>Issued by</h2>
-    <p>
-      <strong><%= lab ? lab.fullname : 'IIGL' %></strong>
-      <% if (lab && lab.address) { %><%= lab.address %><br><% } %>
-      <% if (lab && lab.city) { %><%= lab.city %><% if (lab.state) { %>, <%= lab.state %><% } %><br><% } %>
-      <% if (lab && lab.mobile) { %><%= lab.mobile %><br><% } %>
-      <% if (lab && lab.gst_no) { %>GST <%= lab.gst_no %><% } %>
-    </p>
-  </div>
-  <div class="party">
-    <h2>Customer</h2>
-    <p>
-      <strong><%= order.customer_name %></strong>
-      <%= order.mobile %><% if (order.alt_mobile) { %> · <%= order.alt_mobile %><% } %><br>
-      <% if (order.email) { %><%= order.email %><br><% } %>
-      <% if (order.address) { %><%= order.address %><br><% } %>
-      <% if (order.gst) { %>GST <%= order.gst %><% } %>
-    </p>
-  </div>
-</div>
+    <hr class="inv-rule">
 
-<table>
-  <thead>
-    <tr>
-      <th>Item</th>
-      <th>Category</th>
-      <th>Cards</th>
-      <th class="num">Quantity</th>
-      <% if (kind === 'invoice') { %><th class="num">Amount</th><% } %>
-    </tr>
-  </thead>
-  <tbody>
-    <% items.forEach(function (it, i) { %>
-      <tr>
-        <td><%= i + 1 %></td>
-        <td><%= it.category_name || ('#' + it.category_id) %></td>
-        <td>
-          <%= [it.smart_card ? 'Smart' : null, it.classic_card ? 'Classic' : null].filter(Boolean).join(' + ') || '—' %>
-        </td>
-        <td class="num"><%= it.qty %></td>
-        <% if (kind === 'invoice') { %><td class="num"><%= it.amount == null ? '—' : money(it.amount) %></td><% } %>
-      </tr>
-    <% }); %>
-  </tbody>
-</table>
+    <div class="inv-lab">
+      <div class="sup">
+        <div class="lbl">Place of supply</div>
+        <div class="nm"><%= (lab && lab.fullname) ? lab.fullname.toUpperCase() : company.name %></div>
+        <div class="ad">
+          <% if (lab && lab.address) { %><%= lab.address %><br><% } %>
+          <% if (lab) { %><%= [lab.city, lab.state, lab.pincode].filter(Boolean).join(' ') %><% } %>
+        </div>
+      </div>
+      <div class="inv-meta">
+        <% if (lab && (lab.office_tel || lab.mobile)) { %><b>Tel No</b>: <%= lab.office_tel || lab.mobile %><br><% } %>
+        <% if (lab && lab.fax) { %><b>Fax No</b>: <%= lab.fax %><br><% } %>
+        <% if (lab && (lab.email || lab.official_email)) { %><b>Email ID</b>: <%= lab.email || lab.official_email %><br><% } %>
+        <% if (lab && lab.pan_no) { %><b>PAN No</b>: <%= lab.pan_no %><br><% } %>
+        <% if (lab && lab.gst_no) { %><b>GST</b>: <%= lab.gst_no %><% } %>
+      </div>
+    </div>
 
-<% if (kind === 'invoice' && totals) { %>
-  <table class="totals">
-    <tr><td>Subtotal</td><td><%= money(totals.total_amount) %></td></tr>
-    <% if (totals.discount) { %><tr><td>Discount</td><td>− <%= money(totals.discount) %></td></tr><% } %>
-    <tr><td>Payable</td><td><%= money(totals.payable_amount) %></td></tr>
-    <tr><td>GST at 18%</td><td><%= money(totals.amount_with_gst - totals.payable_amount) %></td></tr>
-    <tr class="grand"><td>Total</td><td><%= money(totals.amount_with_gst) %></td></tr>
-    <tr><td>Paid</td><td><%= money(totals.paid) %></td></tr>
-    <% if (totals.dues > 0) { %>
-      <tr class="dues"><td>Outstanding</td><td><%= money(totals.dues) %></td></tr>
+    <div class="inv-h1">TAX INVOICE</div>
+
+    <div class="inv-cust">
+      <div class="who">
+        <div class="nm"><%= order.customer_name %></div>
+        <p>
+          <%= order.mobile %><br>
+          GST : <%= order.gst || '' %>
+        </p>
+      </div>
+      <div class="ord">
+        <b>Order No</b> : <%= order.order_no %><br>
+        <b>Order Date</b> : <%= order.order_date %><br>
+        <b>Invoice No</b> : <%= order.order_no %><br>
+        <b>Delivery Date</b> : <%= order.delivery_date || order.order_date %>
+      </div>
+    </div>
+
+    <table class="inv">
+      <thead>
+        <tr>
+          <th>Sr. No.</th>
+          <th>Category Name</th>
+          <th class="r">Qty</th>
+          <th class="r">Total Smart Card</th>
+          <th class="r">Total Classic Card</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% items.forEach(function (it, i) { %>
+          <tr>
+            <td><%= i + 1 %></td>
+            <td><%= it.category_name || ('#' + it.category_id) %></td>
+            <td class="r"><%= it.qty %></td>
+            <td class="r"><%= it.smart_card %></td>
+            <td class="r"><%= it.classic_card %></td>
+          </tr>
+        <% }); %>
+        <tr class="tot">
+          <td colspan="2">TOTAL</td>
+          <td class="r"><%= items.reduce((n, it) => n + Number(it.qty || 0), 0) %></td>
+          <td class="r"><%= items.reduce((n, it) => n + Number(it.smart_card || 0), 0) %></td>
+          <td class="r"><%= items.reduce((n, it) => n + Number(it.classic_card || 0), 0) %></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <% if (totals) { %>
+      <table class="inv-sum">
+        <tr><td>TOTAL AMOUNT</td><td>₹ <%= money(totals.total_amount) %></td></tr>
+        <tr><td>DISCOUNT</td><td>₹ <%= money(totals.discount) %></td></tr>
+        <tr><td>GST(18%)</td><td>₹ <%= money(gst) %></td></tr>
+        <tr class="grand"><td>TOTAL PAYABLE</td><td>₹ <%= money(totals.amount_with_gst) %></td></tr>
+      </table>
     <% } %>
-  </table>
-<% } %>
 
-<div class="note">
-  <% if (kind === 'invoice') { %>
-    Certificates issued against this order remain the property of the customer. Verify any
-    certificate at <%= verifyBase %>/verify-report using its report number.
-  <% } else { %>
+    <div class="inv-foot">This is computer generated invoice. Authorised Signatory is not required.</div>
+  </section>
+
+  <!-- ================================================== page 2: report details -->
+  <section class="inv-page">
+    <div class="inv-h1">REPORT DETAILS</div>
+
+    <table class="inv">
+      <thead>
+        <tr>
+          <th>Report No</th>
+          <th>Description</th>
+          <th class="r">Gross Wt</th>
+          <th class="r">Carat Wt</th>
+          <th class="r">Smart Card<br>Charge</th>
+          <th class="r">Classic Card<br>Charge</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% reportLines.forEach(function (r) { %>
+          <tr>
+            <td><%= r.report_no %></td>
+            <td><%= r.description %></td>
+            <td class="r"><%= wt(r.gross_weight) %></td>
+            <td class="r"><%= wt(r.carat_weight) %></td>
+            <td class="r"><%= r.smart ? money(r.smart) : '—' %></td>
+            <td class="r"><%= r.classic ? money(r.classic) : 'N/A' %></td>
+          </tr>
+        <% }); %>
+        <tr class="tot">
+          <td colspan="4" class="r">TOTAL</td>
+          <td class="r"><%= smartTotal ? money(smartTotal) : '—' %></td>
+          <td class="r"><%= classicTotal ? money(classicTotal) : '0' %></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <% if (totals) { %>
+      <div class="rep-list">
+        <div></div>
+        <table class="rep-sum">
+          <tr><td>Total Amount</td><td>:</td><td>₹ <%= money(totals.total_amount) %></td></tr>
+          <tr><td>Discount</td><td>:</td><td>₹ <%= money(totals.discount) %></td></tr>
+          <tr><td>GST(18%)</td><td>:</td><td>₹ <%= money(gst) %></td></tr>
+          <tr><td>Gross Amount</td><td>:</td><td>₹ <%= money(totals.amount_with_gst) %></td></tr>
+        </table>
+      </div>
+    <% } %>
+
+    <div class="inv-foot" style="margin-top:60mm">This is computer generated invoice. Authorised Signatory is not required.</div>
+  </section>
+
+<% } else { %>
+
+  <%- letterhead %>
+
+  <header>
+    <div class="title">
+      <h1>Receipt</h1>
+      <div class="no"><%= order.order_no %></div>
+      <div class="date"><%= order.order_date %></div>
+    </div>
+  </header>
+
+  <div class="parties">
+    <div class="party">
+      <h2>Issued by</h2>
+      <p>
+        <strong><%= lab ? lab.fullname : 'IIGL' %></strong>
+        <% if (lab && lab.address) { %><%= lab.address %><br><% } %>
+        <% if (lab && lab.city) { %><%= lab.city %><% if (lab.state) { %>, <%= lab.state %><% } %><br><% } %>
+        <% if (lab && lab.mobile) { %><%= lab.mobile %><br><% } %>
+        <% if (lab && lab.gst_no) { %>GST <%= lab.gst_no %><% } %>
+      </p>
+    </div>
+    <div class="party">
+      <h2>Customer</h2>
+      <p>
+        <strong><%= order.customer_name %></strong>
+        <%= order.mobile %><% if (order.alt_mobile) { %> · <%= order.alt_mobile %><% } %><br>
+        <% if (order.address) { %><%= order.address %><br><% } %>
+        <% if (order.gst) { %>GST <%= order.gst %><% } %>
+      </p>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Item</th>
+        <th>Category</th>
+        <th>Cards</th>
+        <th class="num">Quantity</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% items.forEach(function (it, i) { %>
+        <tr>
+          <td><%= i + 1 %></td>
+          <td><%= it.category_name || ('#' + it.category_id) %></td>
+          <td><%= [it.smart_card ? 'Smart' : null, it.classic_card ? 'Classic' : null].filter(Boolean).join(' + ') || '—' %></td>
+          <td class="num"><%= it.qty %></td>
+        </tr>
+      <% }); %>
+    </tbody>
+  </table>
+
+  <div class="note">
     This receipt acknowledges the items listed above have been received for testing. It is not a
     bill. An invoice follows when the order is collected.
     <% if (order.dues_date) { %> Expected ready by <%= order.dues_date %>.<% } %>
-  <% } %>
-</div>
+  </div>
 
-<footer>
-  <div>
-    <% if (kind === 'invoice' && order.pay_mode) { %>
-      Paid by <%= order.pay_mode %><% if (order.transaction_no) { %>, reference <%= order.transaction_no %><% } %>.
-    <% } %>
-  </div>
-  <div class="sign">
-    <% if (signature) { %><img src="<%= signature %>" alt=""><% } %>
-    <span>For <%= lab ? lab.fullname : 'IIGL' %></span>
-  </div>
-</footer>
+  <footer>
+    <div></div>
+    <div class="sign">
+      <% if (signature) { %><img src="<%= signature %>" alt=""><% } %>
+      <span>For <%= lab ? lab.fullname : 'IIGL' %></span>
+    </div>
+  </footer>
+
+<% } %>
 
 </body>
 </html>

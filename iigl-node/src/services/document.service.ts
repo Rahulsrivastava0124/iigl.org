@@ -31,6 +31,23 @@ const TEMPLATE = path.resolve(
   '../templates/order-document.ejs',
 );
 
+/** The receipt, laid out as the Laravel one printed. The invoice keeps TEMPLATE. */
+const RECEIPT_TEMPLATE = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../templates/order-receipt.ejs',
+);
+
+/** `03/09/2026` — the Laravel receipt's `date('d/m/Y')`, without a time-zone shift. */
+const dmy = (v: Date | string | null | undefined) => {
+  if (!v) return '';
+  if (v instanceof Date) {
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${p(v.getDate())}/${p(v.getMonth() + 1)}/${v.getFullYear()}`;
+  }
+  const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(v);
+};
+
 export type DocumentKind = 'receipt' | 'invoice';
 
 const money = (v: number | string | null | undefined) =>
@@ -49,13 +66,46 @@ export async function orderDocumentHtml(orderId: number, kind: DocumentKind): Pr
     db.selectFrom('order_details').selectAll().where('order_id', '=', orderId).execute(),
     db
       .selectFrom('users')
-      .select(['id', 'fullname', 'address', 'city', 'state', 'mobile', 'gst_no', 'signature'])
+      .select([
+        'id', 'fullname', 'address', 'city', 'state', 'pincode', 'mobile', 'gst_no', 'signature',
+        // The receipt's header line: address · city · state · country · pincode,
+        // and both numbers after Tel.
+        'country', 'alt_mobile',
+        // The laboratory block on the invoice: its own contacts, PAN and bank.
+        'office_tel', 'fax', 'email', 'official_email', 'pan_no',
+        'bank_name', 'bank_branch', 'ifsc_code', 'account_no', 'account_holder',
+      ])
       .where('id', '=', Number(order.lab_id))
       .executeTakeFirst(),
     db.selectFrom('categories').select(['id', 'name']).execute(),
   ]);
 
   const categoryName = new Map(categories.map((c) => [Number(c.id), c.name]));
+
+  /*
+    The receipt: what was taken in, and the terms it was taken in on, laid out
+    as the Laravel receipt printed. No prices — nothing is priced until the
+    certificates exist — so none of the invoice's work below is needed.
+  */
+  if (kind === 'receipt') {
+    return ejs.renderFile(
+      RECEIPT_TEMPLATE,
+      {
+        order,
+        lab,
+        // The wide IIGL lockup — round mark, rule, two-line name — which is the
+        // old receipt's `public/card-logo.png`, as the certificate cards use it.
+        logo: await asDataUri('public/card-logo.png'),
+        receiptDate: dmy(order.created_at as Date | string | null),
+        totalQty: items.reduce((n, it) => n + (Number(it.qty) || 0), 0),
+        items: items.map((it) => ({
+          ...it,
+          category_name: categoryName.get(Number(it.category_id)) ?? null,
+        })),
+      },
+      { async: true },
+    );
+  }
 
   // Priced only for an invoice: a receipt is raised before any certificate
   // exists, so every line would read zero and imply the work is free.
@@ -68,16 +118,27 @@ export async function orderDocumentHtml(orderId: number, kind: DocumentKind): Pr
     dues: number;
   } | null = null;
   const amountByItem = new Map<number, number>();
+  // The second page of the invoice: one row per certificate on the order.
+  let reportLines: {
+    report_no: string;
+    description: string;
+    gross_weight: string | null;
+    carat_weight: string | null;
+    smart: number;
+    classic: number;
+  }[] = [];
 
   if (kind === 'invoice') {
     const quote = await quoteOrder(orderId, Number(order.discount ?? 0));
     const detailOf = new Map<number, number>();
+    const certByReport = new Map(quote.certificates.map((c) => [c.report_id, c]));
     for (const c of quote.certificates) detailOf.set(c.report_id, c.line_total);
 
-    // Group certificate totals back onto the order line each belongs to.
+    // Group certificate totals back onto the order line each belongs to, and
+    // carry each certificate's own row for the Report Details page.
     const reports = await db
       .selectFrom('reports')
-      .select(['id', 'order_detail_id'])
+      .select(['id', 'order_detail_id', 'report_no', 'gross_weight', 'carat_weight', 'comments'])
       .where(
         'order_detail_id',
         'in',
@@ -91,6 +152,18 @@ export async function orderDocumentHtml(orderId: number, kind: DocumentKind): Pr
       const key = Number(r.order_detail_id);
       amountByItem.set(key, (amountByItem.get(key) ?? 0) + line);
     }
+
+    reportLines = reports.map((r) => {
+      const c = certByReport.get(Number(r.id));
+      return {
+        report_no: r.report_no,
+        description: r.comments ?? '',
+        gross_weight: r.gross_weight,
+        carat_weight: r.carat_weight,
+        smart: Number(c?.smart_price ?? 0),
+        classic: Number(c?.classic_price ?? 0),
+      };
+    });
 
     totals = {
       total_amount: quote.total_amount,
@@ -106,9 +179,11 @@ export async function orderDocumentHtml(orderId: number, kind: DocumentKind): Pr
     };
   }
 
-  const [signature, letterhead] = await Promise.all([
+  const [signature, letterhead, companyName, companyLogo] = await Promise.all([
     asDataUri(lab?.signature ?? null),
     letterheadHtml(),
+    setting('company.name'),
+    brandMark(),
   ]);
 
   return ejs.renderFile(
@@ -120,6 +195,8 @@ export async function orderDocumentHtml(orderId: number, kind: DocumentKind): Pr
       signature,
       letterhead,
       totals,
+      reportLines,
+      company: { name: companyName || 'Institute of International Gemological Laboratory', logo: companyLogo },
       money,
       verifyBase: env.publicSiteUrl,
       items: items.map((it) => ({

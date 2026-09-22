@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Award, Building2, ChevronLeft, ChevronRight, Handshake, Settings, ShieldCheck } from 'lucide-react';
+import { Award, Building2, ChevronLeft, ChevronRight, Handshake, Settings, ShieldCheck } from 'lucide-react';
 import SectionLabel from '../SectionLabel.jsx';
 import { fileUrl, usePublic } from '../../lib/api.js';
 
@@ -28,7 +28,7 @@ function CertificateCard({ certificate, inRow }) {
   const src = fileUrl(certificate.image);
   return (
     <article
-      className={`flex flex-col rounded-xl border border-[#e6e8ee] bg-white p-3 shadow-[0_15px_38px_rgba(44,59,100,0.08)] ${
+      className={`flex flex-col rounded-xl border border-[#e6e8ee] bg-white p-1.5 shadow-[0_15px_38px_rgba(44,59,100,0.08)] ${
         inRow ? 'shrink-0 snap-start basis-full sm:basis-[calc((100%-20px)/2)] lg:basis-[calc((100%-40px)/3)]' : ''
       }`}
     >
@@ -194,41 +194,6 @@ export default function CompanyCertificatesSection() {
           </div>
         )}
 
-        {/* ------------------------------------------ the foot: promise, button, words */}
-        <div className="mt-8 grid items-center gap-6 md:grid-cols-[1fr_auto_1fr]">
-          <div className="flex items-center gap-4">
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#fdf7ef] text-[#061948]">
-              <ShieldCheck aria-hidden className="h-7 w-7" strokeWidth={1.6} />
-            </span>
-            <span aria-hidden className="h-10 w-px shrink-0 bg-[#e6e8ee]" />
-            <div>
-              <p className="m-0 text-[16px] font-medium text-[#061948]">Trusted. Certified. Committed.</p>
-              <p className="m-0 mt-1 text-[14px] text-[#4a5265]">Setting higher standards in gem and jewellery certification.</p>
-            </div>
-          </div>
-
-          <div className="flex justify-center">
-            {(pages > 1 || showAll) && (
-              <button
-                type="button"
-                onClick={() => setShowAll((v) => !v)}
-                className="group inline-flex h-[52px] items-center gap-3 rounded-lg bg-linear-to-b from-[#df9d3d] to-[#bd7724] px-10 text-[16px] font-medium text-white shadow-[0_10px_22px_rgba(189,119,36,0.28)] transition-opacity hover:opacity-95"
-              >
-                {showAll ? 'Show Less' : 'View All Certificates'}
-                <ArrowRight
-                  aria-hidden
-                  className={`h-5 w-5 transition-transform group-hover:translate-x-1 ${showAll ? 'rotate-180' : ''}`}
-                  strokeWidth={2}
-                />
-              </button>
-            )}
-          </div>
-
-          <p className="m-0 hidden justify-self-end border-l border-[#d58a2b]/40 pl-5 text-[16px] font-medium leading-[1.6] text-[#bd7724] md:block">
-            Knowledge · Integrity
-            <br />A Brighter Tomorrow
-          </p>
-        </div>
       </div>
     </section>
   );

@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>receipt-no<%= order.order_no %></title>
+<%
+/*
+  The receipt handed over when items are taken in for testing.
+
+  Reproduces the Laravel receipt (resources/views/common/order/receiptprint
+  .blade.php) as it printed: the laboratory's own header, the customer and
+  receipt particulars between two rules, the items, and the testing terms.
+
+  The markup keeps the old class names and the CSS below is the part of
+  Bootstrap 5.0-beta1, the admin theme's app.css and the page's own <style>
+  that the page actually used, in the same order — so the cascade, and the
+  borders it produces on the item table, come out as they did. The one change
+  is background fills: the grey table cells and the tinted notice were never on
+  the paper (a browser leaves backgrounds off when printing), and the PDF here
+  is rendered with backgrounds on, so they are left out rather than added.
+*/
+const t = (x) => (x == null ? '' : String(x).trim());
+const ucwords = (s) => t(s).replace(/(^|\s)(\S)/g, (_, sp, ch) => sp + ch.toUpperCase());
+%>
+<style>
+  @page { size: A4 portrait; margin: 10mm; }
+
+  /* ---- Bootstrap 5.0-beta1: reboot */
+  *, ::before, ::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.5;
+    color: #4c5258;
+    letter-spacing: .5px;
+    background-color: #fff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  h3 { margin-top: 0; margin-bottom: .5rem; font-weight: 500; line-height: 1.2; color: #32393f; font-size: calc(1.3rem + .6vw); }
+  a { color: #008cff; text-decoration: none; }
+  img { vertical-align: middle; }
+  table { caption-side: bottom; border-collapse: collapse; }
+  th { text-align: inherit; text-align: -webkit-match-parent; }
+  tbody, td, tfoot, th, thead, tr { border-color: inherit; border-style: solid; border-width: 0; }
+
+  /* ---- Bootstrap: grid and utilities */
+  .row {
+    --bs-gutter-x: 1.5rem;
+    --bs-gutter-y: 0;
+    display: flex;
+    flex-wrap: wrap;
+    margin-top: calc(var(--bs-gutter-y) * -1);
+    margin-right: calc(var(--bs-gutter-x) / -2);
+    margin-left: calc(var(--bs-gutter-x) / -2);
+  }
+  .row > * {
+    flex-shrink: 0;
+    width: 100%;
+    max-width: 100%;
+    padding-right: calc(var(--bs-gutter-x) / 2);
+    padding-left: calc(var(--bs-gutter-x) / 2);
+    margin-top: var(--bs-gutter-y);
+  }
+  .col { flex: 1 0 0%; }
+  .col-4 { flex: 0 0 auto; width: 33.3333333333%; }
+  .col-5 { flex: 0 0 auto; width: 41.6666666667%; }
+  .col-7 { flex: 0 0 auto; width: 58.3333333333%; }
+  .col-8 { flex: 0 0 auto; width: 66.6666666667%; }
+  .float-end { float: right !important; }
+  .text-end { text-align: right !important; }
+  .mb-1 { margin-bottom: .25rem !important; }
+  .p-0 { padding: 0 !important; }
+
+  /* ---- Bootstrap: tables */
+  .table { width: 100%; margin-bottom: 1rem; color: #212529; vertical-align: top; border-color: #dee2e6; }
+  .table > :not(caption) > * > * { padding: .5rem .5rem; border-bottom-width: 1px; }
+  .table > tbody { vertical-align: inherit; }
+  .table > thead { vertical-align: bottom; }
+  .table > :not(:last-child) > :last-child > * { border-bottom-color: currentColor; }
+  .table-bordered > :not(caption) > * { border-width: 1px 0; }
+  .table-bordered > :not(caption) > * > * { border-width: 0 1px; }
+
+  /* ---- app.css: the invoice layout (print size) */
+  .invoice { position: relative; background-color: #fff; padding: 15px; font-size: 11px; }
+  .invoice header { padding: 10px 0; margin-bottom: 20px; border-bottom: 1px solid #008cff; }
+  .invoice .company-details { text-align: right; }
+  .invoice .company-details .name { margin-top: 0; margin-bottom: 0; }
+  .invoice .contacts { margin-bottom: 20px; }
+  .invoice .invoice-to { text-align: left; }
+  .invoice .invoice-details { text-align: right; }
+  .invoice main { padding-bottom: 50px; }
+  .invoice main .notices { padding-left: 6px; border-left: 6px solid #008cff; padding: 10px; font-size: 12px; }
+  .invoice main .notices .notice { font-size: 13px; }
+  .invoice table { width: 100%; border-collapse: collapse; border-spacing: 0; margin-bottom: 20px; }
+  .invoice table td, .invoice table th { padding: 15px; border-bottom: 1px solid #fff; }
+  .invoice table th { white-space: nowrap; font-weight: 400; font-size: 16px; }
+  .invoice table tbody tr:last-child td { border: none; }
+  .invoice table tfoot td {
+    border-bottom: none;
+    white-space: nowrap;
+    text-align: right;
+    padding: 10px 20px;
+    font-size: 1.2em;
+    border-top: 1px solid #aaa;
+  }
+  .invoice table tfoot tr:first-child td { border-top: none; }
+  .invoice table tfoot tr td:first-child { border: none; }
+
+  /* ---- the receipt page's own <style> */
+  .contacts { border-top: 1px solid #333; border-bottom: 1px solid #333; padding: 5px 0; margin-bottom: 5px !important; }
+  table th, table td { font-size: 14px !important; padding: 5px !important; }
+  .notice { font-size: 8px !important; }
+  .text-gray-light { font-weight: bold !important; }
+  /* The label never breaks. In Roboto "Customer's Name" just fits its column
+     and only the floated colon drops to the next line, as the printed receipt
+     shows; in a wider fallback face the words themselves would split instead. */
+  .invoice-to .text-gray-light { white-space: nowrap; }
+
+  /* Alignment. The particulars' two rules ran 12px past the item table on
+     each side (a Bootstrap row's negative gutter); held to the column, they
+     now start and end where the table does, with the text still on its edge. */
+  .contacts { margin-left: 0; margin-right: 0; }
+  .contacts > .col { padding-left: 0; padding-right: 0; }
+  /* A label column wide enough for "Customer's Name" and its colon on one line. */
+  .invoice-to .col-4 { width: 38%; }
+  .invoice-to .col-8 { width: 62%; }
+
+  /* The terms sit at the foot of the page, not wherever the items end. */
+  .invoice main .notices.foot { position: fixed; left: 15px; right: 15px; bottom: 0; margin-top: 0 !important; }
+  .invoice main { padding-bottom: 150px; }
+  .company-details div { font-weight: 500 !important; }
+</style>
+</head>
+<body>
+<div id="invoice">
+  <div class="invoice">
+    <div style="min-width: 600px">
+      <header class="p-0" style="border:none; margin-bottom:14px">
+        <div class="row">
+          <div class="col">
+            <% if (logo) { %><img src="<%= logo %>" style="height:60px" alt=""><% } %>
+          </div>
+          <div class="col company-details">
+            <h3 class="name"><a style="color:#131c4e"><%= lab ? lab.fullname : 'IIGL' %></a></h3>
+            <div><%= lab ? t(lab.email) : '' %></div>
+            <div><%= lab ? [lab.address, lab.city, lab.state, lab.country, lab.pincode].map(t).filter(Boolean).join(' ') : '' %></div>
+            <div class="row">
+              <div class="col">Tel <span class="float-end">:</span></div>
+              <div class="col"><%= lab ? t(lab.mobile) : '' %> <%= lab && t(lab.alt_mobile) ? '/' + t(lab.alt_mobile) : '' %></div>
+            </div>
+            <div class="row">
+              <div class="col">Fax No <span class="float-end">:</span></div>
+              <div class="col"><%= lab ? t(lab.fax) : '' %></div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <div class="row contacts">
+          <div class="col invoice-to">
+            <div class="row">
+              <div class="col-4"><div class="text-gray-light">Customer's Name <span class="float-end">:</span></div></div>
+              <div class="col-8"><%= ucwords(order.customer_name) %></div>
+            </div>
+            <div class="row">
+              <div class="col-4"><div class="text-gray-light">Contact No <span class="float-end">:</span></div></div>
+              <div class="col-8"><%= t(order.mobile) %> <%= t(order.alt_mobile) ? '/' + t(order.alt_mobile) : '' %> <%= t(order.email) ? ', ' + t(order.email) : '' %></div>
+            </div>
+            <div class="row">
+              <div class="col-4"><div class="text-gray-light">Address <span class="float-end">:</span></div></div>
+              <div class="col-8"><%= t(order.address) %></div>
+            </div>
+            <div class="row">
+              <div class="col-4"><div class="text-gray-light">GSTin <span class="float-end">:</span></div></div>
+              <div class="col-8"><%= t(order.gst) %></div>
+            </div>
+          </div>
+          <div class="col invoice-details">
+            <div class="row">
+              <div class="col-7"><div class="text-gray-light">Receipt No <span class="float-end">:</span></div></div>
+              <div class="col-5"><%= order.order_no %></div>
+            </div>
+            <div class="row">
+              <div class="col-7"><div class="text-gray-light">Date of Receipt<span class="float-end">:</span></div></div>
+              <div class="col-5"><%= receiptDate %></div>
+            </div>
+            <div class="row">
+              <div class="col-7"><div class="text-gray-light">Due Date<span class="float-end">:</span></div></div>
+              <div class="col-5"><%= t(order.dues_date) %></div>
+            </div>
+          </div>
+        </div>
+
+        <table class="table table-bordered">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th class="text-left">ITEM CATEGORY</th>
+              <th class="text-end">QUANTITY</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% items.forEach(function (it, i) { %>
+              <tr>
+                <td><%= i + 1 %></td>
+                <td class="text-left"><%= it.category_name || '' %></td>
+                <td class="text-end"><%= it.qty %></td>
+              </tr>
+            <% }); %>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="2">TOTAL ITEMS</td>
+              <td><%= totalQty %></td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div class="notices foot">
+          <div style="text-transform: uppercase">Important information for testing report:</div>
+          <div class="notice">Demand / mark your name to appear on the CLASSIC / SMART report card We do not provide original or duplicate information while preparing the report.
+            If you want some changes in the item deposited for the report, then from the preparation of the report Notify first otherwise no change is possible after report is prepared.
+            Gems/jewellery deposited for investigation report must be received within 10 days from the date of deposit Otherwise the keeping charges may be Rs.100/- per piece per day.
+            If the item is not delivered within 90 days, there will be no liability of the lab for any missing or damaged.
+            Submission of receipt is mandatory for getting back the deposited item The depositor agrees to provide the goods to any person giving the receipt.
+            Legal documents for finding receipt or simply not presenting the receipt for any reason It will be mandatory to give e.g. FIR /GD /affidavit/company letterhead/ETC Or take suggestions from the lab manager.
+            Reported results are subject to future changes, improvements, modifications/obsolescence
+            The technologies in use of the equipment in the release report may differ due to this.
+            To use IIGL's registration trademark or service mark to shopkeepers Permission will be mandatory.
+            Legal action for misuse of registration trademark or service mark of IIGL possible
+            Our jurisdiction is under the Indian judicial system. All and any matters, disputes or Judicial decision for arbitration is paramount for us.
+            Gemstones are very hard and fragile and can be easily damaged For any damage caused by the process or chemical use during the test  IIGL is not responsible
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</div>
+</body>
+</html>

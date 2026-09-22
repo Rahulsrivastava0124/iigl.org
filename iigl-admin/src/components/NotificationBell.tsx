@@ -159,8 +159,7 @@ export default function NotificationBell() {
         {rows.length === 0 ? (
           <Box sx={{ px: 2, py: 3 }}>
             <Typography variant="body2" color="text.secondary">
-              Nothing is waiting on you. Money sent to you appears here until you have dealt
-              with it. New messages are counted on Messages in the menu.
+              No notifications
             </Typography>
           </Box>
         ) : (
