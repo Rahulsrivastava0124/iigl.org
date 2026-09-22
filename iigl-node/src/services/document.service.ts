@@ -88,6 +88,22 @@ export async function orderDocumentHtml(orderId: number, kind: DocumentKind): Pr
     certificates exist — so none of the invoice's work below is needed.
   */
   if (kind === 'receipt') {
+    /*
+      The receipt's two report columns, as the Laravel receipt carried them and
+      as the order screen counts them (iigl-admin OrderDetail): a line owes its
+      quantity once per card kind it asks for, and a certificate written for
+      that line counts the same way.
+    */
+    const written = new Map<number, number>();
+    for (const r of await db
+      .selectFrom('reports')
+      .select(['order_detail_id'])
+      .where('order_detail_id', 'in', items.length ? items.map((i) => String(i.id)) : ['-1'])
+      .execute()) {
+      const key = Number(r.order_detail_id);
+      written.set(key, (written.get(key) ?? 0) + 1);
+    }
+
     return ejs.renderFile(
       RECEIPT_TEMPLATE,
       {
@@ -98,10 +114,15 @@ export async function orderDocumentHtml(orderId: number, kind: DocumentKind): Pr
         logo: await asDataUri('public/card-logo.png'),
         receiptDate: dmy(order.created_at as Date | string | null),
         totalQty: items.reduce((n, it) => n + (Number(it.qty) || 0), 0),
-        items: items.map((it) => ({
-          ...it,
-          category_name: categoryName.get(Number(it.category_id)) ?? null,
-        })),
+        items: items.map((it) => {
+          const cards = Number(it.smart_card) + Number(it.classic_card);
+          return {
+            ...it,
+            category_name: categoryName.get(Number(it.category_id)) ?? null,
+            reports_owed: Number(it.qty) * cards,
+            reports_written: (written.get(Number(it.id)) ?? 0) * cards,
+          };
+        }),
       },
       { async: true },
     );

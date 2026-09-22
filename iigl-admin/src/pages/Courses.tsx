@@ -1025,11 +1025,11 @@ export default function Courses() {
               <TextField
                 select
                 label="Status"
-                value={status ?? ''}
-                onChange={(e) => go({ status: e.target.value || null, page: 1 })}
-                sx={{ minWidth: 150 }}
+                value={status ?? 'all'}
+                onChange={(e) => go({ status: e.target.value === 'all' ? null : e.target.value, page: 1 })}
+                sx={{ width: 160, flexShrink: 0 }}
               >
-                <MenuItem value="">All</MenuItem>
+                <MenuItem value="all">All</MenuItem>
                 <MenuItem value="upcoming">Upcoming</MenuItem>
                 <MenuItem value="ongoing">Ongoing</MenuItem>
                 <MenuItem value="completed">Completed</MenuItem>
