@@ -22,12 +22,13 @@ import CommissionIcon from '@mui/icons-material/PercentOutlined';
 import PaidIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
 import DuesIcon from '@mui/icons-material/PendingActionsOutlined';
 import { useDebounced, useFetch } from '../lib/useFetch';
-import { api } from '../lib/api';
+import { api, type PageMeta } from '../lib/api';
 import { fileUrl } from '../lib/config';
 import { messageOf, useAuth } from '../lib/auth';
 import { isSuper } from '../lib/portal';
 import { useToast } from '../components/Toast';
 import FilePreview from '../components/FilePreview';
+import DateRangeField from '../components/DateRangeField';
 import { StatementsTable } from '../components/Statements';
 import {
   Notice,
@@ -39,6 +40,7 @@ import {
   Tile,
   money,
   TILE_CELL,
+  Pager,
 } from '../components/ui';
 
 /**
@@ -108,9 +110,12 @@ interface Detail {
   reports: Report[];
   counts: { payments: number; staff: number; reports: number };
   shown: number;
+  report_meta: PageMeta;
 }
 
 const day = (v: string | null | undefined) => (v ? String(v).slice(0, 10) : '—');
+/** A weight only when there is one: a zero reads as "not recorded". */
+const weight = (v: string | null | undefined) => (v && Number(v) > 0 ? v : '—');
 
 export default function LaboratoryView() {
   // Head office's staff may open this page (Laboratories → View) but not change
@@ -133,10 +138,18 @@ export default function LaboratoryView() {
   */
   const [certSearch, setCertSearch] = useState('');
   const certTerm = useDebounced(certSearch).trim();
+  // The Certificates tab pages through the whole history now.
+  const [certPage, setCertPage] = useState(1);
+  const [certPerPage, setCertPerPage] = useState(50);
+  // Certificates issued between these dates, picked on one calendar.
+  const [certFrom, setCertFrom] = useState('');
+  const [certTo, setCertTo] = useState('');
 
-  const source = useFetch<{ data: Detail }>(
-    `/users/laboratories/${id}/detail${certTerm ? `?q=${encodeURIComponent(certTerm)}` : ''}`,
-  );
+  const detailQuery = new URLSearchParams({ page: String(certPage), per_page: String(certPerPage) });
+  if (certTerm) detailQuery.set('q', certTerm);
+  if (certFrom) detailQuery.set('from', certFrom);
+  if (certTo) detailQuery.set('to', certTo);
+  const source = useFetch<{ data: Detail }>(`/users/laboratories/${id}/detail?${detailQuery}`);
   const d = source.data?.data;
   const lab = d?.laboratory;
 
@@ -253,10 +266,11 @@ export default function LaboratoryView() {
         <Box
           sx={{
             mb: 1,
+            pr: 1,
             borderBottom: 1,
             borderColor: 'divider',
             display: 'flex',
-            alignItems: 'flex-end',
+            alignItems: 'center',
             justifyContent: 'space-between',
             gap: 2,
             flexWrap: 'wrap',
@@ -272,14 +286,29 @@ export default function LaboratoryView() {
           {/* Only on the tab it filters. A search box over the payments list
               that searches certificates is a control that lies about itself. */}
           {tab === 'reports' && (
-            <Box sx={{ pb: 1 }}>
+            <Stack direction="row" spacing={1.5} sx={{ py: 1, flexWrap: 'wrap', alignItems: 'center' }}>
               <SearchField
                 placeholder="Certificate number…"
                 value={certSearch}
-                onChange={setCertSearch}
+                onChange={(v) => {
+                  setCertSearch(v);
+                  setCertPage(1);
+                }}
                 width={220}
               />
-            </Box>
+              <DateRangeField
+                label="Issued between"
+                size="small"
+                from={certFrom}
+                to={certTo}
+                onChange={(f, t) => {
+                  setCertFrom(f);
+                  setCertTo(t);
+                  setCertPage(1);
+                }}
+                width={250}
+              />
+            </Stack>
           )}
         </Box>
 
@@ -381,8 +410,11 @@ export default function LaboratoryView() {
                       "pick this row"; this one is the setting itself, and the
                       only thing that says so is the word above it.
                     */}
-                    <TableCell padding="checkbox" sx={{ whiteSpace: 'nowrap' }}>
-                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                    <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                      {/* Label then box, right-aligned, so the header box sits
+                          over the row boxes below it at the column's edge. */}
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'flex-end' }}>
+                        <span>Hidden</span>
                         <Checkbox
                           size="small"
                           // No padding, like the row boxes under it, so the two
@@ -402,7 +434,6 @@ export default function LaboratoryView() {
                             input: { 'aria-label': 'Hide every certificate shown from the public site' },
                           }}
                         />
-                        <span>Hidden</span>
                       </Stack>
                     </TableCell>
                   </TableRow>
@@ -442,13 +473,13 @@ export default function LaboratoryView() {
                       </TableCell>
                       <TableCell className="mono">{r.report_no}</TableCell>
                       <TableCell align="right" className="tabular">
-                        {r.carat_weight || '—'}
+                        {weight(r.carat_weight)}
                       </TableCell>
                       <TableCell align="right" className="tabular">
-                        {r.gross_weight || '—'}
+                        {weight(r.gross_weight)}
                       </TableCell>
                       <TableCell sx={{ whiteSpace: 'nowrap' }}>{day(r.created_at)}</TableCell>
-                      <TableCell padding="checkbox">
+                      <TableCell align="right" sx={{ pr: 2 }}>
                         <Checkbox
                           size="small"
                           sx={{ p: 0 }}
@@ -475,14 +506,34 @@ export default function LaboratoryView() {
               and the more so now that a search runs against all of them while
               only the newest fifty matches come back.
             */}
-            {(d?.counts.reports ?? 0) > (d?.shown ?? 0) && (
-              <Typography variant="body2" sx={{ px: 2, py: 1.5, color: 'text.secondary' }}>
-                Showing the {d?.shown} most recent of{' '}
-                {(d?.counts.reports ?? 0).toLocaleString()}
-                {certTerm ? ' matching' : ''}. Narrow the search, or open the
-                certificate list for the whole history.
+            {/* The whole history, a page at a time — on its own rule the way the
+                Certificates screen's footer is, the count at the far end. */}
+            <Stack
+              direction="row"
+              spacing={1.5}
+              sx={{
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                px: 2,
+                py: 1.25,
+                borderTop: 1,
+                borderColor: 'divider',
+              }}
+            >
+              <Pager
+                meta={d?.report_meta}
+                onPage={setCertPage}
+                onPerPage={(n) => {
+                  setCertPerPage(n);
+                  setCertPage(1);
+                }}
+              />
+              <Typography variant="body2" color="text.secondary" className="tabular">
+                {(d?.counts.reports ?? 0).toLocaleString()} certificate
+                {(d?.counts.reports ?? 0) === 1 ? '' : 's'}
+                {certTerm ? ' matching' : ''}
               </Typography>
-            )}
+            </Stack>
           </>
         )}
 

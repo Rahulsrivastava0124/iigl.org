@@ -45,6 +45,22 @@ reportRoutes.get(
       c = c.where(search);
     }
 
+    // A date range over when the certificate was issued (`created_at`). Either
+    // bound may be given on its own; the `to` day is inclusive to its last second.
+    const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
+    const from = String(req.query.from ?? '').trim();
+    const to = String(req.query.to ?? '').trim();
+    if (from && isDate(from)) {
+      const start = new Date(`${from}T00:00:00`);
+      q = q.where('created_at', '>=', start);
+      c = c.where('created_at', '>=', start);
+    }
+    if (to && isDate(to)) {
+      const end = new Date(`${to}T23:59:59`);
+      q = q.where('created_at', '<=', end);
+      c = c.where('created_at', '<=', end);
+    }
+
     const [rows, count] = await Promise.all([
       q.orderBy('id', 'desc').limit(p.limit).offset(p.offset).execute(),
       c.executeTakeFirstOrThrow(),

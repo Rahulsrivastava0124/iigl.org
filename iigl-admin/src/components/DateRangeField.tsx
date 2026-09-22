@@ -31,12 +31,15 @@ export default function DateRangeField({
   to,
   onChange,
   width = 240,
+  size = 'medium',
 }: {
   label?: string;
   from: string;
   to: string;
   onChange: (from: string, to: string) => void;
   width?: number;
+  /** Match the fields it sits beside — `small` next to a small search box. */
+  size?: 'small' | 'medium';
 }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   /*
@@ -87,6 +90,7 @@ export default function DateRangeField({
       <TextField
         label={label}
         value={text}
+        size={size}
         placeholder="From – To"
         onClick={(e) => open(e.currentTarget)}
         sx={{ width }}

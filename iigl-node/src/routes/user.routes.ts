@@ -348,6 +348,11 @@ userRoutes.get(
   wrap(async (req, res) => {
     const labId = Number(req.params.id);
     const RECENT = 50;
+    // The Certificates tab pages now, rather than showing only the recent cap.
+    // Payments and staff stay capped — they have screens of their own.
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const perPage = Math.min(200, Math.max(1, Number(req.query.per_page) || RECENT));
+    const offset = (page - 1) * perPage;
 
     /*
       A certificate number to look for, or none.
@@ -363,6 +368,14 @@ userRoutes.get(
       *of what*.
     */
     const q = String(req.query.q ?? '').trim();
+
+    // A date range over when the certificate was issued (`created_at`). Applied
+    // to the list and its count alike, so the tab's number matches its rows.
+    const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
+    const fromRaw = String(req.query.from ?? '').trim();
+    const toRaw = String(req.query.to ?? '').trim();
+    const fromDate = isDate(fromRaw) ? new Date(`${fromRaw}T00:00:00`) : null;
+    const toDate = isDate(toRaw) ? new Date(`${toRaw}T23:59:59`) : null;
 
     const lab = await db
       .selectFrom('users')
@@ -463,8 +476,11 @@ userRoutes.get(
         ])
         .where('lab_id', '=', labId)
         .$if(q !== '', (qb) => qb.where('report_no', 'like', `%${q}%`))
+        .$if(fromDate !== null, (qb) => qb.where('created_at', '>=', fromDate!))
+        .$if(toDate !== null, (qb) => qb.where('created_at', '<=', toDate!))
         .orderBy('id', 'desc')
-        .limit(RECENT)
+        .limit(perPage)
+        .offset(offset)
         .execute(),
 
       // The totals, which are not the length of the capped lists above.
@@ -481,6 +497,8 @@ userRoutes.get(
           .select(({ fn }) => fn.countAll<number>().as('n'))
           .where('lab_id', '=', labId)
           .$if(q !== '', (qb) => qb.where('report_no', 'like', `%${q}%`))
+          .$if(fromDate !== null, (qb) => qb.where('created_at', '>=', fromDate!))
+          .$if(toDate !== null, (qb) => qb.where('created_at', '<=', toDate!))
           .executeTakeFirstOrThrow(),
       ]),
     ]);
@@ -502,7 +520,14 @@ userRoutes.get(
           reports: Number(counts[1].n),
         },
         /** How many of each the lists above actually hold. */
-        shown: RECENT,
+        shown: reportRows.length,
+        /** The certificate page's place, for the tab's own pager. */
+        report_meta: {
+          page,
+          per_page: perPage,
+          total: Number(counts[1].n),
+          total_pages: Math.max(1, Math.ceil(Number(counts[1].n) / perPage)),
+        },
       },
     });
   }),

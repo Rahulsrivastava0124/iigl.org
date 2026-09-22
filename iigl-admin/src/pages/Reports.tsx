@@ -13,12 +13,17 @@ import {
 import PrintIcon from '@mui/icons-material/PrintOutlined';
 import { useFetch, useDebounced, useUrlSearch } from '../lib/useFetch';
 import { IconAction, DEFAULT_PER_PAGE, OrderRef, Pager, Panel, RowActions, SearchField, TableFrame } from '../components/ui';
+import DateRangeField from '../components/DateRangeField';
 import type { Paged, Report } from '../lib/api';
 import { apiUrl, fileUrl, printCard } from '../lib/config';
 import FilePreview from '../components/FilePreview';
 import SmartIcon from '@mui/icons-material/CreditCardOutlined';
 import ClassicIcon from '@mui/icons-material/DescriptionOutlined';
 import HeaderCardIcon from '@mui/icons-material/BrandingWatermarkOutlined';
+
+/** A weight only when there is one: a zero gross or carat reads as "not
+ *  recorded", which a dash says and "0.00" does not. */
+const weight = (v?: string | null) => (v && Number(v) > 0 ? v : '—');
 
 export default function Reports() {
   const [page, setPage] = useState(1);
@@ -35,8 +40,15 @@ export default function Reports() {
   const [search, setSearch] = useUrlSearch();
   const term = useDebounced(search);
 
+  // A date range over when the certificate was issued, picked on one calendar
+  // the way the wallet's statement is.
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+
   const query = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (term.trim()) query.set('q', term.trim());
+  if (from) query.set('from', from);
+  if (to) query.set('to', to);
 
   const { data, loading, error } = useFetch<Paged<Report>>(`/reports?${query}`);
   const rows = data?.data ?? [];
@@ -97,10 +109,25 @@ export default function Reports() {
                 setPage(1);
               }}
             />
-            <Typography variant="body2" color={selected.length > 50 ? 'error' : 'text.secondary'}>
-              {selected.length} selected
-              {selected.length > 50 && ' — the cap is 50 per print run'}
-            </Typography>
+            {/* Issued between these dates, on one calendar — the wallet's field. */}
+            <DateRangeField
+              label="Issued between"
+              size="small"
+              from={from}
+              to={to}
+              onChange={(f, t) => {
+                setFrom(f);
+                setTo(t);
+                setPage(1);
+              }}
+              width={250}
+            />
+            {selected.length > 0 && (
+              <Typography variant="body2" color={selected.length > 50 ? 'error' : 'text.secondary'}>
+                {selected.length} selected
+                {selected.length > 50 && ' — the cap is 50 per print run'}
+              </Typography>
+            )}
             <Button
               variant="contained"
               startIcon={<PrintIcon />}
@@ -208,10 +235,10 @@ export default function Reports() {
                     )}
                   </TableCell>
                   <TableCell align="right" className="tabular">
-                    {r.gross_weight}
+                    {weight(r.gross_weight)}
                   </TableCell>
                   <TableCell align="right" className="tabular">
-                    {r.carat_weight}
+                    {weight(r.carat_weight)}
                   </TableCell>
                   <TableCell>{r.created_at?.slice(0, 10) ?? '—'}</TableCell>
                   {/* The cards the order asked for, and only those. Every row
