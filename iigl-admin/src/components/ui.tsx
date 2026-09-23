@@ -1193,7 +1193,8 @@ export function PasswordField({ value, ...props }: TextFieldProps) {
 
 /**
  * How wide a figure card is, everywhere in the panel: a quarter of the row on a
- * wide screen, a half on a tablet, the whole of it on a phone.
+ * wide screen, and a half on a tablet or a phone — two to a row rather than one
+ * stacked full-width column, so the figures read as a grid on a small screen.
  *
  * One width rather than a width per screen. The dashboard set four to a row and
  * the pages built after it settled on three, so the same three figures — billed,
@@ -1202,7 +1203,7 @@ export function PasswordField({ value, ...props }: TextFieldProps) {
  * A row of three quarter-width cards leaves a quarter empty, which is what the
  * dashboard's own rows do wherever a group is not a multiple of four.
  */
-export const TILE_CELL = { xs: 12, sm: 6, md: 3 } as const;
+export const TILE_CELL = { xs: 6, sm: 6, md: 3 } as const;
 
 /**
  * The columns an attachment frame sits in.

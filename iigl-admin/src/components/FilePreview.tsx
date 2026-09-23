@@ -87,15 +87,10 @@ export default function FilePreview({
         )}
       </DialogContent>
 
-      <DialogActions sx={{ justifyContent: 'space-between' }}>
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          className="mono"
-          sx={{ pl: 1, wordBreak: 'break-all' }}
-        >
-          {stored}
-        </Typography>
+      {/* The stored path is a detail of where the file lives, not something the
+          reader needs — it only crowded the footer and wrapped onto its own
+          lines. The buttons keep the row. */}
+      <DialogActions sx={{ justifyContent: 'flex-end' }}>
         <Box sx={{ display: 'flex', gap: 1 }}>
           {url && (
             <Button

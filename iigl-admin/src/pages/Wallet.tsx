@@ -18,6 +18,23 @@ import { LedgerTable, LedgerTotals, type LedgerPage } from '../components/Ledger
 import { payModeLabel } from '../lib/payModes';
 
 /**
+ * A header button that is the icon alone on a phone.
+ *
+ * 40px to match the small fields it sits with, and on `xs` it drops its label
+ * and shrinks to a square — the icon is the whole button — so the header row
+ * does not spend a line on wide, half-empty buttons. The label returns from
+ * `sm` up, where there is room for it.
+ */
+const ICON_ON_PHONE = {
+  whiteSpace: 'nowrap',
+  height: 40,
+  flexShrink: 0,
+  minWidth: { xs: 40, sm: 'auto' },
+  px: { xs: 0, sm: 2 },
+  '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 }, ml: { xs: 0, sm: -0.5 } },
+} as const;
+
+/**
  * The wallet: this account's money, and every movement that made it.
  *
  * Reached from the wallet figures on the dashboard — head office's "Current
@@ -235,6 +252,7 @@ export default function Wallet() {
       <Button
         variant="contained"
         startIcon={<DownloadIcon />}
+        aria-label="Statement"
         onClick={() => {
           const q = new URLSearchParams();
           if (staff) q.set('scope', wallet);
@@ -247,10 +265,21 @@ export default function Wallet() {
           window.open(apiUrl(`/transactions/ledger/statement${qs ? `?${qs}` : ''}`), '_blank', 'noopener');
         }}
         // The same 40px as the small fields beside it, so the row reads as one
-        // strip of controls rather than a button sitting short of them.
-        sx={{ whiteSpace: 'nowrap', height: 40, flexShrink: 0 }}
+        // strip of controls rather than a button sitting short of them. On a
+        // phone it is the icon alone — the label is dropped and the button
+        // shrinks to a square, so the buttons do not take a row to themselves.
+        sx={{
+          whiteSpace: 'nowrap',
+          height: 40,
+          flexShrink: 0,
+          minWidth: { xs: 40, sm: 'auto' },
+          px: { xs: 0, sm: 2 },
+          '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 }, ml: { xs: 0, sm: -0.5 } },
+        }}
       >
-        Statement
+        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+          Statement
+        </Box>
       </Button>
   );
 
@@ -396,19 +425,25 @@ export default function Wallet() {
       <Button
         variant="outlined"
         startIcon={<ExpenseIcon />}
+        aria-label="Add Expense"
         onClick={() => open('expense')}
-        sx={{ whiteSpace: 'nowrap', height: 40 }}
+        sx={ICON_ON_PHONE}
       >
-        Add Expense
+        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+          Add Expense
+        </Box>
       </Button>
       {isStaff && (
         <Button
           variant="outlined"
           startIcon={<SendIcon />}
+          aria-label="Send to Admin"
           onClick={() => open('transfer')}
-          sx={{ whiteSpace: 'nowrap', height: 40 }}
+          sx={ICON_ON_PHONE}
         >
-          Send to Admin
+          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+            Send to Admin
+          </Box>
         </Button>
       )}
     </>
