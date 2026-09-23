@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@mui/material';
 import {
   Box,
+  Link,
   MenuItem,
   Stack,
   Table,
@@ -15,7 +16,7 @@ import {
 } from '@mui/material';
 import { api } from '../lib/api';
 import { messageOf } from '../lib/auth';
-import { DateField, Dialog, Notice, StateChip, TableFrame, type Tone } from './ui';
+import { DateField, Dialog, StateChip, TableFrame, type Tone } from './ui';
 import { useToast } from './Toast';
 
 /**
@@ -440,6 +441,7 @@ export function FollowupDialog({
 export function EnquiryViewDialog({
   book = 'enquiry',
   enquiry,
+  state,
   onClose,
 }: {
   book?: Book;
@@ -456,64 +458,64 @@ export function EnquiryViewDialog({
     remark: string | null;
     created_at: string | null;
   };
+  /** The status as the list colours it; the caller owns that mapping. */
+  state?: { tone: Tone; label: string };
   onClose: () => void;
 }) {
   const { rows, loading } = useFollowups(book, enquiry.id);
 
-  const line = (label: string, value: string | null | undefined) => (
-    <Box sx={{ minWidth: 180 }}>
-      <Typography variant="overline" color="text.secondary" sx={{ display: 'block' }}>
+  const line = (label: string, value: ReactNode) => (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography variant="overline" color="text.secondary" sx={{ display: 'block', lineHeight: 1.8 }}>
         {label}
       </Typography>
-      <Typography sx={{ fontSize: 13.5, whiteSpace: 'pre-wrap' }}>{value || '—'}</Typography>
+      <Typography component="div" sx={{ fontSize: 13.5, overflowWrap: 'anywhere' }}>
+        {value || '—'}
+      </Typography>
     </Box>
   );
 
+  const received = enquiry.created_at ? dayLabel(enquiry.created_at.slice(0, 10)) : null;
+
   return (
-    <Dialog
-      title={enquiry.name}
-      onClose={onClose}
-      onSubmit={onClose}
-      submitLabel="Done"
-      maxWidth="md"
-    >
+    <Dialog title={enquiry.name} onClose={onClose} onSubmit={onClose} submitLabel="Done" maxWidth="md">
       <Stack spacing={2.5}>
-        {enquiry.status === 'new' && rows.length === 0 && (
-          <Notice kind="warn">Nobody has picked this up yet.</Notice>
-        )}
+        {/* Where it stands, in one line: status, then what and when. */}
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
+          <StateChip {...(state ?? { tone: 'plain', label: statusLabel(book, enquiry.status) })} />
+          <Typography sx={{ fontSize: 13.5 }} color="text.secondary">
+            {[enquiry.kind, enquiry.source && `via ${enquiry.source}`, received && `received ${received}`]
+              .filter(Boolean)
+              .join(' · ')}
+          </Typography>
+        </Stack>
 
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, minmax(0, 1fr))' },
+            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
             gap: 2,
           }}
         >
-          {line('Mobile', enquiry.mobile)}
-          {line('Email', enquiry.email)}
-          {line('Kind', enquiry.kind)}
-          {line('Source', enquiry.source)}
-          {line('Received', enquiry.created_at?.slice(0, 10))}
-          {line('Status', statusLabel(book, enquiry.status))}
+          {line('Mobile', enquiry.mobile && <Link href={`tel:${enquiry.mobile}`} underline="hover">{enquiry.mobile}</Link>)}
+          {line('Email', enquiry.email && <Link href={`mailto:${enquiry.email}`} underline="hover">{enquiry.email}</Link>)}
         </Box>
 
-        {(enquiry.subject || enquiry.message) && (
-          <Box>
-            {line('What they asked', enquiry.subject)}
+        {(enquiry.subject || enquiry.message || enquiry.remark) && (
+          <Stack
+            spacing={1.5}
+            sx={{ p: 2, borderRadius: 1, bgcolor: 'action.hover', border: 1, borderColor: 'divider' }}
+          >
+            {enquiry.subject && line('What they asked', enquiry.subject)}
             {enquiry.message && (
-              <Typography sx={{ fontSize: 13.5, mt: 1, whiteSpace: 'pre-wrap' }}>
-                {enquiry.message}
-              </Typography>
+              <Typography sx={{ fontSize: 13.5, whiteSpace: 'pre-wrap' }}>{enquiry.message}</Typography>
             )}
-          </Box>
+            {enquiry.remark && line('Remark', <Box sx={{ whiteSpace: 'pre-wrap' }}>{enquiry.remark}</Box>)}
+          </Stack>
         )}
 
-        {enquiry.remark && line('Remark', enquiry.remark)}
-
         <Box>
-          <Typography sx={{ fontSize: 13.5, fontWeight: 600, mb: 0.5 }}>
-            Follow-up history
-          </Typography>
+          <Typography sx={{ fontSize: 13.5, fontWeight: 600, mb: 1 }}>Follow-up history</Typography>
           <FollowupHistory rows={rows} loading={loading} book={book} />
         </Box>
       </Stack>

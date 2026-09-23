@@ -676,7 +676,13 @@ export default function Enquiries({ fixedKind }: { fixedKind?: Kind } = {}) {
         />
       )}
 
-      {viewing && <EnquiryViewDialog enquiry={viewing} onClose={() => setViewing(null)} />}
+      {viewing && (
+        <EnquiryViewDialog
+          enquiry={{ ...viewing, kind: KIND_LABEL[viewing.kind] ?? viewing.kind }}
+          state={STATE[viewing.status]}
+          onClose={() => setViewing(null)}
+        />
+      )}
 
       <ConfirmDialog
         open={Boolean(deleting)}

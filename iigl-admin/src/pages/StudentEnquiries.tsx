@@ -606,6 +606,7 @@ export default function StudentEnquiries() {
             remark: viewing.remarks,
             created_at: viewing.enquiry_date,
           }}
+          state={STATE[viewing.status]}
           onClose={() => setViewing(null)}
         />
       )}
