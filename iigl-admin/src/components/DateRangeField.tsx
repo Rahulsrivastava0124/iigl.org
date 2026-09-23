@@ -31,14 +31,14 @@ export default function DateRangeField({
   to,
   onChange,
   width = 240,
-  size = 'medium',
+  size = 'small',
 }: {
   label?: string;
   from: string;
   to: string;
   onChange: (from: string, to: string) => void;
   width?: number;
-  /** Match the fields it sits beside — `small` next to a small search box. */
+  /** The theme's `small`, like every other field; `medium` only beside medium ones. */
   size?: 'small' | 'medium';
 }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
