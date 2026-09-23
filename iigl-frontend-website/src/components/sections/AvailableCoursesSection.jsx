@@ -247,7 +247,7 @@ export default function AvailableCoursesSection() {
         <div className="mt-9 flex justify-center">
           <a
             className="inline-flex h-[54px] items-center justify-center gap-4 rounded-lg border border-[#061948] px-8 text-[16px] font-medium leading-none text-[#061948] transition duration-200 hover:bg-[#061948] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#d58a2b]"
-            href="#courses"
+            href="/education"
           >
             <span>View All Courses</span>
             <ArrowRight className="h-[18px] w-[18px]" strokeWidth={1.8} />

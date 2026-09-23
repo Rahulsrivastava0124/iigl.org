@@ -207,7 +207,7 @@ export default function FaqSection() {
           <span aria-hidden className="hidden h-7 w-px bg-[#e6e8ee] sm:block" />
           <a
             className="group inline-flex h-10 w-fit items-center justify-center gap-3 rounded-lg bg-[#061948] px-5 text-[13px] font-medium uppercase leading-none tracking-[0.04em] text-white shadow-[0_12px_20px_rgba(6,25,72,0.14)]"
-            href="#contact"
+            href="/contact-us"
           >
             <span>Contact Us</span>
             <ArrowRight

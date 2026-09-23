@@ -82,7 +82,7 @@ export default function EducationSection() {
 
               <a
                 className="inline-flex shrink-0 flex-col whitespace-nowrap text-[14px] font-medium leading-none text-[#061948] transition duration-200 hover:text-[#bd7724] max-[640px]:text-[13px]"
-                href="/education#courses"
+                href="/education"
               >
                 <span>Explore Courses</span>
               </a>

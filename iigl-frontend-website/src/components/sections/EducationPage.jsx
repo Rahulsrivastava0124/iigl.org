@@ -59,7 +59,7 @@ function Hero() {
         </p>
         <div className="mt-8 flex items-center justify-center gap-3">
           <a
-            href="#courses"
+            href="#learning-methods"
             className="inline-flex h-[50px] items-center whitespace-nowrap rounded-lg bg-linear-to-b from-[#df9d3d] to-[#bd7724] px-7 text-[15px] font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.32)] max-[420px]:px-4 max-[420px]:text-[13px]"
           >
             Explore Courses

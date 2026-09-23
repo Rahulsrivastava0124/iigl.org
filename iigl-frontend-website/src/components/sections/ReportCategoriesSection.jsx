@@ -142,7 +142,7 @@ export default function ReportCategoriesSection() {
 
                 <a
                   className="mt-auto inline-flex h-10 w-[min(100%,195px)] items-center justify-center gap-3 rounded-lg bg-[#061948] px-4 text-[13px] font-medium leading-none text-white transition duration-200 hover:bg-[#10285e] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#d58a2b]"
-                  href="#reports"
+                  href="/verify-report"
                 >
                   <span>Explore Reports</span>
                   <MoveRight size={16} strokeWidth={2} />

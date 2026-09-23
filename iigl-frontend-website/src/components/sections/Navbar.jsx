@@ -106,13 +106,6 @@ export default function Navbar() {
 
       <div className="ml-[32px] flex items-center gap-[24px] max-[1200px]:ml-[24px] max-[1200px]:gap-[18px] max-[900px]:hidden">
         <a
-          className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-[#2c3b64] transition-colors hover:bg-[#f1f3f7] hover:text-[#bd7724]"
-          href="/verify-report"
-          aria-label="Search a report"
-        >
-          <Search size={21} strokeWidth={2.1} />
-        </a>
-        <a
           className="inline-flex h-[38px] min-w-[188px] items-center justify-center gap-2 rounded-full bg-linear-to-b from-[#df9d3d] to-[#bd7724] px-6 text-[13px] font-medium leading-none tracking-normal text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.32)] max-[1200px]:h-[34px] max-[1200px]:min-w-[170px] max-[1200px]:px-[18px] max-[1200px]:text-[12px]"
           href="/verify-report"
         >

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link as RouterLink, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   AppBar,
@@ -24,6 +24,8 @@ import {
   Toolbar,
   Tooltip,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import SearchIcon from '@mui/icons-material/SearchOutlined';
@@ -458,6 +460,22 @@ export default function Shell() {
   const location = useLocation();
 
   const [open, setOpen] = useState(true);
+  /*
+    Phone and tablet: the sidebar is an overlay, not a fixed column.
+
+    A permanent 276px (or even the 76px rail) eats a screen that is only 360
+    wide, so below the desktop breakpoint the same menu is a temporary Drawer
+    the hamburger opens over the page and a tap outside closes. `isDesktop`
+    switches the whole layout; `mobileOpen` is the overlay's own state, and
+    `expanded` is the visual expand used inside the menu — always expanded on
+    mobile, since a rail with no labels is no use in an overlay.
+  */
+  const theme = useTheme();
+  const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
+  const [mobileOpen, setMobileOpen] = useState(false);
+  // Whether the menu shows its labels (the expanded column) rather than the
+  // icon rail. Named apart from a group's own `expanded` state further down.
+  const showLabels = isDesktop ? open : true;
   // The group holding the current page starts open; the rest start closed, so
   // the menu opens at a readable length rather than a wall of entries.
   /**
@@ -549,6 +567,12 @@ export default function Shell() {
 
   const here = `${location.pathname}${location.search}`;
 
+  // On phone and tablet the menu is an overlay, so it closes once it has taken
+  // you somewhere; on desktop it is permanent and nothing to close.
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [here]);
+
   /*
     Unread messages: written to this account and not yet read or answered. The
     count lives on the Messages entry in the sidebar, where the conversation is,
@@ -614,13 +638,18 @@ export default function Shell() {
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
       {/* ------------------------------------------------------------ sidebar */}
       <Drawer
-        variant="permanent"
+        variant={isDesktop ? 'permanent' : 'temporary'}
+        open={isDesktop ? true : mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        ModalProps={{ keepMounted: true }}
         sx={{
-          width: open ? WIDTH : RAIL,
+          // Permanent, the column reserves its own width; as an overlay it
+          // reserves none and lies over the page instead.
+          width: isDesktop ? (open ? WIDTH : RAIL) : 0,
           flexShrink: 0,
           transition: 'width .2s',
           '& .MuiDrawer-paper': {
-            width: open ? WIDTH : RAIL,
+            width: showLabels ? WIDTH : RAIL,
             boxSizing: 'border-box',
             // The menu is a navy panel, so its edge is a darker navy rather
             // than the page's grey divider — a light rule on a dark ground
@@ -637,8 +666,8 @@ export default function Shell() {
         <Toolbar
           sx={{
             // Collapsed, the mark centres on the rail with the icons below it.
-            px: open ? 2.5 : 0,
-            justifyContent: open ? 'flex-start' : 'center',
+            px: showLabels ? 2.5 : 0,
+            justifyContent: showLabels ? 'flex-start' : 'center',
             minHeight: HEADER_H,
             height: HEADER_H,
             // The logo keeps its own white ground: the mark is drawn in navy
@@ -660,7 +689,7 @@ export default function Shell() {
             }}
           >
             <Box component="img" src="/logo.png" alt="IIGL" sx={{ height: 44, flexShrink: 0 }} />
-            {open && (
+            {showLabels && (
               <Typography
                 sx={{ fontWeight: 700, fontSize: 20, lineHeight: 1.15, color: BRAND.navy }}
               >
@@ -739,8 +768,8 @@ export default function Shell() {
                 my: '3px',
                 borderRadius: RADIUS,
                 py: 1.05,
-                px: open ? 1.5 : 0,
-                justifyContent: open ? 'flex-start' : 'center',
+                px: showLabels ? 1.5 : 0,
+                justifyContent: showLabels ? 'flex-start' : 'center',
                 // Not pure white: the resting rows sit back so the one white
                 // row reads as the place you are, rather than as one of ten
                 // things all shouting the same brightness.
@@ -769,19 +798,19 @@ export default function Shell() {
               const rowInside = (
                 <>
                   <ListItemIcon
-                    sx={{ minWidth: open ? 38 : 0, color: 'inherit', justifyContent: 'center' }}
+                    sx={{ minWidth: showLabels ? 38 : 0, color: 'inherit', justifyContent: 'center' }}
                   >
                     {/* Collapsed, the count has nowhere to go but the icon. */}
                     <Badge
                       badgeContent={count}
                       color="success"
-                      invisible={open || count === 0}
+                      invisible={showLabels || count === 0}
                       max={99}
                     >
                       <Icon sx={{ fontSize: 21 }} />
                     </Badge>
                   </ListItemIcon>
-                  {open && (
+                  {showLabels && (
                     <>
                       <ListItemText
                         primary={group.label}
@@ -826,11 +855,11 @@ export default function Shell() {
               return (
                 <Box key={group.label}>
                   <Tooltip
-                    title={open ? '' : group.label}
+                    title={showLabels ? '' : group.label}
                     placement="right"
-                    disableHoverListener={open}
+                    disableHoverListener={showLabels}
                   >
-                    {single || !open ? (
+                    {single || !showLabels ? (
                       <ListItemButton
                         component={NavLink}
                         to={items[0].to}
@@ -859,7 +888,7 @@ export default function Shell() {
                     )}
                   </Tooltip>
 
-                  {!single && open && (
+                  {!single && showLabels && (
                     <Collapse in={expanded} timeout="auto">
                       <List dense disablePadding sx={{ pb: 0.5 }}>
                         {items.map((item) => (
@@ -937,7 +966,11 @@ export default function Shell() {
           }}
         >
           <Toolbar sx={{ gap: 2, minHeight: HEADER_H, height: HEADER_H, px: { xs: 2, md: 3 } }}>
-            <IconButton onClick={() => setOpen((o) => !o)} edge="start" aria-label="Toggle menu">
+            <IconButton
+              onClick={() => (isDesktop ? setOpen((o) => !o) : setMobileOpen((o) => !o))}
+              edge="start"
+              aria-label="Toggle menu"
+            >
               <MenuIcon />
             </IconButton>
 
