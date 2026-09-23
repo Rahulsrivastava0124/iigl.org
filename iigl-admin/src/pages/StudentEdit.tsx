@@ -46,12 +46,13 @@ interface Student {
   remark: string | null;
 }
 
-type Status = 'pending' | 'registered' | 'active';
+type Status = 'pending' | 'registered' | 'active' | 'cancelled';
 
 const STATUSES: Array<{ id: Status; label: string }> = [
   { id: 'pending', label: 'Pending' },
   { id: 'registered', label: 'Registered' },
   { id: 'active', label: 'Active' },
+  { id: 'cancelled', label: 'Cancelled' },
 ];
 
 export default function StudentEdit() {

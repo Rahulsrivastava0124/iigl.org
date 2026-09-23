@@ -48,7 +48,7 @@ export const ENQUIRY_STATUS = [
   'converted',
   'not_interested',
 ] as const;
-export const REGISTRATION_STATUS = ['pending', 'registered', 'active'] as const;
+export const REGISTRATION_STATUS = ['pending', 'registered', 'active', 'cancelled'] as const;
 export const COURSE_STATUS = ['upcoming', 'ongoing', 'completed'] as const;
 
 const text = (v: unknown): string | null => (v == null || v === '' ? null : String(v).trim());

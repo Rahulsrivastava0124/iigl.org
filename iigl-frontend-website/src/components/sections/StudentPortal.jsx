@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, Wallet, Award, User, LogOut, Loader2, CreditCard, FileText } from 'lucide-react';
-import { getStudent, postStudent, studentUrl, fileUrl } from '../../lib/api.js';
-import { payStudentEnrolment } from '../../lib/cashfree.js';
+import { BookOpen, Wallet, Award, User, LogOut, Loader2, CreditCard, FileText, X } from 'lucide-react';
+import { getPublic, getStudent, postStudent, studentUrl, fileUrl } from '../../lib/api.js';
+import { payStudentEnrolment, payStudentRegistration } from '../../lib/cashfree.js';
 
 const rupee = (v) => `₹ ${Number(v ?? 0).toLocaleString('en-IN')}`;
 const date = (v) => (v ? String(v).slice(0, 10) : '—');
@@ -24,6 +24,11 @@ export default function StudentPortal() {
       .catch(() => setStudent(null))
       .finally(() => setChecking(false));
   }, []);
+
+  // Tells the header, which shows the signed-in name, to look again.
+  useEffect(() => {
+    if (!checking) window.dispatchEvent(new Event('iigl:student'));
+  }, [student, checking]);
 
   if (checking) {
     return (
@@ -272,6 +277,9 @@ function Empty({ children }) {
 
 function Courses() {
   const { loading, data, reload } = usePortal('/enrolments');
+  // The course registered for. Until head office enrols the student (or the
+  // fee is paid online) there is no enrolment, only this.
+  const profile = usePortal('/profile');
   // Whether online payment is offered, read once.
   const [pay, setPay] = useState({ enabled: false, mode: 'sandbox' });
   useEffect(() => {
@@ -280,14 +288,151 @@ function Courses() {
       .catch(() => {});
   }, []);
 
-  if (loading) return <Loading />;
-  if (!data?.length) return <Empty>You are not enrolled on any course yet.</Empty>;
+  if (loading || profile.loading) return <Loading />;
+  const reg = profile.data;
+  const unenrolled =
+    reg?.course_name && reg.status !== 'cancelled' && !data?.some((e) => e.course_name === reg.course_name);
+  if (!data?.length && !unenrolled) return <Empty>You are not enrolled on any course yet.</Empty>;
   return (
     <div className="grid gap-3">
+      {unenrolled && (
+        <RegistrationCard
+          reg={reg}
+          payEnabled={pay.enabled}
+          onChange={() => {
+            reload();
+            profile.reload();
+          }}
+        />
+      )}
       {data.map((e) => (
         <CourseCard key={e.id} e={e} payEnabled={pay.enabled} onPaid={reload} />
       ))}
     </div>
+  );
+}
+
+const REG_STATE = {
+  pending: ['Pending', 'bg-[#fdf3e3] text-[#b26a00]', 'Our team will call you to confirm the batch, the fees and admission.'],
+  registered: ['Registered', 'bg-[#eef1f7] text-[#061948]', 'Your batch and fees will appear here once you are enrolled.'],
+  active: ['Active', 'bg-[#e8f5ee] text-[#1a7f4b]', 'Your batch and fees will appear here once you are enrolled.'],
+};
+
+/**
+ * A registration not yet turned into an enrolment: the course, its fee, and the
+ * two things the student can do about it — pay (which enrols them) or cancel.
+ */
+function RegistrationCard({ reg, payEnabled, onChange }) {
+  const [label, tone, next] = REG_STATE[reg.status] ?? [reg.status || 'Pending', 'bg-[#eef1f7] text-[#061948]', REG_STATE.pending[2]];
+  const [course, setCourse] = useState(null);
+  const [busy, setBusy] = useState('');
+  const [confirming, setConfirming] = useState(false);
+  const [note, setNote] = useState('');
+
+  useEffect(() => {
+    getPublic('/public/courses')
+      .then((all) => setCourse((all ?? []).find((c) => String(c.id) === String(reg.course_id)) ?? null))
+      .catch(() => {});
+  }, [reg.course_id]);
+
+  const total = Number(course?.fee_total ?? 0);
+  const facts = [course?.code, course?.level, course?.duration].filter(Boolean);
+
+  const pay = async () => {
+    setBusy('pay');
+    setNote('');
+    try {
+      const outcome = await payStudentRegistration();
+      if (outcome.status === 'paid') onChange();
+      else setNote('Payment not completed. If money was debited it will be confirmed shortly.');
+    } catch (err) {
+      setNote(err.message);
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const cancel = async () => {
+    setBusy('cancel');
+    setNote('');
+    try {
+      await postStudent('/registration/cancel');
+      onChange();
+    } catch (err) {
+      setNote(err.message);
+      setBusy('');
+    }
+  };
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="m-0 text-[17px] font-semibold text-[#061948]">{reg.course_name}</h3>
+          {facts.length > 0 && <p className="m-0 mt-1 text-[13px] text-[#4a5265]">{facts.join(' · ')}</p>}
+          <p className="m-0 mt-1 text-[13px] text-[#4a5265]">
+            Registration No. <span className="font-mono font-medium text-[#061948]">{reg.registration_no}</span> · Registered {date(reg.registration_date)}
+          </p>
+        </div>
+        <span className={`rounded-full px-3 py-1 text-[12px] font-medium capitalize ${tone}`}>{label}</span>
+      </div>
+
+      {total > 0 && (
+        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[13px] text-[#4a5265]">
+          <span>
+            Course fee: <b className="text-[#061948]">{rupee(total)}</b>
+            {total > Number(course.fee) ? ' incl. GST' : ''}
+          </span>
+          <span className="font-medium text-[#b3261e]">Not paid</span>
+        </div>
+      )}
+      <p className="m-0 mt-3 text-[13px] text-[#4a5265]">{next}</p>
+
+      {reg.status === 'pending' && (
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {payEnabled && total > 0 && (
+            <button
+              className="inline-flex items-center gap-2 rounded-lg bg-[#061948] px-3 py-2 text-[13px] font-medium text-white hover:bg-[#0b2a6b] disabled:opacity-60"
+              onClick={pay}
+              disabled={Boolean(busy)}
+            >
+              {busy === 'pay' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+              Pay {rupee(total)}
+            </button>
+          )}
+          {confirming ? (
+            <span className="inline-flex flex-wrap items-center gap-2 text-[13px] text-[#4a5265]">
+              Cancel this registration?
+              <button
+                className="inline-flex items-center gap-2 rounded-lg bg-[#b3261e] px-3 py-2 text-[13px] font-medium text-white hover:bg-[#8f1e18] disabled:opacity-60"
+                onClick={cancel}
+                disabled={Boolean(busy)}
+              >
+                {busy === 'cancel' && <Loader2 className="h-4 w-4 animate-spin" />}
+                Yes, cancel
+              </button>
+              <button
+                className="rounded-lg border border-[#e6e8ee] px-3 py-2 text-[13px] font-medium text-[#061948] hover:border-[#061948]"
+                onClick={() => setConfirming(false)}
+                disabled={Boolean(busy)}
+              >
+                Keep it
+              </button>
+            </span>
+          ) : (
+            <button
+              className="inline-flex items-center gap-2 rounded-lg border border-[#e6e8ee] px-3 py-2 text-[13px] font-medium text-[#b3261e] hover:border-[#b3261e] disabled:opacity-60"
+              onClick={() => setConfirming(true)}
+              disabled={Boolean(busy)}
+            >
+              <X className="h-4 w-4" /> Cancel registration
+            </button>
+          )}
+        </div>
+      )}
+
+      {note && <p className="m-0 mt-3 text-[13px] text-[#4a5265]">{note}</p>}
+    </Card>
   );
 }
 

@@ -86,7 +86,16 @@ export async function registerAndPay(fields, { beforeCheckout, afterCheckout } =
  * with the outcome; `status` is `paid` when it went through.
  */
 export async function payStudentEnrolment(enrolmentId, { beforeCheckout, afterCheckout } = {}) {
-  const started = await postStudent(`/enrolments/${enrolmentId}/pay`);
+  return payStudent(`/enrolments/${enrolmentId}/pay`, { beforeCheckout, afterCheckout });
+}
+
+/** The same, for the course registered for and not yet enrolled on: paying enrols. */
+export function payStudentRegistration(hooks) {
+  return payStudent('/registration/pay', hooks);
+}
+
+async function payStudent(startPath, { beforeCheckout, afterCheckout } = {}) {
+  const started = await postStudent(startPath);
   await loadSdk();
   if (!window.Cashfree) throw new Error('The payment window could not be loaded.');
 

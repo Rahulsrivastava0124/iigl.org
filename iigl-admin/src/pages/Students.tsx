@@ -39,7 +39,7 @@ import {
 import type { Tone } from '../components/ui';
 import type { Paged } from '../lib/api';
 
-type Status = 'pending' | 'registered' | 'active';
+type Status = 'pending' | 'registered' | 'active' | 'cancelled';
 
 /** Stage two: an enquiry that has been converted is a registration. */
 const TABS: Array<{ id: Status | 'all'; label: string }> = [
@@ -47,12 +47,15 @@ const TABS: Array<{ id: Status | 'all'; label: string }> = [
   { id: 'pending', label: 'Pending' },
   { id: 'registered', label: 'Registered' },
   { id: 'active', label: 'Active' },
+  { id: 'cancelled', label: 'Cancelled' },
 ];
 
 const STATE: Record<Status, { tone: Tone; label: string }> = {
   pending: { tone: 'waiting', label: 'Pending' },
   registered: { tone: 'plain', label: 'Registered' },
   active: { tone: 'settled', label: 'Active' },
+  // Withdrawn by the student from the portal.
+  cancelled: { tone: 'refused', label: 'Cancelled' },
 };
 
 interface Student {

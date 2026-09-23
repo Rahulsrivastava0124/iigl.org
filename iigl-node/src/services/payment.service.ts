@@ -291,6 +291,46 @@ export async function startStudentEnrolmentPayment(
   });
 }
 
+/**
+ * A student paying the fee for the course they registered for but are not yet
+ * enrolled on, from the portal. Nothing is written until it is paid: the
+ * enrolment is made when the payment is fulfilled, as a website registration
+ * paid online is.
+ */
+export async function startStudentRegistrationPayment(studentId: number): Promise<StartedPayment> {
+  const s = await db
+    .selectFrom('students')
+    .select(['id', 'name', 'mobile', 'email', 'status', 'course_id'])
+    .where('id', '=', studentId)
+    .executeTakeFirst();
+  if (!s?.course_id || s.status === 'cancelled') throw notFound('No open course registration to pay for.');
+  const enrolled = await db
+    .selectFrom('student_courses')
+    .select('id')
+    .where('student_id', '=', studentId)
+    .where('course_id', '=', s.course_id)
+    .executeTakeFirst();
+  if (enrolled) throw badRequest('You are already enrolled on this course. Pay from its course card.');
+
+  const course = await courseForRegistration(s.course_id);
+  if (course.total < 1) throw badRequest(`${course.name} has no fee to pay online.`);
+
+  return start({
+    purpose: 'enrolment_fee',
+    amount: course.total,
+    payerId: null,
+    createdBy: null,
+    customer: {
+      id: `student_${s.id}`,
+      name: s.name,
+      phone: tenDigits(s.mobile),
+      email: s.email || null,
+    },
+    payload: { student_id: studentId, course_id: course.id, enrol: true, from: 'student_portal' },
+    note: `Course fee: ${course.name} — ${s.name}`,
+  });
+}
+
 /** A student may confirm only a portal fee payment for one of their own enrolments. */
 export async function assertStudentPayment(orderId: string, studentId: number) {
   const row = await db
@@ -299,7 +339,11 @@ export async function assertStudentPayment(orderId: string, studentId: number) {
     .where('order_id', '=', orderId)
     .executeTakeFirst();
   if (!row || row.purpose !== 'enrolment_fee') throw notFound('Payment not found.');
-  const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : (row.payload as { enrolment_id?: number } | null);
+  const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : (row.payload as { enrolment_id?: number; enrol?: boolean; student_id?: number } | null);
+  if (payload?.enrol) {
+    if (Number(payload.student_id) !== studentId) throw notFound('Payment not found.');
+    return;
+  }
   const enrolmentId = Number(payload?.enrolment_id);
   if (!Number.isInteger(enrolmentId)) throw notFound('Payment not found.');
   const own = await db
@@ -364,6 +408,48 @@ export async function confirmPayment(orderId: string): Promise<PaymentOutcome> {
 
   const fresh = await db.selectFrom('payment_orders').selectAll().where('order_id', '=', orderId).executeTakeFirstOrThrow();
   return outcome(fresh);
+}
+
+/**
+ * The enrolment a portal registration payment pays for, made now it is paid —
+ * or the one head office made meanwhile — and the registration made active,
+ * as a registration paid online at the start is.
+ */
+async function enrolRegistered(trx: typeof db, payload: { student_id: number; course_id: number }, amount: number) {
+  const studentId = Number(payload.student_id);
+  const courseId = Number(payload.course_id);
+  await trx.updateTable('students').set({ status: 'active', updated_at: new Date() }).where('id', '=', studentId).execute();
+
+  const existing = await trx
+    .selectFrom('student_courses')
+    .select('id')
+    .where('student_id', '=', studentId)
+    .where('course_id', '=', courseId)
+    .executeTakeFirst();
+  if (existing) return Number(existing.id);
+
+  // Priced as it was when the payment started; the money is already taken, so
+  // a course switched off since still gets its enrolment.
+  const course = await courseForRegistration(courseId).catch(() => ({ fee: amount, gst_percent: 0, gst_amount: 0 }));
+  const now = new Date();
+  const made = await trx
+    .insertInto('student_courses')
+    .values({
+      student_id: studentId,
+      course_id: courseId,
+      fee: String(course.fee),
+      final_fee: String(course.fee),
+      gst_percent: String(course.gst_percent),
+      gst_amount: String(course.gst_amount),
+      fee_paid: '0',
+      status: 'upcoming',
+      remark: null,
+      added_by: null,
+      created_at: now,
+      updated_at: now,
+    })
+    .executeTakeFirstOrThrow();
+  return Number(made.insertId);
 }
 
 /** Makes what was paid for, once. The row lock is what makes "once" true. */
@@ -432,7 +518,8 @@ async function fulfil(orderId: string, payment: { id: string | null; method: str
       };
       mail = { to: details.email, name: details.name, registrationNo: made.registrationNo, course: course.name };
     } else if (row.purpose === 'enrolment_fee') {
-      const enrolmentId = Number(payload?.enrolment_id);
+      let enrolmentId = Number(payload?.enrolment_id);
+      if (payload?.enrol) enrolmentId = await enrolRegistered(trx as unknown as typeof db, payload, amount);
       const current = await trx
         .selectFrom('student_courses')
         .select(['fee_paid', 'final_fee', 'gst_amount', 'remark'])

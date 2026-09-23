@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, Menu, Search, ShieldCheck, UserRound, X } from "lucide-react";
 import logoUrl from "../../../Assets/logo-text.png";
-import { usePublic } from "../../lib/api.js";
+import { getStudent, usePublic } from "../../lib/api.js";
 
 const path = window.location.pathname;
 
@@ -29,6 +29,25 @@ export default function Navbar() {
   const branches = usePublic("/laboratories");
   // The mobile menu, closed until the hamburger is pressed.
   const [open, setOpen] = useState(false);
+
+  // The signed-in student's name in place of "Student Login", cut to ten
+  // letters so a long name cannot push the header over. Asked again whenever
+  // the portal signs somebody in or out.
+  const [student, setStudent] = useState(null);
+  useEffect(() => {
+    const check = () =>
+      getStudent("/me")
+        .then(setStudent)
+        .catch(() => setStudent(null));
+    check();
+    window.addEventListener("iigl:student", check);
+    return () => window.removeEventListener("iigl:student", check);
+  }, []);
+  const account = student?.name
+    ? student.name.length > 10
+      ? `${student.name.slice(0, 10).trimEnd()}…`
+      : student.name
+    : "Student Login";
 
   return (
     <header className="sticky top-0 z-50 flex h-[60px] w-full items-center border-b border-[rgba(18,25,68,0.08)] bg-white px-[34px] shadow-[0_11px_26px_rgba(19,28,58,0.10)] max-[900px]:px-[18px] max-[560px]:h-[58px]">
@@ -117,7 +136,7 @@ export default function Navbar() {
           href="/student"
         >
           <UserRound size={23} strokeWidth={2.1} />
-          <span>Student Login</span>
+          <span title={student?.name}>{account}</span>
         </a>
       </div>
 
@@ -186,7 +205,7 @@ export default function Navbar() {
                 onClick={() => setOpen(false)}
               >
                 <UserRound size={22} strokeWidth={2.1} />
-                <span>Student Login</span>
+                <span title={student?.name}>{account}</span>
               </a>
             </div>
           </nav>

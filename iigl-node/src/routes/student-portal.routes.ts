@@ -17,6 +17,7 @@ import {
   confirmPayment,
   paymentConfig,
   startStudentEnrolmentPayment,
+  startStudentRegistrationPayment,
 } from '../services/payment.service.js';
 
 /**
@@ -187,7 +188,7 @@ studentPortalRoutes.get(
         's.id', 's.name', 's.registration_no', 's.registration_date', 's.email', 's.mobile',
         's.alt_mobile', 's.father_name', 's.gender', 's.dob', 's.address', 's.city', 's.state',
         's.pincode', 's.photo', 's.id_proof', 's.qualification_doc', 's.extra_doc', 's.status',
-        'c.name as course_name',
+        's.course_id', 'c.name as course_name',
       ])
       .where('s.id', '=', me(req).id)
       .executeTakeFirst();
@@ -300,6 +301,40 @@ studentPortalRoutes.post(
     const amount = amountRaw === undefined || amountRaw === null || amountRaw === '' ? null : Number(amountRaw);
     const started = await startStudentEnrolmentPayment(me(req).id, enrolmentId, amount);
     res.status(201).json({ data: started });
+  }),
+);
+
+/**
+ * Start paying the fee for the course the student registered for but is not
+ * yet enrolled on. Confirmed through the same `/payments/:orderId/confirm`.
+ */
+studentPortalRoutes.post(
+  '/registration/pay',
+  requireStudent,
+  wrap(async (req, res) => {
+    res.status(201).json({ data: await startStudentRegistrationPayment(me(req).id) });
+  }),
+);
+
+/**
+ * The student withdrawing their own registration. Only while it is pending and
+ * nothing has been enrolled or paid on it: after that it is head office's call.
+ */
+studentPortalRoutes.post(
+  '/registration/cancel',
+  requireStudent,
+  wrap(async (req, res) => {
+    const id = me(req).id;
+    const enrolled = await db.selectFrom('student_courses').select('id').where('student_id', '=', id).executeTakeFirst();
+    if (enrolled) throw badRequest('You are already enrolled. Please contact the institute to cancel.');
+    const done = await db
+      .updateTable('students')
+      .set({ status: 'cancelled', updated_at: new Date() })
+      .where('id', '=', id)
+      .where('status', '=', 'pending')
+      .executeTakeFirst();
+    if (!Number(done.numUpdatedRows)) throw badRequest('Only a pending registration can be cancelled here. Please contact the institute.');
+    res.json({ data: { status: 'cancelled' } });
   }),
 );
 
