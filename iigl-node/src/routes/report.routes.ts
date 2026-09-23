@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { sql } from 'kysely';
 import { db } from '../db/index.js';
 import { wrap } from '../lib/async.js';
 import { requirePermission } from '../services/permission.service.js';
@@ -28,9 +29,19 @@ reportRoutes.get(
     let q = db.selectFrom('reports').selectAll();
     let c = db.selectFrom('reports').select(db.fn.countAll().as('n'));
 
-    if (req.user.roleId !== ROLE.SUPER) {
+    /*
+      Who sees which certificates: head office every one, a laboratory its own
+      whole list, and a member of its staff only the certificates they wrote
+      themselves — `user_id` is the person who raised it.
+    */
+    if (req.user.roleId === ROLE.SUPER) {
+      // Every certificate.
+    } else if (req.user.roleId === ROLE.LAB) {
       q = q.where('lab_id', '=', req.user.labId);
       c = c.where('lab_id', '=', req.user.labId);
+    } else {
+      q = q.where('user_id', '=', req.user.id);
+      c = c.where('user_id', '=', req.user.id);
     }
     if (orderId) {
       q = q.where('order_no', '=', orderId);
@@ -59,6 +70,26 @@ reportRoutes.get(
       const end = new Date(`${to}T23:59:59`);
       q = q.where('created_at', '<=', end);
       c = c.where('created_at', '<=', end);
+    }
+
+    // Who wrote it: one creator, by id. Head office and a laboratory may narrow
+    // to a person; a staff member is already narrowed to themselves above.
+    const createdBy = Number(req.query.created_by);
+    if (Number.isInteger(createdBy) && createdBy > 0) {
+      q = q.where('user_id', '=', createdBy);
+      c = c.where('user_id', '=', createdBy);
+    }
+
+    // The card the order line asked for. Filtered through the line, since the
+    // kind lives there, not on the certificate.
+    const card = String(req.query.card ?? '').trim().toLowerCase();
+    if (card === 'smart' || card === 'classic') {
+      // `order_detail_id` is a string, the line id a number, so the join is a
+      // raw `IN` MySQL coerces rather than a typed subquery it will not.
+      const col = card === 'smart' ? 'smart_card' : 'classic_card';
+      const cond = sql<boolean>`reports.order_detail_id IN (SELECT id FROM order_details WHERE ${sql.ref(col)} = 1)`;
+      q = q.where(cond);
+      c = c.where(cond);
     }
 
     const [rows, count] = await Promise.all([
@@ -102,6 +133,21 @@ reportRoutes.get(
       : [];
     const kindOf = new Map(lines.map((l) => [Number(l.id), l]));
 
+    // The item's name (its subcategory) and who wrote the certificate, for the
+    // list's own columns — one query each over the ids on the page.
+    const subIds = [...new Set(rows.map((r) => Number(r.subcategory_id)).filter(Boolean))];
+    const userIds = [...new Set(rows.map((r) => Number(r.user_id)).filter(Boolean))];
+    const [subs, users] = await Promise.all([
+      subIds.length
+        ? db.selectFrom('subcategories').select(['id', 'name']).where('id', 'in', subIds).execute()
+        : Promise.resolve([]),
+      userIds.length
+        ? db.selectFrom('users').select(['id', 'fullname']).where('id', 'in', userIds).execute()
+        : Promise.resolve([]),
+    ]);
+    const subName = new Map(subs.map((s) => [Number(s.id), s.name]));
+    const userName = new Map(users.map((u) => [Number(u.id), u.fullname]));
+
     const expanded = await expandAttributes(rows.map((r) => r.description));
     const data = rows.map((r, i) => {
       const line = kindOf.get(Number(r.order_detail_id));
@@ -110,6 +156,8 @@ reportRoutes.get(
         attributes: expanded[i],
         order_id: Number(r.order_no) || null,
         order_number: orderNumberOf.get(Number(r.order_no)) ?? null,
+        item_name: subName.get(Number(r.subcategory_id)) ?? null,
+        created_by: userName.get(Number(r.user_id)) ?? null,
         // A certificate whose line has gone offers both rather than neither:
         // the card exists and somebody may still need to reprint it.
         smart_card: line ? Number(line.smart_card) === 1 : true,
@@ -118,6 +166,29 @@ reportRoutes.get(
     });
 
     res.json(paged(data, Number(count.n), p));
+  }),
+);
+
+/**
+ * The people who have written a certificate in the caller's scope, for the
+ * list's "Created by" filter. Head office sees everyone, a laboratory its own
+ * staff, a staff member only themselves.
+ *
+ * Before `/:id` so `creators` is not read as an id.
+ */
+reportRoutes.get(
+  '/creators',
+  requirePermission('report', 'view'),
+  wrap(async (req, res) => {
+    let q = db.selectFrom('reports').select('user_id').distinct();
+    if (req.user.roleId === ROLE.LAB) q = q.where('lab_id', '=', req.user.labId);
+    else if (req.user.roleId !== ROLE.SUPER) q = q.where('user_id', '=', req.user.id);
+    const ids = (await q.execute()).map((r) => Number(r.user_id)).filter(Boolean);
+    const users = ids.length
+      ? await db.selectFrom('users').select(['id', 'fullname']).where('id', 'in', ids).execute()
+      : [];
+    users.sort((a, b) => (a.fullname ?? '').localeCompare(b.fullname ?? ''));
+    res.json({ data: users });
   }),
 );
 

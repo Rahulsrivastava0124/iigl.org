@@ -1,4 +1,4 @@
-import { apiUrl } from './api.js';
+import { apiUrl, postStudent } from './api.js';
 
 /**
  * Paying the course fee through Cashfree.
@@ -73,6 +73,35 @@ export async function registerAndPay(fields, { beforeCheckout, afterCheckout } =
   }
 
   const outcome = await postJson(`/public/payments/${encodeURIComponent(started.order_id)}/confirm`);
+  if (outcome.status !== 'paid' && result?.error?.message) throw new Error(result.error.message);
+  return outcome;
+}
+
+/**
+ * A signed-in student paying (the balance of) their course fee.
+ *
+ * Same three steps as the registration payment, over the credentialed student
+ * portal endpoints: start the payment, open the checkout, then ask the API to
+ * confirm it with Cashfree — which is what records the fee as paid. Resolves
+ * with the outcome; `status` is `paid` when it went through.
+ */
+export async function payStudentEnrolment(enrolmentId, { beforeCheckout, afterCheckout } = {}) {
+  const started = await postStudent(`/enrolments/${enrolmentId}/pay`);
+  await loadSdk();
+  if (!window.Cashfree) throw new Error('The payment window could not be loaded.');
+
+  beforeCheckout?.();
+  let result;
+  try {
+    result = await window.Cashfree({ mode: started.mode }).checkout({
+      paymentSessionId: started.payment_session_id,
+      redirectTarget: '_modal',
+    });
+  } finally {
+    afterCheckout?.();
+  }
+
+  const outcome = await postStudent(`/payments/${encodeURIComponent(started.order_id)}/confirm`);
   if (outcome.status !== 'paid' && result?.error?.message) throw new Error(result.error.message);
   return outcome;
 }

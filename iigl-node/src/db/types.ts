@@ -658,6 +658,7 @@ export interface Settings {
 
 export interface SiteProfiles {
   banner: string | null;
+  certificate: string | null;
   content: string | null;
   created_at: Date | null;
   facebook: string | null;
@@ -665,6 +666,8 @@ export interface SiteProfiles {
   id: Generated<number>;
   instagram: string | null;
   lab_id: number;
+  owner_name: string | null;
+  owner_photo: string | null;
   updated_at: Date | null;
   updated_by: number | null;
   whatsapp: string | null;
@@ -755,6 +758,16 @@ export interface StudentEnquiries {
   source: string | null;
   status: Generated<string>;
   student_id: number | null;
+  updated_at: Date | null;
+}
+
+export interface StudentOtps {
+  id: Generated<number>;
+  student_id: number;
+  code_hash: string;
+  expires_at: Date;
+  attempts: Generated<number>;
+  created_at: Date;
   updated_at: Date | null;
 }
 
@@ -966,6 +979,7 @@ export interface DB {
   student_certificates: StudentCertificates;
   student_courses: StudentCourses;
   student_enquiries: StudentEnquiries;
+  student_otps: StudentOtps;
   students: Students;
   subcategories: Subcategories;
   transactions: Transactions;

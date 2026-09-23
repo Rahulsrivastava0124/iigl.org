@@ -180,6 +180,11 @@ export interface Report {
   gross_weight: string;
   lab_id: number;
   created_at: string | null;
+  /** The item's name — its subcategory — and the free-text note on it. */
+  item_name: string | null;
+  comments: string | null;
+  /** Who wrote the certificate, by name. */
+  created_by: string | null;
   /**
    * Which cards this certificate is for, read from the order line it belongs
    * to — the kind is what the line asked for, not a property of the stone. The

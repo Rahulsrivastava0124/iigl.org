@@ -121,10 +121,10 @@ export default function Navbar() {
         </a>
         <a
           className="inline-flex items-center gap-[9px] whitespace-nowrap text-[14px] font-medium text-[#2c3b64] max-[1200px]:text[12px]"
-          href="#login"
+          href="/student"
         >
           <UserRound size={23} strokeWidth={2.1} />
-          <span>Login</span>
+          <span>Student Login</span>
         </a>
       </div>
 
@@ -189,11 +189,11 @@ export default function Navbar() {
               </a>
               <a
                 className="inline-flex items-center justify-center gap-[9px] text-[14px] font-medium text-[#2c3b64]"
-                href="#login"
+                href="/student"
                 onClick={() => setOpen(false)}
               >
                 <UserRound size={22} strokeWidth={2.1} />
-                <span>Login</span>
+                <span>Student Login</span>
               </a>
             </div>
           </nav>

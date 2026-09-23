@@ -33,6 +33,36 @@ export async function postPublic(path, fields) {
 }
 
 /**
+ * The student portal talks to `/api/public/student/*` and carries the
+ * `iigl.student` cookie, so these send credentials where the plain public
+ * helpers do not.
+ */
+export async function getStudent(path, { signal } = {}) {
+  const response = await fetch(apiUrl(`/public/student${path}`), {
+    signal,
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  if (response.status === 401) throw Object.assign(new Error('Not signed in.'), { status: 401 });
+  if (!response.ok) throw new Error(`${path} answered ${response.status}`);
+  return (await response.json()).data;
+}
+
+export async function postStudent(path, fields = {}) {
+  const response = await fetch(apiUrl(`/public/student${path}`), {
+    method: 'POST',
+    credentials: 'include',
+    body: new URLSearchParams(fields),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.message ?? 'Something went wrong. Please try again.');
+  return body.data;
+}
+
+/** A URL on the student portal, for a PDF opened in a new tab. */
+export const studentUrl = (path) => apiUrl(`/public/student${path}`);
+
+/**
  * A URL for a stored `public/uploads/…` path, built the way the panel builds
  * it. The website's own folders (website, banner, icon) need no session.
  */

@@ -9,6 +9,7 @@ import { requireLabScope } from '../middleware/auth.js';
 import { numericId } from '../middleware/params.js';
 import { TRANSACTION_TYPE, STATUS } from '../services/commission.service.js';
 import { setting } from '../services/settings.service.js';
+import { invoiceDocumentHtml, invoiceDocumentPdf } from '../services/document.service.js';
 
 /**
  * Purchase and sales invoices.
@@ -238,6 +239,31 @@ function purchaseList() {
 
 invoiceRoutes.get('/purchases', purchaseList());
 invoiceRoutes.get('/sales', list('sales'));
+
+/*
+  The printable invoice, on the company letterhead.
+
+  A purchase or a sale rendered as a proper document — the same head every other
+  paper carries — rather than the panel's bare client-side print. `?format=html`
+  returns the markup, so the layout is worked on without a render round trip.
+*/
+function invoiceDocument(kind: Kind) {
+  return wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    if (req.query.format === 'html') {
+      res.type('html').send(await invoiceDocumentHtml(kind, id, req.user.id));
+      return;
+    }
+    const pdf = await invoiceDocumentPdf(kind, id, req.user.id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${kind}-${id}.pdf"`);
+    res.setHeader('Content-Length', String(pdf.length));
+    res.end(pdf);
+  });
+}
+
+invoiceRoutes.get('/purchases/:id/document', numericId, invoiceDocument('purchases'));
+invoiceRoutes.get('/sales/:id/document', numericId, invoiceDocument('sales'));
 
 /*
   A purchase: the row, and the money leaving the account's wallet.

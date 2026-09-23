@@ -408,7 +408,7 @@ export default function Wallet() {
           onClick={() => open('transfer')}
           sx={{ whiteSpace: 'nowrap', height: 40 }}
         >
-          Send to Laboratory
+          Send to Admin
         </Button>
       )}
     </>
@@ -556,7 +556,7 @@ export default function Wallet() {
 
       {kind && (
         <Dialog
-          title={kind === 'expense' ? 'Add Expense' : 'Send to Laboratory'}
+          title={kind === 'expense' ? 'Add Expense' : 'Send to Admin'}
           onClose={() => setKind(null)}
           onSubmit={submit}
           submitLabel={kind === 'expense' ? 'Add expense' : 'Send'}

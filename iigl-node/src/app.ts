@@ -8,6 +8,7 @@ import { errorHandler, notFoundHandler } from './middleware/error.js';
 import { authRoutes } from './routes/auth.routes.js';
 import { catalogRoutes } from './routes/catalog.routes.js';
 import { publicRoutes } from './routes/public.routes.js';
+import { studentPortalRoutes } from './routes/student-portal.routes.js';
 import { orderRoutes } from './routes/order.routes.js';
 import { invoiceRoutes } from './routes/invoice.routes.js';
 import { reportRoutes } from './routes/report.routes.js';
@@ -57,7 +58,32 @@ export function createApp() {
 
   app.use(
     cors({
-      origin: env.corsOrigins,
+      // The allowlist, plus any localhost origin while developing. A credentialed
+      // request (the panels' session, and the student portal's) needs the exact
+      // Origin reflected back — a wildcard is refused with credentials — so an
+      // origin that is not allowed gets no CORS headers and the browser blocks
+      // it. In development the panel and the public site run on their own Vite
+      // ports (5173, 5174, …), so rather than pin one, every localhost port is
+      // allowed there; production stays the explicit CORS_ORIGINS list.
+      origin(origin, callback) {
+        // No Origin header: curl, the sweep, another server. Not a browser, so
+        // no cookie it did not set itself — allowed, as it was before.
+        if (!origin) return callback(null, true);
+        if (env.corsOrigins.includes(origin.replace(/\/+$/, ''))) return callback(null, true);
+        if (!env.isProd) {
+          try {
+            const host = new URL(origin).hostname;
+            if (host === 'localhost' || host === '127.0.0.1' || host.endsWith('.localhost')) {
+              return callback(null, true);
+            }
+          } catch {
+            /* a malformed Origin falls through to the refusal below */
+          }
+        }
+        // Not an error to the caller — just no CORS headers, which the browser
+        // turns into its own "blocked by CORS" message.
+        callback(null, false);
+      },
       // Authentication is a session cookie, so the browser must be allowed to
       // send it. This is why the origin list is explicit rather than a wildcard.
       credentials: true,
@@ -141,6 +167,10 @@ export function createApp() {
   app.use('/api/public/verify-log', verifyLogLimiter);
   app.use('/api/public/course-enquiries', courseEnquiryLimiter);
   app.use('/api/public/student-registrations', courseEnquiryLimiter);
+  // The student sign-in: a code is mailed on each request, so it is capped like
+  // the other public forms that do work per call.
+  app.use('/api/public/student/otp', courseEnquiryLimiter);
+  app.use('/api/public/student/verify', loginLimiter);
   // Confirming a website payment asks Cashfree; the webhook beside it is not limited.
   app.use('/api/public/payments/:orderId/confirm', verifyLogLimiter);
   app.use('/api/public/student-certificates', verifyLogLimiter);
@@ -149,6 +179,10 @@ export function createApp() {
   app.use('/api/public/verify/:reportNo/pdf', renderLimiter);
 
   app.use('/api/auth', authRoutes);
+  // Before the general public router and well before the staff guard: the
+  // student portal keeps its own `iigl.student` cookie and signs nobody in
+  // through the panels' door.
+  app.use('/api/public/student', studentPortalRoutes);
   app.use('/api/public', publicRoutes);
 
   // Uploaded files, from the legacy disk first and R2 after (see the note

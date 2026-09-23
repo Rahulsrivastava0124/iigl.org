@@ -9,7 +9,8 @@
     tax invoice raised when the order is settled. The invoice is two pages in one
     file — the bill, then the certificate-by-certificate report details.
   */
-  @page { size: A4 portrait; margin: 14mm; }
+  /* Narrower side margins give the wide report table the room it needs. */
+  @page { size: A4 portrait; margin: 11mm 9mm; }
   * { box-sizing: border-box; }
   body {
     margin: 0;
@@ -42,7 +43,7 @@
   .sign span { border-top: 1px solid #c9cdd8; padding-top: 1mm; display: block; }
 
   /* ---------------------------------------------------------------- invoice */
-  .inv-page { min-height: 251mm; display: flex; flex-direction: column; }
+  .inv-page { min-height: 273mm; display: flex; flex-direction: column; }
   .inv-page + .inv-page { page-break-before: always; }
 
   .inv-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8mm; }
@@ -53,6 +54,9 @@
   .inv-bank { font-size: 8.5pt; line-height: 1.55; text-align: left; min-width: 46mm; }
   .inv-bank b { color: #061948; }
   .inv-bank .h { font-weight: 700; color: #061948; margin-bottom: 1mm; }
+  .inv-bank .bnk-name { display: block; margin-bottom: 0.5mm; }
+  /* Labels in their own column so every colon and value lines up. */
+  .inv-bank .rows { display: grid; grid-template-columns: max-content 1fr; column-gap: 1.5mm; row-gap: 0.3mm; }
 
   .inv-rule { border: 0; border-top: 1px solid #e6e8ee; margin: 4mm 0; }
 
@@ -72,11 +76,12 @@
   .inv-cust .ord { font-size: 9.5pt; line-height: 1.85; }
   .inv-cust .ord b { color: #061948; display: inline-block; min-width: 24mm; }
 
-  table.inv { width: 100%; border-collapse: collapse; margin-top: 6mm; font-size: 9.5pt; }
-  table.inv th { background: transparent; border-bottom: 1px solid #cfd4de; color: #8b93a7; font-weight: 600; font-size: 8pt; letter-spacing: 0.04em; text-transform: uppercase; padding: 2mm 3mm; text-align: left; }
-  table.inv td { border-bottom: 1px solid #eef0f4; padding: 2.6mm 3mm; }
+  table.inv { width: 100%; border-collapse: collapse; margin-top: 6mm; font-size: 9.5pt; border: 1px solid #d3d9e2; }
+  table.inv th { background: #061948; border: 1px solid #061948; color: #ffffff; font-weight: 600; font-size: 6.8pt; letter-spacing: 0.02em; text-transform: uppercase; padding: 1.8mm 2.4mm; text-align: left; }
+  table.inv td { border: 1px solid #e6e8ee; padding: 2.6mm 3mm; }
   table.inv .r { text-align: right; font-variant-numeric: tabular-nums; }
-  table.inv tr.tot td { border-bottom: 1px solid #cfd4de; color: #6b7285; }
+  table.inv tr:nth-child(even) td { background: #f8f9fb; }
+  table.inv tr.tot td { background: #eef1f6; border-top: 1px solid #cfd4de; color: #1b2440; font-weight: 700; }
 
   .inv-sum { margin-top: 5mm; margin-left: auto; width: 92mm; }
   .inv-sum tr td { padding: 2mm 3mm; border-bottom: 1px solid #eef0f4; }
@@ -99,7 +104,15 @@
      const gst = totals ? (totals.amount_with_gst - totals.payable_amount) : 0;
      const smartTotal = reportLines.reduce((n, r) => n + r.smart, 0);
      const classicTotal = reportLines.reduce((n, r) => n + r.classic, 0);
-     const wt = (v) => (v && Number(v) > 0 ? v : '—');
+     const wt = (v) => {
+       // Weights are free text as often as numbers — "10.920 gram", or a
+       // carat breakdown like "R-0.23ct m-1.71ct". Keep whatever is there;
+       // dash only an empty field or a plain zero.
+       const s = v == null ? '' : String(v).trim();
+       if (s === '') return '—';
+       const n = Number(s);
+       return (!Number.isNaN(n) && n === 0) ? '—' : s;
+     };
 %>
 
   <!-- ===================================================== page 1: tax invoice -->
@@ -115,10 +128,12 @@
       <% if (lab && (lab.bank_name || lab.account_no)) { %>
         <div class="inv-bank">
           <div class="h">Bank Details</div>
-          <% if (lab.bank_name) { %><b><%= lab.bank_name %></b><br><% } %>
-          <% if (lab.bank_branch) { %>Branch : <%= lab.bank_branch %><br><% } %>
-          <% if (lab.ifsc_code) { %>IFSC Code : <b><%= lab.ifsc_code %></b><br><% } %>
-          <% if (lab.account_no) { %>Account NO : <b><%= lab.account_no %></b><% } %>
+          <div class="rows">
+            <% if (lab.bank_name) { %><span>Bank Name</span><span>: <b><%= lab.bank_name %></b></span><% } %>
+            <% if (lab.bank_branch) { %><span>Branch</span><span>: <%= lab.bank_branch %></span><% } %>
+            <% if (lab.ifsc_code) { %><span>IFSC Code</span><span>: <b><%= lab.ifsc_code %></b></span><% } %>
+            <% if (lab.account_no) { %><span>Account NO</span><span>: <b><%= lab.account_no %></b></span><% } %>
+          </div>
         </div>
       <% } %>
     </div>
@@ -143,6 +158,7 @@
       </div>
     </div>
 
+    <hr class="inv-rule">
     <div class="inv-h1">TAX INVOICE</div>
 
     <div class="inv-cust">
@@ -248,7 +264,7 @@
       </div>
     <% } %>
 
-    <div class="inv-foot" style="margin-top:60mm">This is computer generated invoice. Authorised Signatory is not required.</div>
+    <div class="inv-foot">This is computer generated invoice. Authorised Signatory is not required.</div>
   </section>
 
 <% } else { %>

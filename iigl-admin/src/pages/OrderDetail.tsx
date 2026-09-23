@@ -320,7 +320,21 @@ export default function OrderDetail() {
             </Button>
             <Button
               startIcon={<PrintIcon />}
-              onClick={() => window.open(apiUrl(`/cards/order/invoice/${id}`), '_blank', 'noopener')}
+              onClick={() =>
+                window.open(
+                  // Bill at the discount typed beside the pricing table, so the
+                  // printed invoice matches the priced preview even before the
+                  // order is settled. Untouched, the box is empty and the
+                  // invoice uses the order's own saved discount.
+                  apiUrl(
+                    `/cards/order/invoice/${id}${
+                      settled.trim() === '' ? '' : `?discount=${Number(settled) || 0}`
+                    }`,
+                  ),
+                  '_blank',
+                  'noopener',
+                )
+              }
             >
               Invoice
             </Button>

@@ -168,14 +168,22 @@ cardRoutes.get(
     if (!order) throw notFound('Order not found.');
     assertLabOwnership(req.user, Number(order.lab_id));
 
+    // An invoice may be billed at a discount typed on the order screen but not
+    // yet settled, passed as `?discount=`; a receipt carries no money and
+    // ignores it. Anything not a non-negative number falls back to the order's
+    // own saved discount.
+    const raw = Number(req.query.discount);
+    const discount =
+      kind === 'invoice' && Number.isFinite(raw) && raw >= 0 ? raw : undefined;
+
     if (req.query.format === 'html') {
-      res.type('html').send(await orderDocumentHtml(id, kind as DocumentKind));
+      res.type('html').send(await orderDocumentHtml(id, kind as DocumentKind, discount));
       return;
     }
 
     send(
       res,
-      await orderDocumentPdf(id, kind as DocumentKind),
+      await orderDocumentPdf(id, kind as DocumentKind, discount),
       `${order.order_no}-${kind}.pdf`,
     );
   }),

@@ -27,6 +27,8 @@ import {
   Link,
   Menu as MuiMenu,
   MenuItem,
+  Pagination,
+  PaginationItem,
   Paper,
   Stack,
   TableContainer,
@@ -34,6 +36,8 @@ import {
   Typography,
 } from '@mui/material';
 import type { SvgIconProps } from '@mui/material';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeftOutlined';
+import ChevronRightIcon from '@mui/icons-material/ChevronRightOutlined';
 import TextField from '@mui/material/TextField';
 import SearchIcon from '@mui/icons-material/SearchOutlined';
 import ClearIcon from '@mui/icons-material/CloseOutlined';
@@ -45,7 +49,7 @@ import type { TextFieldProps } from '@mui/material';
 import type { PageMeta } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { isSuper } from '../lib/portal';
-import { BRAND_FILL, TONE } from '../lib/theme';
+import { BRAND, BRAND_FILL, TONE } from '../lib/theme';
 import type { ToneName } from '../lib/theme';
 
 /**
@@ -749,6 +753,20 @@ const PER_PAGE_CHOICES = [10, 50, 100, 200] as const;
 /** The default every list starts at. The same number the API would have used. */
 export const DEFAULT_PER_PAGE = 50;
 
+/** The prev/next labels: a chevron and a word, as the reference draws them. */
+const BackLabel = () => (
+  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, px: 0.25 }}>
+    <ChevronLeftIcon fontSize="small" />
+    Back
+  </Box>
+);
+const NextLabel = () => (
+  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, px: 0.25 }}>
+    Next
+    <ChevronRightIcon fontSize="small" />
+  </Box>
+);
+
 export function Pager({
   meta,
   onPage,
@@ -771,9 +789,9 @@ export function Pager({
 
   return (
     // Sits in the Panel's footer row, which supplies the padding and the rule.
-    // The total is the count's job on the other side of that row, not repeated
-    // here.
-    <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', flexShrink: 0 }}>
+    // Fills the row so the Rows selector keeps the left and the page controls
+    // go to the right, beside the total the footer prints after it.
+    <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', flex: 1, minWidth: 0 }}>
       {onPerPage && (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Typography variant="body2" color="text.secondary">
@@ -808,18 +826,45 @@ export function Pager({
         </Stack>
       )}
 
+      {/* Pushes the page controls to the right of the footer row. */}
+      <Box sx={{ flex: 1 }} />
+
       {meta.total_pages > 1 && (
-        <>
-          <Typography variant="body2" color="text.secondary" className="tabular">
-            Page {meta.page} of {meta.total_pages}
-          </Typography>
-          <Button disabled={meta.page <= 1} onClick={() => onPage(meta.page - 1)}>
-            Previous
-          </Button>
-          <Button disabled={meta.page >= meta.total_pages} onClick={() => onPage(meta.page + 1)}>
-            Next
-          </Button>
-        </>
+        <Pagination
+          count={meta.total_pages}
+          page={meta.page}
+          onChange={(_, p) => onPage(p)}
+          shape="rounded"
+          color="primary"
+          siblingCount={1}
+          boundaryCount={1}
+          sx={{
+            flexShrink: 0,
+            // Boxed pages the way the reference draws them: a border on each,
+            // the current one filled in the brand navy.
+            '& .MuiPaginationItem-root': {
+              minWidth: 30,
+              height: 30,
+              border: '1px solid',
+              borderColor: 'divider',
+              m: '0 2px',
+              fontWeight: 600,
+            },
+            '& .MuiPaginationItem-previousNext': { border: 0, fontWeight: 500 },
+            '& .MuiPaginationItem-ellipsis': { border: 0, minWidth: 22 },
+            '& .Mui-selected': {
+              bgcolor: `${BRAND.navy} !important`,
+              color: '#fff',
+              borderColor: BRAND.navy,
+            },
+          }}
+          renderItem={(item) => (
+            <PaginationItem
+              slots={{ previous: BackLabel, next: NextLabel }}
+              {...item}
+            />
+          )}
+        />
       )}
     </Stack>
   );

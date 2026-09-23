@@ -125,6 +125,47 @@ export default function BranchPage({ id }) {
             <div className="rich-content mt-8 text-[15px] leading-[1.75] text-[#3c4252]" dangerouslySetInnerHTML={{ __html: content }} />
           )}
 
+          {/* The branch owner, when the laboratory has set one in the panel. */}
+          {(branch.owner_name || branch.owner_photo) && (
+            <div className="mt-10 flex items-center gap-4">
+              {branch.owner_photo && (
+                <img
+                  className="h-20 w-20 rounded-full border border-[#e6e8ee] bg-white object-cover"
+                  src={fileUrl(branch.owner_photo)}
+                  alt=""
+                />
+              )}
+              <div className="min-w-0">
+                <p className="m-0 text-[12px] font-medium uppercase tracking-wide text-[#bd7724]">Owner</p>
+                {branch.owner_name && (
+                  <p className="m-0 mt-0.5 text-[18px] font-medium text-[#061948]">{branch.owner_name}</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* The branch's accreditation certificate, when uploaded. */}
+          {branch.certificate && (
+            <div className="mt-10">
+              <h2 className="m-0 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[28px] font-medium text-[#061948]">
+                Certificate
+              </h2>
+              <a
+                className="mt-5 block max-w-[520px] overflow-hidden rounded-lg border border-[#e6e8ee]"
+                href={fileUrl(branch.certificate)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <img
+                  className="w-full object-contain"
+                  src={fileUrl(branch.certificate)}
+                  alt="Branch certificate"
+                  loading="lazy"
+                />
+              </a>
+            </div>
+          )}
+
           {gallery.length > 0 && (
             <div className="mt-10">
               <h2 className="m-0 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[28px] font-medium text-[#061948]">

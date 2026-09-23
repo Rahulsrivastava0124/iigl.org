@@ -17,6 +17,7 @@ import Navbar from './components/sections/Navbar.jsx';
 import ReportCategoriesSection from './components/sections/ReportCategoriesSection.jsx';
 import RegisteredCustomersSection from './components/sections/RegisteredCustomersSection.jsx';
 import ReviewsSection from './components/sections/ReviewsSection.jsx';
+import StudentPortal from './components/sections/StudentPortal.jsx';
 import WhyChooseSection from './components/sections/WhyChooseSection.jsx';
 
 export default function App() {
@@ -60,6 +61,8 @@ export default function App() {
         <VerifyReportPage id={verify[1]} />
       ) : blog ? (
         blog[1] ? <BlogArticlePage slug={blog[1]} /> : <BlogPage />
+      ) : path === '/student' ? (
+        <StudentPortal />
       ) : education ? (
         <EducationPage />
       ) : path === '/about-us' ? (

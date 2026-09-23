@@ -27,6 +27,11 @@ export interface SiteProfile {
   banner: string | null;
   content: string;
   gallery: string[];
+  /** The branch's owner, shown on its page: a name and a photograph. */
+  owner_name: string | null;
+  owner_photo: string | null;
+  /** An uploaded accreditation certificate (image or PDF), shown on the page. */
+  certificate: string | null;
   whatsapp: string | null;
   facebook: string | null;
   instagram: string | null;
@@ -79,6 +84,9 @@ export async function siteProfile(labId: number): Promise<SiteProfile> {
     banner: row?.banner ?? null,
     content: row?.content ?? '',
     gallery: galleryOf(row?.gallery),
+    owner_name: row?.owner_name ?? null,
+    owner_photo: row?.owner_photo ?? null,
+    certificate: row?.certificate ?? null,
     ...social,
     updated_at: row?.updated_at ?? null,
   };
@@ -220,6 +228,16 @@ const write = wrap(async (req, res) => {
     const gallery = [...new Set(given.map((p: unknown) => picture(p, 'A gallery picture')).filter(Boolean))];
     values.gallery = gallery.length ? JSON.stringify(gallery) : null;
   }
+  if (sent('owner_name')) {
+    const name = text(b.owner_name);
+    if (name.length > 255) throw badRequest('The owner name is too long.');
+    values.owner_name = name || null;
+  }
+  // Owner photo and certificate are uploaded through the same field the banner
+  // is, so they land in the banner bucket and `picture` accepts them; a
+  // certificate may be a PDF, which the path pattern allows by its extension.
+  if (sent('owner_photo')) values.owner_photo = picture(b.owner_photo, 'The owner photo');
+  if (sent('certificate')) values.certificate = picture(b.certificate, 'The certificate');
   if (sent('whatsapp')) values.whatsapp = whatsapp(b.whatsapp);
   if (sent('facebook')) values.facebook = link(b.facebook, 'Facebook', 'facebook.com');
   if (sent('instagram')) values.instagram = link(b.instagram, 'Instagram', 'instagram.com');

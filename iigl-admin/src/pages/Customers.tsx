@@ -277,7 +277,10 @@ export default function Customers() {
                 <TableCell align="right">Total amount</TableCell>
                 <TableCell align="right">Paid</TableCell>
                 <TableCell align="right">Due</TableCell>
-                {registered && <TableCell align="center">Show on website</TableCell>}
+                {/* Whether a customer appears on the public site is head
+                    office's call — the laboratory and team panels do not show
+                    this column. */}
+                {registered && admin && <TableCell align="center">Show on website</TableCell>}
                 {(canView || mayEdit || mayCreate) && <TableCell />}
               </TableRow>
             </TableHead>
@@ -342,7 +345,7 @@ export default function Customers() {
                   >
                     {money(r.due ?? 0)}
                   </TableCell>
-                  {registered && (
+                  {registered && admin && (
                     <TableCell align="center" padding="checkbox">
                       {r.account_id ? (
                         <Checkbox

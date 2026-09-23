@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title><%= doc.title %> <%= doc.number %></title>
+<style>
+  /*
+    A purchase or sales invoice, on the same company letterhead every other
+    document prints on — so a bill handed over from the Invoice screen carries
+    the same head as a tax invoice or a fee statement, from one shared partial.
+
+    A4 office stock, the head office details supplied by the letterhead.
+  */
+  @page { size: A4 portrait; margin: 14mm; }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    /* Explicit, not inherited: a headless Chrome set to a dark scheme paints a
+       transparent body dark, and the sheet goes out black. */
+    background: #ffffff;
+    font-family: "IBM Plex Sans", Arial, sans-serif;
+    font-size: 11pt;
+    color: #3c4252;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-top: 5mm;
+    padding-bottom: 4mm;
+    border-bottom: 1px solid #e6e8ee;
+  }
+  .party { font-size: 10pt; line-height: 1.5; }
+  .party .k { color: #4a5265; font-size: 8.5pt; text-transform: uppercase; letter-spacing: .04em; }
+  .party .name { color: #061948; font-weight: 700; font-size: 11.5pt; }
+  .party .gst { color: #3c4252; }
+
+  .title { text-align: right; }
+  .title h1 {
+    margin: 0;
+    font-size: 15pt;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #061948;
+  }
+  .title p { margin: 2mm 0 0; font-size: 9.5pt; }
+  .title strong { color: #061948; }
+
+  table.lines {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 7mm;
+  }
+  table.lines th {
+    background: #061948;
+    color: #ffffff;
+    text-align: left;
+    font-size: 9pt;
+    font-weight: 600;
+    letter-spacing: .03em;
+    padding: 2.4mm 3mm;
+  }
+  table.lines th.amount, table.lines td.amount { text-align: right; }
+  table.lines td {
+    padding: 2.6mm 3mm;
+    border-bottom: 1px solid #e6e8ee;
+    font-size: 10.5pt;
+    vertical-align: top;
+  }
+  table.lines td.amount { font-variant-numeric: tabular-nums; color: #061948; }
+
+  .figures {
+    width: 62mm;
+    margin-left: auto;
+    margin-top: 5mm;
+    border-collapse: collapse;
+  }
+  .figures td { padding: 1.8mm 0; font-size: 10.5pt; }
+  .figures td.amount { text-align: right; font-variant-numeric: tabular-nums; }
+  .figures tr.total td {
+    border-top: 2px solid #061948;
+    padding-top: 3mm;
+    font-weight: 700;
+    font-size: 12pt;
+    color: #061948;
+  }
+
+  .note {
+    display: flex;
+    gap: 3mm;
+    margin-top: 9mm;
+    font-size: 9pt;
+    color: #4a5265;
+  }
+  .note .mark {
+    flex: none;
+    width: 4.5mm;
+    height: 4.5mm;
+    border: 1px solid #061948;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 4.2mm;
+    font-size: 7pt;
+    font-weight: 700;
+    color: #061948;
+  }
+  .note p { margin: 0; line-height: 1.55; }
+
+  footer {
+    margin-top: 14mm;
+    border-top: 1px solid #e6e8ee;
+    padding-top: 4mm;
+    text-align: center;
+    font-size: 9.5pt;
+    color: #3c4252;
+  }
+  .flourish {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4mm;
+    margin-top: -6.5mm;
+    margin-bottom: 3mm;
+  }
+  .flourish span { width: 16mm; height: 1px; background: #d58a2b; }
+  .flourish .gem { color: #061948; font-size: 10pt; line-height: 1; }
+</style>
+</head>
+<body>
+  <%- letterhead %>
+
+  <header>
+    <div class="party">
+      <div class="k"><%= doc.partyLabel %></div>
+      <div class="name"><%= doc.party.name || '—' %></div>
+      <% if (doc.party.gst) { %><div class="gst">GST : <%= doc.party.gst %></div><% } %>
+    </div>
+    <div class="title">
+      <h1><%= doc.title %></h1>
+      <p><strong>Invoice No:</strong> <%= doc.number %></p>
+      <p><strong>Date:</strong> <%= doc.date %></p>
+    </div>
+  </header>
+
+  <table class="lines">
+    <thead>
+      <tr>
+        <th>Product</th>
+        <th class="amount">Qty</th>
+        <th class="amount">Rate</th>
+        <th class="amount">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><%= doc.product || '—' %></td>
+        <td class="amount"><%= doc.quantity %></td>
+        <td class="amount"><%= money(doc.rate) %></td>
+        <td class="amount"><%= money(doc.amount) %></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <table class="figures">
+    <tr>
+      <td>Total</td>
+      <td class="amount"><%= money(doc.amount) %></td>
+    </tr>
+    <tr>
+      <td>Paid</td>
+      <td class="amount"><%= money(doc.paid) %></td>
+    </tr>
+    <tr class="total">
+      <td>Due</td>
+      <td class="amount"><%= money(doc.due) %></td>
+    </tr>
+  </table>
+
+  <div class="note">
+    <div class="mark">i</div>
+    <p>
+      Payment method: <%= doc.payment || '—' %>.<br>
+      Figures as at the time of printing.
+    </p>
+  </div>
+
+  <footer>
+    <div class="flourish">
+      <span></span>
+      <div class="gem">◆</div>
+      <span></span>
+    </div>
+    This is a computer generated invoice.
+  </footer>
+</body>
+</html>

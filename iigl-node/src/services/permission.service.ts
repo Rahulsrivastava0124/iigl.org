@@ -480,14 +480,16 @@ function labelOf(action: string): string {
 }
 
 /**
- * How far an order list reaches for this user. With view and add on orders an
- * employee sees the laboratory's; without both, only the orders they took or
- * were assigned. Ported from OrderController.
+ * How far an order list reaches for this user. Head office sees everything, a
+ * laboratory its own whole list, and a member of its staff only the orders they
+ * took or were assigned — their own.
+ *
+ * Laravel let a staffer with view and add on orders see the whole laboratory's
+ * list; that escalation is dropped by request, so the team portal shows each
+ * person only their own orders and their own customers.
  */
 export async function orderVisibility(user: SessionUser): Promise<'all' | 'lab' | 'own'> {
   if (user.roleId === ROLE.SUPER) return 'all';
   if (user.roleId === ROLE.LAB) return 'lab';
-  const view = await can(user, 'product_collection', 'view');
-  const create = await can(user, 'product_collection', 'create');
-  return view && create ? 'lab' : 'own';
+  return 'own';
 }

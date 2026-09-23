@@ -338,6 +338,31 @@ const ADMIN_GROUPS: Group[] = [
 const FIELD_GROUPS: Group[] = [
   { label: 'Dashboard', icon: DashboardIcon, items: [{ to: '/', label: 'Dashboard', end: true }] },
   {
+    // Straight after the Dashboard, as head office has it: the money first.
+    label: 'Account',
+    icon: TransactionsIcon,
+    items: [
+      // No Transfer History. What it was opened for was the Approve and
+      // Decline on money sent to this account, and that is a tab on Wallet
+      // now, beside the account it moves. The screen itself still exists for
+      // the links that open it filtered, such as Commission History below.
+      { to: '/wallet', label: 'Wallet' },
+      // What this laboratory has remitted to head office, and where each
+      // remittance stands. It is the same screen as the transfer history with
+      // the commission rows kept, because "have they taken my payment yet" is
+      // the question a franchise opens this menu to answer.
+      { to: '/transactions?type=commision', label: 'Commission History', labOnly: true },
+    ],
+  },
+  {
+    // Purchase invoices, straight after the account. The laboratory account
+    // only, not its staff.
+    label: 'Invoice',
+    icon: InvoiceIcon,
+    labOnly: true,
+    items: [{ to: '/invoices', label: 'Purchase', end: true, labOnly: true }],
+  },
+  {
     label: 'Orders',
     icon: OrdersIcon,
     items: [
@@ -362,30 +387,6 @@ const FIELD_GROUPS: Group[] = [
       { to: '/customers', label: 'Registered', perm: 'customer' },
       { to: '/customers?tab=unregistered', label: 'Non-Registered', perm: 'customer' },
     ],
-  },
-  {
-    label: 'Account',
-    icon: TransactionsIcon,
-    items: [
-      // No Transfer History. What it was opened for was the Approve and
-      // Decline on money sent to this account, and that is a tab on Wallet
-      // now, beside the account it moves. The screen itself still exists for
-      // the links that open it filtered, such as Commission History below.
-      { to: '/wallet', label: 'Wallet' },
-      // What this laboratory has remitted to head office, and where each
-      // remittance stands. It is the same screen as the transfer history with
-      // the commission rows kept, because "have they taken my payment yet" is
-      // the question a franchise opens this menu to answer.
-      { to: '/transactions?type=commision', label: 'Commission History', labOnly: true },
-    ],
-  },
-  {
-    // Purchase invoices, after the account. The laboratory account only, not
-    // its staff.
-    label: 'Invoice',
-    icon: InvoiceIcon,
-    labOnly: true,
-    items: [{ to: '/invoices', label: 'Purchase', end: true, labOnly: true }],
   },
   {
     /*
@@ -948,27 +949,15 @@ export default function Shell() {
             </Box>
 
             {/*
-              The middle of the bar, and who gets it.
+              The middle of the bar: the search, for everyone.
 
-              For head office and a laboratory it is the search — a certificate
-              number or a customer, across the laboratory. Staff have their own
-              work in front of them and the lists to page; what the bar owes
-              them is the day's clock, so that takes the room the field had, in
-              the same place.
+              For head office and a laboratory it reaches across the laboratory;
+              for staff it reaches only their own work — the order list and the
+              certificate list are already scoped to them on the server, so the
+              same jump-to lands on their own orders and their own certificates.
+              Staff also keep the day's clock, inline beside the field rather
+              than in place of it.
             */}
-            {isStaff && (
-              <Box
-                sx={{
-                  flex: 1,
-                  display: 'flex',
-                  justifyContent: 'center',
-                  minWidth: 0,
-                }}
-              >
-                <PunchClock />
-              </Box>
-            )}
-
             <Box
               component="form"
               onSubmit={search}
@@ -982,7 +971,7 @@ export default function Shell() {
                 */
                 maxWidth: 360,
                 mx: 'auto',
-                display: isStaff ? 'none' : { xs: 'none', md: 'block' },
+                display: { xs: 'none', md: 'block' },
               }}
             >
               <TextField
@@ -1033,6 +1022,14 @@ export default function Shell() {
                 }}
               />
             </Box>
+
+            {/* Staff keep the day's clock, now beside the search rather than in
+                place of it. */}
+            {isStaff && (
+              <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', mr: 1 }}>
+                <PunchClock />
+              </Box>
+            )}
 
             {/* The gap that pushes the controls right on a narrow screen,
                 where the field in the middle is hidden. */}

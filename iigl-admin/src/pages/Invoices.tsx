@@ -36,6 +36,7 @@ import PayIcon from '@mui/icons-material/PaymentsOutlined';
 import EditIcon from '@mui/icons-material/EditOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import { Panel, TableFrame, money } from '../components/ui';
+import { apiUrl } from '../lib/config';
 import { useDebounced, useFetch } from '../lib/useFetch';
 import { api, type Lab, type Paged, type Transaction } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
@@ -105,43 +106,17 @@ const fromRow = (r: Invoice) => ({
   payment: r.payment_method ?? '',
 });
 
-/** A printable invoice, opened in its own window. */
+/**
+ * The printable invoice, on the company letterhead.
+ *
+ * Rendered by the API — the same head every other document prints on — rather
+ * than drawn here, so a purchase or sales bill carries the company block a tax
+ * invoice and a fee statement do. A head office sale a laboratory sees as its
+ * own purchase (`source: 'sale'`) prints from the sales row it belongs to.
+ */
 function printInvoice(r: Invoice, kind: Kind) {
-  const sold = r.source === 'sale';
-  const label = sold || kind === 'sales' ? 'Sales' : 'Purchase';
-  const prefix = sold || kind === 'sales' ? 'SAL' : 'PUR';
-  const party = kind === 'purchase' ? 'Supplier' : 'Customer';
-  const rows: [string, string][] = [
-    ['Invoice No.', `${prefix}-${r.id}`],
-    ['Date', String(r.invoice_date).slice(0, 10)],
-    [party, r.party_name],
-    ['GST No.', r.gst_no || '—'],
-    ['Product', r.product_name],
-    ['Quantity', String(Number(r.quantity))],
-    ['Rate', money(r.rate)],
-    ['Payment', r.payment_method || '—'],
-    ['Total', money(r.amount)],
-    ['Paid', money(r.paid_amount)],
-    ['Due', money(due(r))],
-  ];
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${label} Invoice ${prefix}-${r.id}</title>
-    <style>
-      body{font-family:Arial,Helvetica,sans-serif;color:#1b2440;margin:40px}
-      h1{font-size:22px;margin:0 0 2px}.sub{color:#6b7285;font-size:13px;margin:0 0 24px}
-      table{border-collapse:collapse;width:100%;max-width:520px}
-      td{padding:9px 12px;border-bottom:1px solid #e6e8ee;font-size:14px}
-      td:first-child{color:#6b7285;width:40%}td:last-child{font-weight:600;text-align:right}
-      tr:last-child td{border-bottom:2px solid #1b2440}
-    </style></head><body>
-    <h1>IIGL — ${label} Invoice</h1><p class="sub">${prefix}-${r.id}</p>
-    <table>${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table>
-    <script>window.onload=function(){window.print()}</script>
-    </body></html>`;
-  const w = window.open('', '_blank', 'width=680,height=800');
-  if (w) {
-    w.document.write(html);
-    w.document.close();
-  }
+  const resource = r.source === 'sale' || kind === 'sales' ? 'sales' : 'purchases';
+  window.open(apiUrl(`/invoices/${resource}/${r.id}/document`), '_blank', 'noopener');
 }
 
 export default function Invoices() {

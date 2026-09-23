@@ -76,6 +76,14 @@ orderRoutes.get(
       c = c.where('status', '=', status);
     }
 
+    // The person an order is with, by id. Head office and a laboratory may
+    // narrow to one; a staff member is already held to their own above.
+    const assignedTo = Number(req.query.assigned_to);
+    if (Number.isInteger(assignedTo) && assignedTo > 0) {
+      q = q.where('assigned_to', '=', assignedTo);
+      c = c.where('assigned_to', '=', assignedTo);
+    }
+
     // Free-text search across the columns the list actually shows.
     const search = readSearch(req, ['order_no', 'customer_name', 'mobile']);
     if (search) {
@@ -188,6 +196,30 @@ async function withCounts<T extends { id: number; assigned_to: number | null }>(
     };
   });
 }
+
+/**
+ * The people orders in the caller's scope are assigned to, for the list's
+ * "Assigned to" filter. Head office sees everyone, a laboratory its own, a
+ * staff member only themselves.
+ *
+ * Before `/:id` so `assignees` is not read as an id.
+ */
+orderRoutes.get(
+  '/assignees',
+  wrap(async (req, res) => {
+    let q = live(db.selectFrom('orders').select('assigned_to').distinct());
+    q = scopeToLab(q, req.user);
+    if ((await orderVisibility(req.user)) === 'own') {
+      q = q.where('assigned_to', '=', req.user.id);
+    }
+    const ids = (await q.execute()).map((r) => Number(r.assigned_to)).filter(Boolean);
+    const users = ids.length
+      ? await db.selectFrom('users').select(['id', 'fullname']).where('id', 'in', ids).execute()
+      : [];
+    users.sort((a, b) => (a.fullname ?? '').localeCompare(b.fullname ?? ''));
+    res.json({ data: users });
+  }),
+);
 
 orderRoutes.get(
   '/:id',

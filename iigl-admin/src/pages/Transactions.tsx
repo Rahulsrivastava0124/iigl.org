@@ -260,9 +260,7 @@ export default function Transactions() {
                         so it is named rather than left to be inferred from two
                         columns of numbers. */}
                     <TableCell>
-                      {e.commission_type === 'per_pc'
-                        ? `${money(e.rate)} a piece`
-                        : `${e.rate}% of collected`}
+                      {e.commission_type === 'per_pc' ? `${money(e.rate)} a piece` : `${e.rate}%`}
                     </TableCell>
                     <TableCell align="right" className="tabular" sx={{ fontWeight: 600 }}>
                       {money(e.commission)}

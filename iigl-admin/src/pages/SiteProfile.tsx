@@ -17,12 +17,25 @@ interface Profile {
   banner: string | null;
   content: string;
   gallery: string[];
+  owner_name: string | null;
+  owner_photo: string | null;
+  certificate: string | null;
   whatsapp: string | null;
   facebook: string | null;
   instagram: string | null;
 }
 
-type Form = { banner: string | null; content: string; gallery: string[]; whatsapp: string; facebook: string; instagram: string };
+type Form = {
+  banner: string | null;
+  content: string;
+  gallery: string[];
+  owner_name: string;
+  owner_photo: string | null;
+  certificate: string | null;
+  whatsapp: string;
+  facebook: string;
+  instagram: string;
+};
 
 const GALLERY_MAX = 24;
 
@@ -30,6 +43,9 @@ const toForm = (p: Profile): Form => ({
   banner: p.banner,
   content: p.content ?? '',
   gallery: p.gallery ?? [],
+  owner_name: p.owner_name ?? '',
+  owner_photo: p.owner_photo ?? null,
+  certificate: p.certificate ?? null,
   whatsapp: p.whatsapp ?? '',
   facebook: p.facebook ?? '',
   instagram: p.instagram ?? '',
@@ -51,7 +67,17 @@ type Section = 'all' | 'gallery';
 */
 /** The fields each section saves. Only those are sent: the API changes what it is sent. */
 const SAVES: Record<Section, Array<keyof Form>> = {
-  all: ['banner', 'content', 'gallery', 'whatsapp', 'facebook', 'instagram'],
+  all: [
+    'banner',
+    'content',
+    'gallery',
+    'owner_name',
+    'owner_photo',
+    'certificate',
+    'whatsapp',
+    'facebook',
+    'instagram',
+  ],
   gallery: ['gallery'],
 };
 
@@ -214,6 +240,37 @@ export default function SiteProfile({ section = 'all' }: { section?: Section }) 
                   helperText="What the page says under its name."
                 />
               </Box>
+            )}
+
+            {/* The owner shown on the branch page, and the branch's own
+                certificate — its accreditation, printed under the details. */}
+            {section === 'all' && (
+              <TextField
+                label="Owner name"
+                value={form.owner_name}
+                onChange={(e) => setForm({ ...form, owner_name: e.target.value })}
+                slotProps={hint('The person shown as the branch owner on its page.')}
+              />
+            )}
+            {section === 'all' && (
+              <FileField
+                label="Owner photo"
+                bucket="banner"
+                ratio="1 / 1"
+                value={form.owner_photo}
+                onChange={(owner_photo) => setForm({ ...form, owner_photo })}
+                helperText="A portrait of the owner. Square looks best."
+              />
+            )}
+            {section === 'all' && (
+              <FileField
+                label="Certificate"
+                bucket="banner"
+                ratio="4 / 3"
+                value={form.certificate}
+                onChange={(certificate) => setForm({ ...form, certificate })}
+                helperText="The branch's accreditation certificate, as an image."
+              />
             )}
 
             {/*

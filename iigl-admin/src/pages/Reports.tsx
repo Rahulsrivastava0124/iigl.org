@@ -3,16 +3,20 @@ import {
   Avatar,
   Button,
   Checkbox,
+  MenuItem,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
+  TextField,
   Typography,
 } from '@mui/material';
 import PrintIcon from '@mui/icons-material/PrintOutlined';
 import { useFetch, useDebounced, useUrlSearch } from '../lib/useFetch';
 import { IconAction, DEFAULT_PER_PAGE, OrderRef, Pager, Panel, RowActions, SearchField, TableFrame } from '../components/ui';
+import { useAuth } from '../lib/auth';
+import { isLab, isSuper } from '../lib/portal';
 import DateRangeField from '../components/DateRangeField';
 import type { Paged, Report } from '../lib/api';
 import { apiUrl, fileUrl, printCard } from '../lib/config';
@@ -26,6 +30,11 @@ import HeaderCardIcon from '@mui/icons-material/BrandingWatermarkOutlined';
 const weight = (v?: string | null) => (v && Number(v) > 0 ? v : '—');
 
 export default function Reports() {
+  // Staff see only their own certificates, so a "Created by" column that always
+  // reads their own name is noise; head office and a laboratory keep it.
+  const { user } = useAuth();
+  const staff = !isSuper(user) && !isLab(user);
+
   const [page, setPage] = useState(1);
   /** Rows per page. Component state, not a URL parameter: it is how somebody
    * likes to read a list, not which list they are looking at. */
@@ -44,14 +53,22 @@ export default function Reports() {
   // the way the wallet's statement is.
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  // Who wrote it, and which card the order asked for.
+  const [createdBy, setCreatedBy] = useState('');
+  const [card, setCard] = useState('');
 
   const query = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (term.trim()) query.set('q', term.trim());
   if (from) query.set('from', from);
   if (to) query.set('to', to);
+  if (createdBy) query.set('created_by', createdBy);
+  if (card) query.set('card', card);
 
   const { data, loading, error } = useFetch<Paged<Report>>(`/reports?${query}`);
   const rows = data?.data ?? [];
+
+  // The people who have written certificates in view, for the Created-by filter.
+  const creators = useFetch<{ data: { id: number; fullname: string }[] }>('/reports/creators');
 
   const toggle = (id: number) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -122,6 +139,45 @@ export default function Reports() {
               }}
               width={250}
             />
+            {!staff && (
+              <TextField
+                select
+                size="small"
+                label="Created by"
+                value={createdBy}
+                onChange={(e) => {
+                  setCreatedBy(e.target.value);
+                  setPage(1);
+                }}
+                sx={{ width: 180 }}
+              >
+                <MenuItem value="">
+                  <em>Everyone</em>
+                </MenuItem>
+                {(creators.data?.data ?? []).map((u) => (
+                  <MenuItem key={u.id} value={String(u.id)}>
+                    {u.fullname}
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
+            <TextField
+              select
+              size="small"
+              label="Card"
+              value={card}
+              onChange={(e) => {
+                setCard(e.target.value);
+                setPage(1);
+              }}
+              sx={{ width: 130 }}
+            >
+              <MenuItem value="">
+                <em>All cards</em>
+              </MenuItem>
+              <MenuItem value="smart">Smart</MenuItem>
+              <MenuItem value="classic">Classic</MenuItem>
+            </TextField>
             {/* Only the one thing worth saying: that the selection is past the
                 print cap. The plain count read as clutter, "0 selected" most of
                 all. */}
@@ -136,7 +192,7 @@ export default function Reports() {
               disabled={selected.length === 0 || selected.length > 50}
               onClick={printBatch}
             >
-              Print smart cards
+              Print
             </Button>
           </>
         }
@@ -174,12 +230,15 @@ export default function Reports() {
                   so the one way to check the right picture went onto the right
                   certificate was to print it.
                 */}
-                <TableCell sx={{ width: 56 }}>Item</TableCell>
+                <TableCell>Date</TableCell>
                 <TableCell>Certificate</TableCell>
-                <TableCell>Order</TableCell>
-                <TableCell align="right">Gross</TableCell>
-                <TableCell align="right">Carat</TableCell>
-                <TableCell>Issued</TableCell>
+                <TableCell sx={{ width: 72 }}>Image</TableCell>
+                <TableCell>Item Name</TableCell>
+                <TableCell align="right">Gross Wt</TableCell>
+                <TableCell align="right">Carat Wt</TableCell>
+                <TableCell>Comment</TableCell>
+                {!staff && <TableCell>Created by</TableCell>}
+                <TableCell>Order No</TableCell>
                 <TableCell align="right">Print</TableCell>
               </TableRow>
             </TableHead>
@@ -194,6 +253,8 @@ export default function Reports() {
                       slotProps={{ input: { 'aria-label': `Select ${r.report_no}` } }}
                     />
                   </TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{r.created_at?.slice(0, 10) ?? '—'}</TableCell>
+                  <TableCell className="mono">{r.report_no}</TableCell>
                   <TableCell>
                     {/*
                       Avatar rather than a bare <img>: it draws its fallback
@@ -213,8 +274,8 @@ export default function Reports() {
                       // The whole stone, not a square crop of it.
                       slotProps={{ img: { sx: { objectFit: 'contain' } } }}
                       sx={{
-                        width: 36,
-                        height: 36,
+                        width: 60,
+                        height: 60,
                         bgcolor: 'action.hover',
                         color: 'text.secondary',
                         fontSize: 12,
@@ -224,11 +285,15 @@ export default function Reports() {
                       —
                     </Avatar>
                   </TableCell>
-                  <TableCell className="mono">{r.report_no}</TableCell>
-                  {/* The order by the number it is called everywhere else.
-                      `order_no` on a certificate holds the order id, so this
-                      column used to read "#9616" for an order the rest of the
-                      panel calls 202608-484662. */}
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{r.item_name ?? '—'}</TableCell>
+                  <TableCell align="right" className="tabular">
+                    {weight(r.gross_weight)}
+                  </TableCell>
+                  <TableCell align="right" className="tabular">
+                    {weight(r.carat_weight)}
+                  </TableCell>
+                  <TableCell sx={{ minWidth: 200, whiteSpace: 'normal' }}>{r.comments || '—'}</TableCell>
+                  {!staff && <TableCell sx={{ whiteSpace: 'nowrap' }}>{r.created_by ?? '—'}</TableCell>}
                   <TableCell className="mono">
                     {r.order_id ? (
                       <OrderRef id={r.order_id}>{r.order_number ?? `#${r.order_no}`}</OrderRef>
@@ -236,13 +301,6 @@ export default function Reports() {
                       '—'
                     )}
                   </TableCell>
-                  <TableCell align="right" className="tabular">
-                    {weight(r.gross_weight)}
-                  </TableCell>
-                  <TableCell align="right" className="tabular">
-                    {weight(r.carat_weight)}
-                  </TableCell>
-                  <TableCell>{r.created_at?.slice(0, 10) ?? '—'}</TableCell>
                   {/* The cards the order asked for, and only those. Every row
                       used to offer both, so half the buttons on this screen
                       printed a card nobody had ordered. */}

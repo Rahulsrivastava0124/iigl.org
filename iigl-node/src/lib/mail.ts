@@ -180,6 +180,64 @@ export async function sendRegistrationReceived(
   }
 }
 
+/**
+ * The one-time code a student signs in to their portal with.
+ *
+ * Sent to the email on the student's record. The same transport and refusals as
+ * the other messages; a missing SMTP server is reported, so the caller can tell
+ * the student a code could not be sent rather than leaving them waiting.
+ */
+export async function sendStudentOtp(
+  to: string,
+  code: string,
+  name: string,
+  /** How many minutes the code is good for. */
+  minutes: number,
+): Promise<void> {
+  const transport = await transportFor();
+  if (!transport) {
+    if (!env.isProd) console.info(`[dev] student OTP for ${to}: ${code}`);
+    throw new ApiError(503, 'No SMTP server is configured, so the sign-in code cannot be sent.', 'mail_unconfigured');
+  }
+
+  const company = await setting('company.name');
+  const navy = '#061948';
+  const html = `<!doctype html>
+<html><body style="margin:0;padding:0;background:#ffffff;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#3c4252">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:520px;margin:0;background:#ffffff">
+    <tr><td style="padding:20px 24px">
+      <p style="margin:0;font-size:18px;font-weight:600;color:${navy}">${escape(company)}</p>
+      <p style="margin:0 0 20px;font-size:13px;color:#4a5265">Student sign-in</p>
+      <p style="margin:0 0 12px;font-size:15px">Hello ${escape(name)},</p>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.5">Use this code to sign in to your student page:</p>
+      <p style="margin:0 0 16px;font-size:30px;font-weight:700;letter-spacing:6px;color:${navy}">${escape(code)}</p>
+      <p style="margin:0;font-size:13px;color:#4a5265;line-height:1.5">
+        It works for ${minutes} minutes. If you did not ask to sign in, you can ignore this message.
+      </p>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  try {
+    await transport.sendMail({
+      from: await setting('mail.from'),
+      to,
+      subject: `Your ${company} sign-in code is ${code}`,
+      html,
+      text: [
+        `Hello ${name},`,
+        '',
+        `Your ${company} sign-in code is ${code}.`,
+        `It works for ${minutes} minutes.`,
+        '',
+        'If you did not ask to sign in, you can ignore this message.',
+      ].join('\n'),
+    });
+  } catch (e) {
+    throw new ApiError(502, `The mail server refused the message: ${(e as Error).message}`, 'mail_failed');
+  }
+}
+
 export async function sendPasswordReset(
   to: string,
   url: string,

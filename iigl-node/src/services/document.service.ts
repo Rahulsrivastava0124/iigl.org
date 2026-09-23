@@ -53,7 +53,15 @@ export type DocumentKind = 'receipt' | 'invoice';
 const money = (v: number | string | null | undefined) =>
   v == null || v === '' ? '—' : Number(v).toLocaleString('en-IN');
 
-export async function orderDocumentHtml(orderId: number, kind: DocumentKind): Promise<string> {
+export async function orderDocumentHtml(
+  orderId: number,
+  kind: DocumentKind,
+  // The discount to bill at. Left off, the order's saved discount is used; the
+  // order screen passes the figure in its Discount box so the printed invoice
+  // matches the priced preview beside it, without waiting for the order to be
+  // settled first.
+  discountOverride?: number,
+): Promise<string> {
   const order = await db
     .selectFrom('orders')
     .where('deleted_at', 'is', null)
@@ -150,7 +158,11 @@ export async function orderDocumentHtml(orderId: number, kind: DocumentKind): Pr
   }[] = [];
 
   if (kind === 'invoice') {
-    const quote = await quoteOrder(orderId, Number(order.discount ?? 0));
+    const discount =
+      discountOverride != null && Number.isFinite(discountOverride) && discountOverride >= 0
+        ? discountOverride
+        : Number(order.discount ?? 0);
+    const quote = await quoteOrder(orderId, discount);
     const detailOf = new Map<number, number>();
     const certByReport = new Map(quote.certificates.map((c) => [c.report_id, c]));
     for (const c of quote.certificates) detailOf.set(c.report_id, c.line_total);
@@ -230,8 +242,12 @@ export async function orderDocumentHtml(orderId: number, kind: DocumentKind): Pr
   );
 }
 
-export async function orderDocumentPdf(orderId: number, kind: DocumentKind): Promise<Buffer> {
-  const html = await orderDocumentHtml(orderId, kind);
+export async function orderDocumentPdf(
+  orderId: number,
+  kind: DocumentKind,
+  discountOverride?: number,
+): Promise<Buffer> {
+  const html = await orderDocumentHtml(orderId, kind, discountOverride);
 
   // A separate browser from the card renderer would double the memory for no
   // gain, so this reuses the same one.
@@ -565,6 +581,89 @@ export async function feeStatementPdf(enrolmentId: number, issuedBy: string): Pr
   return renderHtmlToPdf(html, { format: 'A4' });
 }
 
+
+/* ------------------------------------------------------ invoice document */
+
+const INVOICE_TEMPLATE = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../templates/invoice-document.ejs',
+);
+
+export type InvoiceKind = 'purchases' | 'sales';
+
+/**
+ * A purchase or sales invoice, on the company letterhead.
+ *
+ * The Invoice screen used to print these from the panel with no company head at
+ * all — a bare "IIGL — Purchase Invoice". They are raised here instead, sharing
+ * the one `_letterhead.ejs` every other document prints on, so a purchase bill,
+ * a sales bill, a tax invoice and a fee statement all carry the same head.
+ *
+ * Scoped to the caller: a purchase is the caller's own row; a sale is readable
+ * by the head office that raised it and by the laboratory it was sold to. A
+ * laboratory reading head office's sale sees it as the purchase it also is —
+ * bought from the company, whose name and GST head the supplier block.
+ */
+export async function invoiceDocumentHtml(
+  kind: InvoiceKind,
+  id: number,
+  userId: number,
+): Promise<string> {
+  const row = await db.selectFrom(kind).selectAll().where('id', '=', id).executeTakeFirst();
+  if (!row) throw notFound('Invoice not found.');
+
+  const seller = Number(row.lab_id) === userId;
+  // A sale is the seller's, or the buyer's to read as a purchase. Anyone else
+  // gets a 404: it is not their line.
+  if (kind === 'purchases' && !seller) throw notFound('Invoice not found.');
+  if (kind === 'sales' && !seller && Number(row.buyer_lab_id) !== userId) {
+    throw notFound('Invoice not found.');
+  }
+
+  // The buyer reading a sale sees the company as its supplier, not itself.
+  const boughtFromCompany = kind === 'sales' && !seller;
+  const [companyName, companyGstin] = boughtFromCompany
+    ? await Promise.all([setting('company.name'), setting('company.gstin')])
+    : [null, null];
+
+  const amount = Number(row.amount);
+  const paid = Number(row.paid_amount);
+  const purchase = kind === 'purchases' || boughtFromCompany;
+
+  const doc = {
+    title: purchase ? 'Purchase Invoice' : 'Sales Invoice',
+    number: `${purchase ? 'PUR' : 'SAL'}-${row.id}`,
+    date: String(row.invoice_date).slice(0, 10),
+    partyLabel: purchase ? 'Supplier' : 'Customer',
+    party: {
+      name: boughtFromCompany ? companyName || 'Head office' : row.party_name,
+      gst: (boughtFromCompany ? companyGstin : row.gst_no) || null,
+    },
+    product: row.product_name,
+    quantity: Number(row.quantity),
+    rate: Number(row.rate),
+    amount,
+    paid,
+    due: Math.round((amount - paid) * 100) / 100,
+    payment: row.payment_method,
+  };
+
+  return ejs.renderFile(
+    INVOICE_TEMPLATE,
+    { doc, letterhead: await letterheadHtml(), money: rupees },
+    { async: true },
+  );
+}
+
+export async function invoiceDocumentPdf(
+  kind: InvoiceKind,
+  id: number,
+  userId: number,
+): Promise<Buffer> {
+  const html = await invoiceDocumentHtml(kind, id, userId);
+  const { renderHtmlToPdf } = await import('./pdf.service.js');
+  return renderHtmlToPdf(html, { format: 'A4' });
+}
 
 /* ---------------------------------------------------- course certificate */
 

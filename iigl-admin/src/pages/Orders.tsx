@@ -20,7 +20,7 @@ import { useToast } from '../components/Toast';
 import { useFetch, useDebounced, useUrlSearch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
-import { isSuper } from '../lib/portal';
+import { isLab, isSuper } from '../lib/portal';
 import {
   IconAction,
   money,
@@ -76,10 +76,16 @@ export default function Orders() {
   const [search, setSearch] = useUrlSearch();
   const term = useDebounced(search);
 
+  // Staff see only their own orders, so a "with whom" filter that only ever
+  // reads their own name is noise; head office and a laboratory keep it.
+  const canFilterAssignee = isSuper(user) || isLab(user);
+  const [assignedTo, setAssignedTo] = useState('');
+
   const query = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (status) query.set('status', status);
   if (dues) query.set('dues', '1');
   if (term.trim()) query.set('q', term.trim());
+  if (assignedTo) query.set('assigned_to', assignedTo);
 
   const setStatus = (next: string) => {
     setPage(1);
@@ -88,6 +94,11 @@ export default function Orders() {
 
   const { data, loading, error, reload } = useFetch<Paged<Order>>(`/orders?${query}`);
   const rows = data?.data ?? [];
+
+  // The people orders in view are assigned to, for the Assigned-to filter.
+  const assignees = useFetch<{ data: { id: number; fullname: string }[] }>(
+    canFilterAssignee ? '/orders/assignees' : null,
+  );
 
   const toast = useToast();
   // The order to delete, held by id and looked up on render rather than kept as
@@ -150,6 +161,27 @@ export default function Orders() {
             <MenuItem value="delivered">Delivered</MenuItem>
             <MenuItem value="not assigned">Not assigned</MenuItem>
           </TextField>
+          {canFilterAssignee && (
+            <TextField
+              select
+              label="Assigned to"
+              value={assignedTo}
+              onChange={(e) => {
+                setAssignedTo(e.target.value);
+                setPage(1);
+              }}
+              sx={{ width: 180 }}
+            >
+              <MenuItem value="">
+                <em>Everyone</em>
+              </MenuItem>
+              {(assignees.data?.data ?? []).map((u) => (
+                <MenuItem key={u.id} value={String(u.id)}>
+                  {u.fullname}
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
           </>
         }
       >
@@ -300,17 +332,17 @@ export default function Orders() {
                         waiting for. While certificates are outstanding the
                         arrow carries on with the work; once they are all
                         written the only thing left is to take the money and
-                        hand it over, so the arrow gives way to Pay — a disabled
-                        arrow beside a finished order is a control that exists
+                        hand it over, so the arrow gives way to Pay.
+
+                        On a finished order — every certificate written, nothing
+                        owed, as a delivered order is — there is neither: the
+                        arrow is gone rather than sitting there disabled, since a
+                        dead control beside a done order is one that exists only
                         to say no.
 
-                        A delivered order that still owes gets the same button.
-                        It is the whole of the dues list, and the row there used
-                        to carry nothing but that dead arrow: the one thing
-                        anybody opens that screen to do had no control on it.
-
-                        Settling happens on the order's own page, where the
-                        amount payable is in front of whoever takes the money.
+                        A delivered order that still owes shows Pay. Settling
+                        happens on the order's own page, where the amount payable
+                        is in front of whoever takes the money.
                       */}
                       {!opensOrders ? null : ready || owing ? (
                         <Button
@@ -323,15 +355,10 @@ export default function Orders() {
                         >
                           Pay
                         </Button>
-                      ) : (
+                      ) : o.reports_generated >= o.total_reports ? null : (
                         <IconAction
-                          label={
-                            o.reports_generated >= o.total_reports
-                              ? 'Every certificate on this order is written'
-                              : 'Write the next certificate'
-                          }
+                          label="Write the next certificate"
                           icon={NextIcon}
-                          disabled={o.reports_generated >= o.total_reports}
                           to={`/reports/new?order=${o.id}`}
                         />
                       )}

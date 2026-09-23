@@ -246,6 +246,71 @@ export async function startEnrolmentPayment(user: SessionUser, body: Record<stri
   });
 }
 
+/**
+ * A student paying their own fee from the website portal.
+ *
+ * Scoped to the student in the portal session: the enrolment must be theirs, and
+ * the amount is capped at what is still due. No `created_by` and no `payer_id`
+ * — there is no staff account behind it — so the enrolment id in the payload is
+ * what ties the payment back to the student for the confirm.
+ */
+export async function startStudentEnrolmentPayment(
+  studentId: number,
+  enrolmentId: number,
+  requestedAmount: number | null,
+): Promise<StartedPayment> {
+  const row = await db
+    .selectFrom('student_courses as sc')
+    .innerJoin('students as s', 's.id', 'sc.student_id')
+    .leftJoin('courses as c', 'c.id', 'sc.course_id')
+    .select(['sc.id', 'sc.final_fee', 'sc.gst_amount', 'sc.fee_paid', 's.id as student_id', 's.name', 's.mobile', 's.email', 'c.name as course'])
+    .where('sc.id', '=', enrolmentId)
+    .where('sc.student_id', '=', studentId)
+    .executeTakeFirst();
+  if (!row) throw notFound('Enrolment not found.');
+
+  const due = Math.round((Number(row.final_fee) + Number(row.gst_amount ?? 0) - Number(row.fee_paid)) * 100) / 100;
+  if (due <= 0) throw badRequest('This course fee is already paid in full.');
+  const amount = requestedAmount == null ? due : Math.round(Number(requestedAmount) * 100) / 100;
+  if (!Number.isFinite(amount) || amount <= 0) throw badRequest('Enter an amount greater than zero.');
+  if (amount > due) throw badRequest('That is more than the fee still due.');
+
+  return start({
+    purpose: 'enrolment_fee',
+    amount,
+    payerId: null,
+    createdBy: null,
+    customer: {
+      id: `student_${row.student_id}`,
+      name: row.name,
+      phone: tenDigits(row.mobile),
+      email: row.email || null,
+    },
+    payload: { enrolment_id: enrolmentId, from: 'student_portal' },
+    note: `Course fee: ${row.course ?? 'course'} — ${row.name}`,
+  });
+}
+
+/** A student may confirm only a portal fee payment for one of their own enrolments. */
+export async function assertStudentPayment(orderId: string, studentId: number) {
+  const row = await db
+    .selectFrom('payment_orders')
+    .select(['purpose', 'payload'])
+    .where('order_id', '=', orderId)
+    .executeTakeFirst();
+  if (!row || row.purpose !== 'enrolment_fee') throw notFound('Payment not found.');
+  const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : (row.payload as { enrolment_id?: number } | null);
+  const enrolmentId = Number(payload?.enrolment_id);
+  if (!Number.isInteger(enrolmentId)) throw notFound('Payment not found.');
+  const own = await db
+    .selectFrom('student_courses')
+    .select('id')
+    .where('id', '=', enrolmentId)
+    .where('student_id', '=', studentId)
+    .executeTakeFirst();
+  if (!own) throw notFound('Payment not found.');
+}
+
 const outcome = (row: {
   order_id: string;
   purpose: string;
