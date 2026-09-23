@@ -314,7 +314,13 @@ export default function CoursePage({ id }) {
           >
             <X className="h-5 w-5" strokeWidth={2} />
           </button>
-          <RegistrationForm courseId={course.id} course={title} fee={course.fee} feeTotal={course.fee_total} />
+          <RegistrationForm
+            courseId={course.id}
+            course={title}
+            fee={course.fee}
+            feeTotal={course.fee_total}
+            facts={[course.code, course.level, course.duration].filter(Boolean)}
+          />
         </div>
       </dialog>
     </main>

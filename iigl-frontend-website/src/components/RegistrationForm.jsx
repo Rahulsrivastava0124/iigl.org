@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CircleCheck, CreditCard, UserPlus } from 'lucide-react';
+import { ArrowLeft, CircleCheck, CreditCard, UserPlus } from 'lucide-react';
 import { postPublic } from '../lib/api.js';
 import { paymentConfig, registerAndPay } from '../lib/cashfree.js';
 
@@ -38,7 +38,8 @@ function Field({ label, wide, children }) {
  * with the confirmation mailed to the student. The documents are collected in
  * person.
  *
- * Two ways to finish, when the course has a fee and online payment is set up:
+ * Two steps when the course has a fee and online payment is set up: the details,
+ * then the course and its fee, with two ways to finish:
  *
  *   Pay & register   the fee (plus GST) is taken in Cashfree's window; once the
  *                    API confirms it with Cashfree the student is registered,
@@ -46,8 +47,10 @@ function Field({ label, wide, children }) {
  *   Register only    saved as a pending registration for head office to call,
  *                    as before.
  */
-export default function RegistrationForm({ courseId, course, fee, feeTotal }) {
+export default function RegistrationForm({ courseId, course, fee, feeTotal, facts = [] }) {
   const [form, setForm] = useState(BLANK);
+  // 'details' is the form; 'pay' is the course, its fee and how to finish.
+  const [step, setStep] = useState('details');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState(null);
@@ -67,8 +70,6 @@ export default function RegistrationForm({ courseId, course, fee, feeTotal }) {
    * comes back with the result.
    */
   const pay = async () => {
-    const formEl = root.current?.querySelector('form');
-    if (formEl && !formEl.reportValidity()) return;
     setSending(true);
     setError('');
     const dialog = root.current?.closest('dialog');
@@ -95,8 +96,17 @@ export default function RegistrationForm({ courseId, course, fee, feeTotal }) {
   const set = (key) => (event) => setForm((f) => ({ ...f, [key]: event.target.value }));
   const today = new Date().toISOString().slice(0, 10);
 
-  const submit = async (event) => {
+  // With nothing to pay online there is no second step: Register saves it.
+  const submit = (event) => {
     event.preventDefault();
+    setError('');
+    if (payable) {
+      setStep('pay');
+      root.current?.scrollIntoView({ block: 'start' });
+    } else register();
+  };
+
+  const register = async () => {
     setSending(true);
     setError('');
     try {
@@ -112,7 +122,7 @@ export default function RegistrationForm({ courseId, course, fee, feeTotal }) {
   return (
     <div ref={root} className="rounded-xl border border-[#e6e8ee] bg-white p-6 shadow-[0_15px_38px_rgba(44,59,100,0.08)] sm:p-8">
       <h2 className="m-0 font-['Playfair_Display',Georgia,'Times_New_Roman',serif] text-[28px] font-medium text-[#061948]">
-        Register for this course
+        {step === 'pay' && !done ? 'Confirm and pay' : 'Register for this course'}
       </h2>
 
       {done ? (
@@ -145,10 +155,73 @@ export default function RegistrationForm({ courseId, course, fee, feeTotal }) {
               : `Our team will call you on ${form.mobile.trim()} to confirm the batch, the fees and admission.`}
           </p>
         </div>
+      ) : step === 'pay' ? (
+        <div className="mt-5 grid gap-4">
+          <div className="rounded-lg border border-[#e6e8ee] bg-[#f8f9fb] p-5">
+            <p className="m-0 text-[12px] font-medium uppercase tracking-[0.08em] text-[#8b93a7]">Course</p>
+            <p className="m-0 mt-1 text-[18px] font-semibold text-[#061948]">{course}</p>
+            {facts.length > 0 && <p className="m-0 mt-1 text-[13.5px] text-[#4a5265]">{facts.join(' · ')}</p>}
+
+            <dl className="m-0 mt-4 grid grid-cols-[1fr_auto] gap-y-1.5 border-t border-[#e6e8ee] pt-4 text-[14px] text-[#3c4252]">
+              {Number(feeTotal) > Number(fee) && (
+                <>
+                  <dt>Course fee</dt>
+                  <dd className="m-0 text-right">{rupees(fee)}</dd>
+                  <dt>GST</dt>
+                  <dd className="m-0 text-right">{rupees(Number(feeTotal) - Number(fee))}</dd>
+                </>
+              )}
+              <dt className="font-semibold text-[#061948]">Total</dt>
+              <dd className="m-0 text-right text-[17px] font-semibold text-[#061948]">{rupees(feeTotal)}</dd>
+            </dl>
+            <p className="m-0 mt-4 text-[13.5px] text-[#4a5265]">
+              Student: <span className="font-medium text-[#2c3b64]">{form.name.trim()}</span> · {form.mobile.trim()}
+            </p>
+          </div>
+
+          {testMode && (
+            <p className="m-0 text-[12.5px] font-medium text-[#b26a00]">
+              Test mode — pay with Cashfree test cards or UPI. No real money is charged.
+            </p>
+          )}
+          {error && (
+            <p role="alert" className="m-0 text-[14px] text-[#c62828]">
+              {error}
+            </p>
+          )}
+
+          <button
+            type="button"
+            onClick={pay}
+            disabled={sending}
+            className="inline-flex h-[50px] cursor-pointer items-center justify-center gap-3 rounded-lg border-0 bg-linear-to-b from-[#df9d3d] to-[#bd7724] px-6 text-[15px] font-medium text-white transition-opacity hover:opacity-95 disabled:cursor-wait disabled:opacity-60"
+          >
+            <CreditCard className="h-[18px] w-[18px]" strokeWidth={1.8} />
+            {sending ? 'Please wait…' : `Pay ${rupees(feeTotal)} now`}
+          </button>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => setStep('details')}
+              disabled={sending}
+              className="inline-flex cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-[14px] font-medium text-[#2c3b64] hover:underline disabled:cursor-wait"
+            >
+              <ArrowLeft className="h-4 w-4" /> Edit details
+            </button>
+            <button
+              type="button"
+              onClick={register}
+              disabled={sending}
+              className="cursor-pointer border-0 bg-transparent p-0 text-[14px] font-medium text-[#bd7724] hover:underline disabled:cursor-wait"
+            >
+              Pay later at the institute
+            </button>
+          </div>
+        </div>
       ) : (
         <>
           <p className="m-0 mt-2 text-[15px] leading-[1.7] text-[#4a5265]">
-            Fill in your details. Your registration is saved as pending, and we email you the registration number.
+            Registering for <span className="font-medium text-[#2c3b64]">{course}</span>. Fill in your details and we email you the registration number.
           </p>
           <form className="mt-6 grid gap-4 sm:grid-cols-2" onSubmit={submit}>
             <Field label="Student name *">
@@ -203,49 +276,20 @@ export default function RegistrationForm({ courseId, course, fee, feeTotal }) {
             </Field>
 
             <p className="m-0 text-[13px] text-[#8b93a7] sm:col-span-2">
-              Registering for <span className="font-medium text-[#2c3b64]">{course}</span>. Your photograph, ID proof and
-              qualification documents are collected when you visit.
+              Your photograph, ID proof and qualification documents are collected when you visit.
             </p>
-            {payable && (
-              <div className="rounded-lg border border-[#e6e8ee] bg-[#f8f9fb] px-4 py-3 text-[14px] text-[#3c4252] sm:col-span-2">
-                <div className="flex items-center justify-between gap-3">
-                  <span>Course fee{Number(feeTotal) > Number(fee) ? ' (incl. GST)' : ''}</span>
-                  <span className="text-[17px] font-semibold text-[#061948]">{rupees(feeTotal)}</span>
-                </div>
-                {testMode && (
-                  <p className="m-0 mt-1.5 text-[12.5px] font-medium text-[#b26a00]">
-                    Test mode — pay with Cashfree test cards or UPI. No real money is charged.
-                  </p>
-                )}
-              </div>
-            )}
             {error && (
               <p role="alert" className="m-0 text-[14px] text-[#c62828] sm:col-span-2">
                 {error}
               </p>
             )}
-            {payable && (
-              <button
-                type="button"
-                onClick={pay}
-                disabled={sending}
-                className="inline-flex h-[50px] cursor-pointer items-center justify-center gap-3 rounded-lg border-0 bg-linear-to-b from-[#df9d3d] to-[#bd7724] px-6 text-[15px] font-medium text-white transition-opacity hover:opacity-95 disabled:cursor-wait disabled:opacity-60 sm:col-span-2"
-              >
-                <CreditCard className="h-[18px] w-[18px]" strokeWidth={1.8} />
-                {sending ? 'Opening payment…' : `Pay ${rupees(feeTotal)} & register`}
-              </button>
-            )}
             <button
               type="submit"
               disabled={sending}
-              className={`inline-flex h-[50px] cursor-pointer items-center justify-center gap-3 rounded-lg px-6 text-[15px] font-medium transition-colors disabled:cursor-wait disabled:opacity-60 sm:col-span-2 ${
-                payable
-                  ? 'border border-[#061948] bg-white text-[#061948] hover:bg-[#f8f9fb]'
-                  : 'border-0 bg-[#061948] text-white hover:bg-[#10285e]'
-              }`}
+              className="inline-flex h-[50px] cursor-pointer items-center justify-center gap-3 rounded-lg border-0 bg-[#061948] px-6 text-[15px] font-medium text-white transition-colors hover:bg-[#10285e] disabled:cursor-wait disabled:opacity-60 sm:col-span-2"
             >
               <UserPlus className="h-[18px] w-[18px]" strokeWidth={1.8} />
-              {sending && !payable ? 'Registering…' : payable ? 'Register now, pay later' : 'Register now'}
+              {sending ? 'Registering…' : 'Register'}
             </button>
           </form>
         </>
