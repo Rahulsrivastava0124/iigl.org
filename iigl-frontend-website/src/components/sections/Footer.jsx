@@ -29,6 +29,7 @@ const columns = [
     links: [
       { label: 'About Us', href: '/about-us' },
       { label: 'Affiliation', href: '/affiliation' },
+      { label: 'Our Branches', href: '/#branches' },
       { label: 'Importance of Certificate', href: '/importance-of-certificate' },
       { label: 'GemBlog', href: '/blog' },
       { label: 'Contact Us', href: '/contact-us' },

@@ -61,10 +61,6 @@ export default function WhyChooseSection() {
             Excellence in Gemology,
             <span className="block">Trust in Every Report</span>
           </h2>
-
-          <p className="mx-auto mt-4 max-w-[610px] text-[15px] font-normal leading-[1.65] text-[#4a5265]">
-            We combine international standards, advanced technology, and expertise to deliver reports you can trust with complete confidence.
-          </p>
         </div>
 
         {/* Phone: the reasons auto-rotate through a swiper, one and a peek at a
@@ -93,6 +89,10 @@ export default function WhyChooseSection() {
             <ReasonCard key={reason.title} {...reason} />
           ))}
         </div>
+
+        <p className="mx-auto mt-10 max-w-[610px] text-center text-[15px] font-normal leading-[1.65] text-[#4a5265]">
+          We combine international standards, advanced technology, and expertise to deliver reports you can trust with complete confidence.
+        </p>
       </div>
     </section>
   );
