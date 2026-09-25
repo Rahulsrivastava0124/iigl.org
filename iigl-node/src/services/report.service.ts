@@ -72,6 +72,20 @@ export interface CreateReportInput {
   attributes: ReportAttribute[];
 }
 
+/**
+ * A stored picture path, or null for none.
+ *
+ * Laravel posted a field with no picture as the text "null" and saved it that
+ * way, so most certificates carry `"attr_img":"null"`. Read as a path it is a
+ * file that does not exist, and the panel shows "File missing" for a field
+ * that simply has no picture.
+ */
+function realPath(v: unknown): string | null {
+  if (v == null) return null;
+  const s = String(v).trim();
+  return s === '' || s === 'null' || s === 'undefined' ? null : s;
+}
+
 export function validateReportInput(body: unknown): CreateReportInput {
   const b = (body ?? {}) as Record<string, unknown>;
   if (!b.order_id) throw badRequest('Order is required.');
@@ -98,7 +112,7 @@ export function validateReportInput(body: unknown): CreateReportInput {
         attr_id: String(a.attr_id),
         attr_value: a.attr_value != null ? String(a.attr_value) : null,
         attr_desc: a.attr_desc != null ? String(a.attr_desc) : null,
-        ...(a.attr_img != null ? { attr_img: String(a.attr_img) } : {}),
+        ...(realPath(a.attr_img) ? { attr_img: realPath(a.attr_img)! } : {}),
       };
     }),
   };
@@ -342,7 +356,7 @@ export async function expandAttributes(descriptions: (string | null)[]) {
         value: val?.value_name ?? a.attr_value,
         value_icon: val?.icon ?? null,
         description: a.attr_desc,
-        image: a.attr_img ?? null,
+        image: realPath(a.attr_img),
         // The raw stored id and note, so the edit form can pre-select the value
         // it holds (the dropdown is keyed by value id, not by name).
         attr_value: a.attr_value ?? null,
@@ -391,7 +405,7 @@ export function validateUpdateReportInput(body: unknown): UpdateReportInput {
         attr_id: String(a.attr_id),
         attr_value: a.attr_value != null ? String(a.attr_value) : null,
         attr_desc: a.attr_desc != null ? String(a.attr_desc) : null,
-        ...(a.attr_img != null ? { attr_img: String(a.attr_img) } : {}),
+        ...(realPath(a.attr_img) ? { attr_img: realPath(a.attr_img)! } : {}),
       };
     });
   }
