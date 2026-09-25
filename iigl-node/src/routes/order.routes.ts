@@ -309,6 +309,88 @@ orderRoutes.get(
   }),
 );
 
+/**
+ * The laboratory's own customers, for the counter's mobile field to pick from.
+ *
+ * Two sources, the way the Registered customers screen has them: the accounts
+ * registered under this laboratory first — they are the customers it keeps on
+ * its books — then everybody who has ordered here, each number once with the
+ * details of its most recent order. An account also brings the name and the
+ * picture it wants on its cards.
+ *
+ * `q` narrows by the start of the number; without it this is the list as it
+ * opens. The field still takes a number nobody has used, so this suggests and
+ * never restricts.
+ */
+orderRoutes.get(
+  '/customer/suggest',
+  wrap(async (req, res) => {
+    const q = String(req.query.q ?? '').replace(/\D/g, '').slice(0, 10);
+    const LIMIT = 25;
+    const scoped = req.user.roleId !== ROLE.SUPER;
+
+    let accountsQuery = db
+      .selectFrom('registered_customers')
+      .select([
+        'company_name',
+        'owner_name',
+        'mobile',
+        'email',
+        'gst_no',
+        'area',
+        'city',
+        'state',
+        'show_name_in_card',
+        'show_name_input',
+        'show_image_in_card',
+        'show_image_in_card_file',
+      ]);
+    if (scoped) accountsQuery = accountsQuery.where('lab_id', '=', req.user.labId);
+    if (q) accountsQuery = accountsQuery.where('mobile', 'like', `${q}%`);
+
+    let ordersQuery = live(db.selectFrom('orders'))
+      .select(['customer_name', 'mobile', 'alt_mobile', 'email', 'gst', 'address'])
+      .where('mobile', '!=', '');
+    if (scoped) ordersQuery = ordersQuery.where('lab_id', '=', req.user.labId);
+    if (q) ordersQuery = ordersQuery.where('mobile', 'like', `${q}%`);
+
+    const [accounts, orders] = await Promise.all([
+      accountsQuery.orderBy('company_name').limit(LIMIT).execute(),
+      ordersQuery.orderBy('id', 'desc').limit(300).execute(),
+    ]);
+
+    const seen = new Set<string>();
+    const data = [];
+    for (const a of accounts) {
+      const mobile = String(a.mobile ?? '').trim();
+      if (!mobile || seen.has(mobile)) continue;
+      seen.add(mobile);
+      data.push({
+        registered: true,
+        customer_name: a.owner_name || a.company_name,
+        company_name: a.company_name,
+        mobile,
+        alt_mobile: null,
+        email: a.email,
+        gst: a.gst_no,
+        address: [a.area, a.city, a.state].filter(Boolean).join(', ') || null,
+        show_name_in_card: Number(a.show_name_in_card),
+        show_name_input: a.show_name_input,
+        show_image_in_card: Number(a.show_image_in_card),
+        show_image_in_card_file: a.show_image_in_card_file,
+      });
+    }
+    for (const o of orders) {
+      if (data.length >= LIMIT) break;
+      const mobile = String(o.mobile ?? '').trim();
+      if (!mobile || seen.has(mobile)) continue;
+      seen.add(mobile);
+      data.push({ registered: false, company_name: null, ...o, mobile });
+    }
+    res.json({ data });
+  }),
+);
+
 orderRoutes.post(
   '/',
   requirePermission('product_collection', 'create'),

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
+  Autocomplete,
   Box,
   Button,
   Checkbox,
@@ -21,11 +22,11 @@ import dayjs from 'dayjs';
 import AddIcon from '@mui/icons-material/AddOutlined';
 import RemoveIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import { useToast } from '../components/Toast';
-import { useFetch } from '../lib/useFetch';
+import { useDebounced, useFetch } from '../lib/useFetch';
 import { api } from '../lib/api';
 import { messageOf, useAuth } from '../lib/auth';
 import { isTeam } from '../lib/portal';
-import { hint, Panel } from '../components/ui';
+import { hint, hintNode, Panel, StateChip } from '../components/ui';
 import FileField from '../components/FileField';
 import YesNoField from '../components/YesNoField';
 import type { Category, Paged } from '../lib/api';
@@ -62,6 +63,24 @@ interface OrderRecord {
     smart_card: number;
     classic_card: number;
   }[];
+}
+
+/** One of the laboratory's own customers, as the mobile field offers them. */
+interface KnownCustomer {
+  /** A registered account, rather than somebody known only from their orders. */
+  registered: boolean;
+  customer_name: string | null;
+  company_name: string | null;
+  mobile: string;
+  alt_mobile: string | null;
+  email: string | null;
+  gst: string | null;
+  address: string | null;
+  /** An account's card preferences; absent for an order-only customer. */
+  show_name_in_card?: number;
+  show_name_input?: string | null;
+  show_image_in_card?: number;
+  show_image_in_card_file?: string | null;
 }
 
 /** Somebody on this laboratory's books, for the Assign to list. */
@@ -215,6 +234,38 @@ export default function NewOrder() {
   const setItem = (i: number, patch: Partial<Item>) =>
     setItems((rows) => rows.map((r, n) => (n === i ? { ...r, ...patch } : r)));
 
+  /*
+    The laboratory's own customers, offered by the mobile field: the whole list
+    when it opens, narrowed as digits are typed. Not while amending — the
+    customer is already on the order.
+  */
+  const typed = useDebounced(customer.mobile.replace(/\D/g, ''), 250);
+  const suggestions = useFetch<{ data: KnownCustomer[] }>(
+    amending ? null : `/orders/customer/suggest?q=${encodeURIComponent(typed)}`,
+  );
+  const known = suggestions.data?.data ?? [];
+
+  /**
+   * Fills the form from a customer picked off the list. An account also brings
+   * the name and picture it wants on its cards.
+   */
+  const pick = (c: KnownCustomer) => {
+    setCustomer({
+      customer_name: c.customer_name ?? '',
+      mobile: c.mobile,
+      alt_mobile: c.alt_mobile ?? '',
+      email: c.email ?? '',
+      gst: c.gst ?? '',
+      address: c.address ?? '',
+    });
+    if (c.registered) {
+      setShowName(Boolean(c.show_name_in_card));
+      setNameOnCard(c.show_name_input ?? '');
+      setShowImage(Boolean(c.show_image_in_card));
+      setImageOnCard(c.show_image_in_card_file ?? null);
+    }
+  };
+
   /** Looks the number up when it is long enough to be one. */
   const lookup = async () => {
     const mobile = customer.mobile.trim();
@@ -233,7 +284,7 @@ export default function NewOrder() {
         gst: c.gst ?? prev.gst,
         address: c.address ?? prev.address,
       }));
-      toast.ok(`Filled in from the last order for ${c.customer_name ?? mobile}.`);
+      // Silently: the fields filling themselves in is the confirmation.
     } catch {
       // A number nobody has ordered under is the normal case, not an error.
     }
@@ -302,17 +353,74 @@ export default function NewOrder() {
       >
         <Grid container spacing={2}>
           <Grid size={CELL}>
-            <TextField
-              label="Customer's Mobile No."
-              placeholder="Eg. 84024523654"
-              value={customer.mobile}
-              onChange={(e) => set('mobile', e.target.value)}
-              onBlur={lookup}
-              required
-              slotProps={{
-                htmlInput: { maxLength: 10, inputMode: 'numeric' },
-                ...hint('If they have ordered before, the rest fills itself in.'),
+            {/*
+              A selector and a text box at once. Opening it lists the lab's own
+              customers — registered accounts first — and typing digits narrows
+              the list; picking one fills the rest. A new number is simply typed
+              out, and the lookup on leaving the field still catches a full one
+              nobody picked.
+            */}
+            <Autocomplete<KnownCustomer, false, false, true>
+              freeSolo
+              openOnFocus
+              // The first customer is highlighted, so Enter takes it. A number
+              // that matches nobody leaves the list empty and Enter keeps it.
+              autoHighlight
+              options={known}
+              filterOptions={(o) => o}
+              getOptionLabel={(o) => (typeof o === 'string' ? o : o.mobile)}
+              inputValue={customer.mobile}
+              onInputChange={(_, text, reason) => {
+                if (reason !== 'reset') set('mobile', text.replace(/\D/g, '').slice(0, 10));
               }}
+              onChange={(_, next) => {
+                if (next && typeof next !== 'string') pick(next);
+              }}
+              loading={suggestions.loading}
+              noOptionsText="No customer with that number yet — carry on typing to add one"
+              renderOption={({ key, ...props }, o) => (
+                <li key={key} {...props}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center', width: '100%', minWidth: 0 }}>
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                      <Typography className="mono" sx={{ fontSize: 14 }}>
+                        {o.mobile}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      >
+                        {[o.customer_name, o.company_name !== o.customer_name ? o.company_name : null]
+                          .filter(Boolean)
+                          .join(' · ') || 'No name'}
+                      </Typography>
+                    </Box>
+                    {o.registered && <StateChip tone="settled" label="Registered" soft />}
+                  </Stack>
+                </li>
+              )}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Customer's Mobile No."
+                  placeholder="Eg. 84024523654"
+                  onBlur={lookup}
+                  required
+                  slotProps={{
+                    ...params.slotProps,
+                    htmlInput: { ...params.slotProps.htmlInput, maxLength: 10, inputMode: 'numeric' },
+                    input: {
+                      ...params.slotProps.input,
+                      endAdornment: (
+                        <>
+                          {hintNode('Pick one of your customers, or type a new number. Picking fills in the rest.')}
+                          {params.slotProps.input.endAdornment}
+                        </>
+                      ),
+                    },
+                  }}
+                />
+              )}
             />
           </Grid>
           <Grid size={CELL}>
@@ -365,6 +473,21 @@ export default function NewOrder() {
             <Typography sx={{ fontSize: 13.5, fontWeight: 600, mt: 1 }}>Items Details</Typography>
           </Grid>
           <Grid size={12}>
+            {/*
+              Framed and ruled, so the lines read as a table the order is written
+              into rather than fields floating under the header.
+            */}
+            <Box
+              sx={{
+                border: 1,
+                borderColor: 'divider',
+                borderRadius: 1,
+                overflow: 'hidden',
+                '& td, & th': { borderRight: 1, borderColor: 'divider' },
+                '& td:last-of-type, & th:last-of-type': { borderRight: 0 },
+                '& tbody tr:last-of-type td': { borderBottom: 0 },
+              }}
+            >
             <Table size="small">
               <TableHead>
                 {/*
@@ -464,6 +587,7 @@ export default function NewOrder() {
                 ))}
               </TableBody>
             </Table>
+            </Box>
           </Grid>
 
           {/* ------------------------------------------- handover details */}

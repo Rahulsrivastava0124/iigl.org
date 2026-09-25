@@ -1775,6 +1775,22 @@ const document = {
       },
     },
 
+    '/api/orders/customer/suggest': {
+      get: {
+        tags: ['Orders'],
+        summary: 'The laboratory’s own customers, for the counter’s mobile field',
+        description:
+          'Registered customer accounts of the caller’s laboratory first (with their card name and picture), then everybody who has ordered there, each number once with its most recent details. `q` narrows by the start of the number. 25 at most.',
+        parameters: [
+          { name: 'q', in: 'query', required: false, schema: { type: 'string', examples: ['984'] } },
+        ],
+        responses: {
+          200: { description: 'Up to 25 customers, `registered` marking an account.' },
+          ...guarded,
+        },
+      },
+    },
+
     '/api/orders/items/{id}': {
       delete: {
         tags: ['Orders'],
