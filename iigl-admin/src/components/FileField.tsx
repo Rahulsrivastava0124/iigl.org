@@ -52,6 +52,7 @@ export default function FileField({
   helperText,
   ratio,
   fill,
+  height = FRAME_HEIGHT,
   multiple = false,
 }: {
   label: string;
@@ -74,6 +75,11 @@ export default function FileField({
    * frame.
    */
   fill?: boolean;
+  /**
+   * How tall a shaped frame would like to be, in px; the width follows from
+   * `ratio`. Smaller for a field that sits on one row beside its question.
+   */
+  height?: number;
   /**
    * Take several files at once, dropped or chosen together. `onChange` is
    * called once for each file saved, in order — for a list, such as a gallery,
@@ -114,7 +120,7 @@ export default function FileField({
   const shaped = Boolean(ratio) && rw > 0 && rh > 0;
   const frame = {
     width: '100%',
-    maxWidth: fill ? '100%' : Math.round(FRAME_HEIGHT * (rw / rh)),
+    maxWidth: fill ? '100%' : Math.round(height * (rw / rh)),
     aspectRatio: shaped ? `${rw} / ${rh}` : undefined,
   };
 
@@ -247,7 +253,7 @@ export default function FileField({
     <Box
       sx={
         shaped && !fill
-          ? { width: Math.round(FRAME_HEIGHT * (rw / rh)), maxWidth: '100%' }
+          ? { width: Math.round(height * (rw / rh)), maxWidth: '100%' }
           : undefined
       }
     >

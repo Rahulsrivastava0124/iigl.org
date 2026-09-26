@@ -592,48 +592,18 @@ export default function NewOrder() {
 
           {/* ------------------------------------------- handover details */}
           <Grid size={CELL}>
-            <Stack spacing={2}>
-              <TextField
-                select
-                label="Assign to"
-                value={assigned}
-                onChange={(e) => setAssignedTo(e.target.value)}
-                disabled={staff.loading}
-                slotProps={{
-                  select: { displayEmpty: true },
-                  /*
-                    `displayEmpty` draws "Nobody yet" while the value is still
-                    empty, and an empty value leaves the label sitting at full
-                    size in the same place — the two were printed on top of each
-                    other. The label is told to stay up: there is always something
-                    in the box for it to sit above.
-                  */
-                  inputLabel: { shrink: true },
-                  // `true`: on a select the mark has to clear the dropdown arrow.
-                  ...hint('Who writes the certificates for this order. It can be changed later.', true),
-                }}
-              >
-                <MenuItem value="">Nobody yet</MenuItem>
-                {team.map((s) => (
-                  <MenuItem key={s.id} value={String(s.id)}>
-                    {s.fullname}
-                    {s.empid ? ` (${s.empid})` : ''}
-                  </MenuItem>
-                ))}
-              </TextField>
-
-              <DateTimePicker
-                label="Delivery Date"
-                format={DUES_FORMAT}
-                value={dues}
-                onChange={(next) => next && setDues(next)}
-                slotProps={{ textField: { fullWidth: true } }}
-              />
-            </Stack>
+            <DateTimePicker
+              label="Delivery Date"
+              format={DUES_FORMAT}
+              value={dues}
+              onChange={(next) => next && setDues(next)}
+              slotProps={{ textField: { fullWidth: true } }}
+            />
           </Grid>
 
           <Grid size={CELL}>
             <YesNoField
+              inline
               label="Show Name on Card"
               value={showName}
               onChange={setShowName}
@@ -652,7 +622,9 @@ export default function NewOrder() {
           </Grid>
 
           <Grid size={CELL}>
-            <YesNoField label="Show Image on Card" value={showImage} onChange={setShowImage}>
+            <YesNoField inline label="Show Image on Card" value={showImage} onChange={setShowImage}>
+              {/* Same 4:3 shape as printed, just a smaller frame so it sits
+                  on the row beside the question. */}
               {showImage ? (
                 <FileField
                   label="Picture for the card"
@@ -661,7 +633,7 @@ export default function NewOrder() {
                   onChange={setImageOnCard}
                   accept="image/png,image/jpeg"
                   ratio="4 / 3"
-                  fill
+                  height={120}
                 />
               ) : null}
             </YesNoField>
@@ -677,9 +649,41 @@ export default function NewOrder() {
             pt: 2,
             borderTop: 1,
             borderColor: 'divider',
-            justifyContent: 'flex-end',
+            alignItems: 'center',
           }}
         >
+          {/* Left of the buttons: who the order goes to is the last thing
+              decided before it is collected. */}
+          <TextField
+            select
+            size="small"
+            label="Assign to"
+            value={assigned}
+            onChange={(e) => setAssignedTo(e.target.value)}
+            disabled={staff.loading}
+            sx={{ width: 320, maxWidth: '100%', mr: 'auto' }}
+            slotProps={{
+              select: { displayEmpty: true },
+              /*
+                `displayEmpty` draws "Nobody yet" while the value is still
+                empty, and an empty value leaves the label sitting at full
+                size in the same place — the two were printed on top of each
+                other. The label is told to stay up: there is always something
+                in the box for it to sit above.
+              */
+              inputLabel: { shrink: true },
+              // `true`: on a select the mark has to clear the dropdown arrow.
+              ...hint('Who writes the certificates for this order. It can be changed later.', true),
+            }}
+          >
+            <MenuItem value="">Nobody yet</MenuItem>
+            {team.map((s) => (
+              <MenuItem key={s.id} value={String(s.id)}>
+                {s.fullname}
+                {s.empid ? ` (${s.empid})` : ''}
+              </MenuItem>
+            ))}
+          </TextField>
           <Button variant="contained" type="submit" disabled={!ready || busy}>
             {busy ? 'Saving…' : amending ? 'Save changes' : 'Collect order'}
           </Button>

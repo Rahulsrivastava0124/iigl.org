@@ -43,7 +43,19 @@ export interface OrderHead {
   alt_mobile?: string | null;
   email?: string | null;
   address?: string | null;
+  /** dd-mm-yyyy text, as `orders.order_date` stores it. */
   order_date?: string | null;
+}
+
+/**
+ * `order_date` is dd-mm-yyyy text, which `dayjs()` cannot read without being
+ * told the format — it came out as "Invalid Date". Anything that still does not
+ * parse is shown as stored rather than hidden.
+ */
+function invoiceDate(raw?: string | null): string {
+  if (!raw) return '—';
+  const day = dayjs(raw, 'DD-MM-YYYY', true);
+  return day.isValid() ? day.format('DD/MM/YYYY') : raw;
 }
 
 interface Unit {
@@ -320,7 +332,7 @@ export default function CertificateForm({
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                   Date of invoice:{' '}
-                  {head.order_date ? dayjs(head.order_date).format('DD/MM/YYYY') : '—'}
+                  {invoiceDate(head.order_date)}
                 </Typography>
                 {itemNote && (
                   <Typography variant="body2" color="text.secondary">
