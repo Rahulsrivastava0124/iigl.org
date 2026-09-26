@@ -974,7 +974,17 @@ export default function Shell() {
               <MenuIcon />
             </IconButton>
 
-            <Box sx={{ minWidth: 0, display: { xs: 'none', sm: 'block' } }}>
+            {/* Home, like the logo beside it: the dashboard is `/`. */}
+            <Box
+              component={RouterLink}
+              to="/"
+              sx={{
+                minWidth: 0,
+                display: { xs: 'none', sm: 'block' },
+                color: 'inherit',
+                textDecoration: 'none',
+              }}
+            >
               <Typography sx={{ fontWeight: 600, fontSize: 15.5, lineHeight: 1.2 }} noWrap>
                 Welcome, {user?.fullname}
               </Typography>
