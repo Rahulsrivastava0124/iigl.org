@@ -650,10 +650,13 @@ export default function NewOrder() {
             borderTop: 1,
             borderColor: 'divider',
             alignItems: 'center',
+            justifyContent: 'space-between',
           }}
         >
           {/* Left of the buttons: who the order goes to is the last thing
-              decided before it is collected. */}
+              decided before it is collected. The buttons are a group of their
+              own because Stack's spacing zeroes a child's margin, so an
+              `mr: 'auto'` here never pushed them right. */}
           <TextField
             select
             size="small"
@@ -661,7 +664,7 @@ export default function NewOrder() {
             value={assigned}
             onChange={(e) => setAssignedTo(e.target.value)}
             disabled={staff.loading}
-            sx={{ width: 320, maxWidth: '100%', mr: 'auto' }}
+            sx={{ width: 320, maxWidth: '100%' }}
             slotProps={{
               select: { displayEmpty: true },
               /*
@@ -684,16 +687,18 @@ export default function NewOrder() {
               </MenuItem>
             ))}
           </TextField>
-          <Button variant="contained" type="submit" disabled={!ready || busy}>
-            {busy ? 'Saving…' : amending ? 'Save changes' : 'Collect order'}
-          </Button>
-          <Button
-            variant="outlined"
-            onClick={() => navigate(amending ? `/orders/${orderId}` : '/orders')}
-            disabled={busy}
-          >
-            Cancel
-          </Button>
+          <Stack direction="row" spacing={2}>
+            <Button variant="contained" type="submit" disabled={!ready || busy}>
+              {busy ? 'Saving…' : amending ? 'Save changes' : 'Collect order'}
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={() => navigate(amending ? `/orders/${orderId}` : '/orders')}
+              disabled={busy}
+            >
+              Cancel
+            </Button>
+          </Stack>
         </Stack>
       </Box>
     </Panel>
