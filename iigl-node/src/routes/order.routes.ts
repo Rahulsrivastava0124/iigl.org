@@ -105,9 +105,31 @@ orderRoutes.get(
       c.executeTakeFirstOrThrow(),
     ]);
 
-    res.json(paged(await withCounts(rows), Number(count.n), p));
+    res.json(paged(await withDues(await withCounts(rows)), Number(count.n), p));
   }),
 );
+
+/**
+ * Paid and Due for orders nobody has settled yet.
+ *
+ * A settled order stores both; one still in preparation stores nothing, and
+ * the list read that as 0 due — an order with five certificates written looked
+ * square. Those rows are quoted live, the same bill the order's own page and
+ * the Pay dialog show, so the column says what the customer owes so far.
+ * Nothing is written: the stored figures, which the dashboard and customer
+ * totals add up, still only exist once somebody has settled the order.
+ */
+async function withDues<T extends { id: number; dues_amount: string | null; paid_amount: string | null; discount: number | null }>(
+  rows: T[],
+): Promise<T[]> {
+  return Promise.all(
+    rows.map(async (r) => {
+      if (r.dues_amount !== null) return r;
+      const q = await quoteOrder(Number(r.id), Number(r.discount ?? 0)).catch(() => null);
+      return q ? { ...r, paid_amount: String(q.paid_amount), dues_amount: String(q.balance_due) } : r;
+    }),
+  );
+}
 
 /**
  * The four columns the Laravel order list carried beside the money: how many

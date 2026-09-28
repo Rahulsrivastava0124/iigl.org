@@ -290,6 +290,13 @@ export const theme = createTheme({
           backgroundColor: BRAND.tableHeadBg,
           borderBottom: 'none',
           whiteSpace: 'nowrap',
+          /*
+            A select-all box in a header is navy by default — invisible on the
+            navy row. It takes the header's own text colour, ticked or not.
+          */
+          '& .MuiCheckbox-root, & .MuiCheckbox-root.Mui-checked, & .MuiCheckbox-root.MuiCheckbox-indeterminate': {
+            color: BRAND.tableHeadText,
+          },
         },
         // Every list in the panel sets `stickyHeader`, and that slot paints its
         // own background over the one above, so the navy has to be repeated

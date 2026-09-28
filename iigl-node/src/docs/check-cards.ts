@@ -13,8 +13,8 @@
  * screenshot:
  *
  *   multsmart.blade.php            no logo, no background, no corner rules,
- *                                  no terms line, and a back panel that is the
- *                                  issuing laboratory's address and nothing else
+ *                                  no terms line — and here no back panel: its
+ *                                  fronts print two to a 182 x 122mm page
  *   smartCardwithheader.blade.php  the logo, `bg.png` at 130px on every
  *                                  section, four 15px corner rules, the terms
  *                                  line, and the notes, IIGL block and gold band
@@ -90,7 +90,9 @@ console.log('\nwhat both carry:');
 only('the certificate number', ['smart', 'smart-header'], (h) => h.includes(card.report_no));
 only('the stone', ['smart', 'smart-header'], (h) => h.includes('class="item"'));
 only('the QR', ['smart', 'smart-header'], (h) => h.includes('class="qr"'));
-only("the laboratory's address", ['smart', 'smart-header'], (h) =>
+// The plain card prints its front alone, two to a 182 x 122mm page, so the
+// address that was its whole back panel is on the headed card only.
+only("the laboratory's address", card.lab_address ? ['smart-header'] : ['smart', 'smart-header'], (h) =>
   card.lab_address ? h.includes(card.lab_address) : true,
 );
 if (card.customer_name) {

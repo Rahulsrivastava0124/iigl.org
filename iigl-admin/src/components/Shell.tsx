@@ -368,6 +368,7 @@ const FIELD_GROUPS: Group[] = [
     label: 'Orders',
     icon: OrdersIcon,
     items: [
+      { to: '/orders/new', label: 'Collect Order', needs: 'order-create' },
       { to: '/orders?status=preparing', label: 'In Progress' },
       { to: '/orders?status=delivered', label: 'Delivered' },
       { to: '/orders?dues=1', label: 'Dues Order' },
@@ -1091,9 +1092,8 @@ export default function Shell() {
               thing anybody starts from is in the same place whoever is signed
               in — staff have the clock in the middle, not instead of this.
 
-              This is now the only way in: the Orders group used to carry a
-              Collect New beside its three lists, and one action in two places
-              is two things to keep in step for no gain.
+              The Orders group also opens it, as its first entry, for whoever
+              looks for it under Orders rather than up here.
             */}
             {canCollect && (
               <Button

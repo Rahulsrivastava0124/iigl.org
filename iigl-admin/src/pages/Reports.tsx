@@ -3,6 +3,7 @@ import {
   Avatar,
   Button,
   Checkbox,
+  FormControlLabel,
   MenuItem,
   Table,
   TableBody,
@@ -56,6 +57,9 @@ export default function Reports() {
   // Who wrote it, and which card the order asked for.
   const [createdBy, setCreatedBy] = useState('');
   const [card, setCard] = useState('');
+  // Whether the batch prints the headed smart card — IIGL's logo, the notes
+  // and the band on the back — rather than the plain one.
+  const [withHeader, setWithHeader] = useState(false);
 
   const query = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (term.trim()) query.set('q', term.trim());
@@ -87,7 +91,7 @@ export default function Reports() {
    * response is a PDF, which is turned into a blob URL and opened.
    */
   const printBatch = async () => {
-    const res = await fetch(apiUrl('/cards/smart'), {
+    const res = await fetch(apiUrl(withHeader ? '/cards/smart-header' : '/cards/smart'), {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -186,6 +190,13 @@ export default function Reports() {
                 {selected.length} selected — the cap is 50 per print run
               </Typography>
             )}
+            <FormControlLabel
+              control={
+                <Checkbox size="small" checked={withHeader} onChange={(e) => setWithHeader(e.target.checked)} />
+              }
+              label="With header"
+              sx={{ mr: 0, whiteSpace: 'nowrap' }}
+            />
             <Button
               variant="contained"
               startIcon={<PrintIcon />}

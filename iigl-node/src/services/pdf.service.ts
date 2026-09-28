@@ -43,7 +43,8 @@ const TEMPLATES: Record<CardKind, string> = {
 
 /** Page setup per card type. Sizes match the printed stock. */
 const PAGE: Record<CardKind, { width: string; height: string } | { format: 'A4' }> = {
-  smart: { width: '7.2in', height: '2.5in' },
+  // Two plain cards to a page, on the counter printer's custom 182 x 122mm.
+  smart: { width: '182mm', height: '122mm' },
   'smart-header': { width: '7.2in', height: '2.5in' },
   /*
     The card stock, not a paper size. The classic certificate overprints

@@ -340,11 +340,21 @@ export default function Orders() {
                         dead control beside a done order is one that exists only
                         to say no.
 
+                        Outstanding certificates win over money owed: an order
+                        in progress already runs a bill, but it is paid once
+                        the work is done, not halfway through it.
+
                         A delivered order that still owes shows Pay. Settling
                         happens on the order's own page, where the amount payable
                         is in front of whoever takes the money.
                       */}
-                      {!opensOrders ? null : ready || owing ? (
+                      {!opensOrders ? null : o.reports_generated < o.total_reports ? (
+                        <IconAction
+                          label="Write the next certificate"
+                          icon={NextIcon}
+                          to={`/reports/new?order=${o.id}`}
+                        />
+                      ) : ready || owing ? (
                         <Button
                           size="small"
                           variant="contained"
@@ -355,13 +365,7 @@ export default function Orders() {
                         >
                           Pay
                         </Button>
-                      ) : o.reports_generated >= o.total_reports ? null : (
-                        <IconAction
-                          label="Write the next certificate"
-                          icon={NextIcon}
-                          to={`/reports/new?order=${o.id}`}
-                        />
-                      )}
+                      ) : null}
                       {opensOrders && (
                         <IconAction label="View order" icon={OpenIcon} to={`/orders/${o.id}`} />
                       )}

@@ -9,8 +9,13 @@
     Two panels of 3.4in x 2.2in, front and back, printed side by side.
     Dimensions are load-bearing: cards are guillotined to these marks.
   */
+  /*
+    The headed card is front and back side by side, one card to a page. The
+    plain card prints its front alone, two to a page, centred on a 182mm x
+    122mm sheet — the custom paper size set on the counter's printer.
+  */
   @page {
-    size: 7.2in 2.5in;
+    size: <%= header ? '7.2in 2.5in' : '182mm 122mm' %>;
     margin: 0;
   }
 
@@ -31,6 +36,23 @@
     page-break-after: always;
   }
   .sheet:last-child { page-break-after: auto; }
+
+  /*
+    Two fixed slots, top and bottom, rather than centring whatever is there: a
+    last page with one card prints it in the top slot, where the first card of
+    every other page sits. The top padding is what centres a full pair —
+    (122mm - 2 x 2.2in - 4mm) / 2.
+  */
+  .sheet.pair {
+    width: 182mm;
+    height: 122mm;
+    padding: 3.12mm 0 0;
+    gap: 4mm;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    overflow: hidden;
+  }
 
   .panel {
     width: 3.4in;
@@ -172,18 +194,6 @@
     font-size: 7px;
   }
 
-  /* The plain card's back: no notes, no band — the laboratory's address, sat
-     low on the panel where `multsmart` puts it. */
-  .panel.back.plain { border: 0; }
-  .panel.back.plain .drop { height: 3.95cm; }
-  .lab-address {
-    margin: 0 auto;
-    width: 68%;
-    font-size: 7px;
-    text-align: center;
-    color: #000;
-  }
-
   .band {
     position: absolute;
     bottom: 0;
@@ -199,9 +209,10 @@
 </style>
 </head>
 <body>
-<% for (const card of cards) { %>
-  <div class="sheet">
-
+<%
+  /* The front, shared by both layouts: one copy, so the two cannot drift. */
+  function front(card) {
+%>
     <section class="panel front<%= header ? ' headed' : '' %>"
       <% if (header && chrome.watermark) { %>style="background-image:url('<%= chrome.watermark %>')"<% } %>>
       <% if (header) { %><div class="corners"></div><% } %>
@@ -263,6 +274,12 @@
       </div>
     </section>
 
+<% } %>
+<% if (header) { %>
+<% for (const card of cards) { %>
+  <div class="sheet">
+
+<% front(card) %>
     <%
       /*
         The back, which is where the two cards differ most.
@@ -301,16 +318,16 @@
         </div>
         <div class="band">Giving an Identity of Pureness</div>
       </section>
-    <% } else { %>
-      <section class="panel back plain">
-        <div class="inner">
-          <div class="drop"></div>
-          <% if (card.lab_address) { %><p class="lab-address"><%= card.lab_address %></p><% } %>
-        </div>
-      </section>
     <% } %>
 
   </div>
+<% } %>
+<% } else { %>
+<% for (let i = 0; i < cards.length; i += 2) { %>
+  <div class="sheet pair">
+<% for (const card of cards.slice(i, i + 2)) { front(card) } %>
+  </div>
+<% } %>
 <% } %>
 </body>
 </html>

@@ -158,6 +158,7 @@ export default function NewReport() {
               <TableHead>
                 <TableRow>
                   <TableCell>Item</TableCell>
+                  <TableCell>Category</TableCell>
                   <TableCell>Cards</TableCell>
                   <TableCell align="right">Ordered</TableCell>
                   <TableCell align="right">Issued</TableCell>
@@ -171,6 +172,7 @@ export default function NewReport() {
                   return (
                     <TableRow key={it.id} hover>
                       <TableCell className="mono">#{it.id}</TableCell>
+                      <TableCell>{it.category_name ?? '—'}</TableCell>
                       <TableCell>
                         {[it.smart_card && 'Smart', it.classic_card && 'Classic']
                           .filter(Boolean)
