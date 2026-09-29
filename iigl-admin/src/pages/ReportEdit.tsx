@@ -123,12 +123,8 @@ export default function ReportEdit() {
       actions={back}
       head={order.data?.data ?? null}
       item={item}
-      itemNote={
-        <>
-          Certificate <span className="mono">{r.report_no}</span>
-          {item ? ` · item #${item.id}` : ''}
-        </>
-      }
+      // The item only: the certificate number is already the page's title.
+      itemNote={item ? `Item #${item.id}` : null}
       initial={draftOf(r)}
       submitLabel="Save changes"
       busyLabel="Saving…"
