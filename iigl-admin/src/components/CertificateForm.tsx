@@ -238,6 +238,27 @@ export default function CertificateForm({
     (s) => categoryId == null || Number(s.category_id) === Number(categoryId),
   );
 
+  /*
+    A certificate saved against a stone from another category than its order
+    line — older ones carry an AGATE on a DIAMOND JEWELLERY line. That stone is
+    not offered, so it is cleared, with its fields, and the form says what it
+    was: somebody has to choose one of this line's stones before saving.
+  */
+  const misfiled =
+    item != null && initial.subcategory_id !== ''
+      ? (subcategories.data?.data ?? []).find(
+          (s) => String(s.id) === initial.subcategory_id && Number(s.category_id) !== Number(item.category_id),
+        ) ?? null
+      : null;
+  useEffect(() => {
+    if (!misfiled) return;
+    setDraft((d) =>
+      d.subcategory_id === initial.subcategory_id
+        ? { ...d, subcategory_id: '', values: {}, notes: {}, images: {} }
+        : d,
+    );
+  }, [misfiled, initial.subcategory_id]);
+
   const rows = forCards(attributes.data?.data ?? [], item);
   const graded = rows.filter((a) => draft.values[a.id]).length;
   const missing = rows.filter((a) => a.is_required && !draft.values[a.id]);
@@ -375,6 +396,12 @@ export default function CertificateForm({
                 'What the stone is. This decides which fields the certificate carries.',
                 true,
               )}
+              error={Boolean(misfiled) && !draft.subcategory_id}
+              helperText={
+                misfiled && !draft.subcategory_id
+                  ? `Saved as ${misfiled.name}, which is not a ${category?.name ?? 'this category'} item. Choose one.`
+                  : undefined
+              }
               required
             >
               {identifications.map((s) => (
@@ -695,15 +722,13 @@ function AttributeRow({
             value={note}
             onChange={(e) => onNote(e.target.value)}
             placeholder="Optional"
-            multiline
-            minRows={2}
-            maxRows={4}
           />
         ) : null}
       </TableCell>
       <TableCell>
         {attribute.show_image ? (
-          <Box sx={{ width: 110 }}>
+          // The height of the field beside it, so the row stays one line.
+          <Box sx={{ width: 40 }}>
             <FileField
               label="Picture"
               bucket="report"
@@ -711,6 +736,7 @@ function AttributeRow({
               onChange={onImage}
               ratio="1 / 1"
               fill
+              compact
             />
           </Box>
         ) : null}

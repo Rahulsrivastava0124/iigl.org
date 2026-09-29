@@ -54,6 +54,7 @@ export default function FileField({
   fill,
   height = FRAME_HEIGHT,
   multiple = false,
+  compact = false,
 }: {
   label: string;
   bucket: Bucket;
@@ -86,6 +87,12 @@ export default function FileField({
    * that the caller adds to rather than a single path it replaces.
    */
   multiple?: boolean;
+  /**
+   * For a field that has to sit on one table row: no label above it, and an
+   * empty frame shows only the upload mark, with the label and the prompt as
+   * its tooltip. Meant for a small `ratio` frame with `fill`.
+   */
+  compact?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   /*
@@ -264,6 +271,7 @@ export default function FileField({
         the label, so a note here reads the same way as a note on a text field
         instead of adding a line under the frame.
       */}
+      {!compact && (
       <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
         {/* Dark, so the slot is read as the heading of what goes in it
             rather than as a note under the field above. */}
@@ -286,13 +294,16 @@ export default function FileField({
           </Tooltip>
         )}
       </Stack>
+      )}
 
       {shaped ? (
         <Box
           {...getRootProps()}
+          title={compact ? `${label}: ${prompt}` : undefined}
+          aria-label={compact ? label : undefined}
           sx={{
             ...zone,
-            mt: 0.5,
+            mt: compact ? 0 : 0.5,
             ...frame,
             position: 'relative',
             overflow: 'hidden',
@@ -400,10 +411,14 @@ export default function FileField({
             ))}
 
           {!value && !busy && (
-            <Stack spacing={0.75} sx={{ alignItems: 'center', px: 2, textAlign: 'center' }}>
-              <UploadIcon sx={{ color: isDragActive ? 'primary.main' : 'text.disabled' }} />
-              <Typography sx={{ fontSize: 12.5 }}>{prompt}</Typography>
-            </Stack>
+            compact ? (
+              <UploadIcon fontSize="small" sx={{ color: isDragActive ? 'primary.main' : 'text.disabled' }} />
+            ) : (
+              <Stack spacing={0.75} sx={{ alignItems: 'center', px: 2, textAlign: 'center' }}>
+                <UploadIcon sx={{ color: isDragActive ? 'primary.main' : 'text.disabled' }} />
+                <Typography sx={{ fontSize: 12.5 }}>{prompt}</Typography>
+              </Stack>
+            )
           )}
 
           {/*

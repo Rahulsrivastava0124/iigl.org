@@ -204,6 +204,7 @@ export async function createReport(
       .where('id', '=', input.order_detail_id)
       .executeTakeFirst();
     if (!detail) throw badRequest('That order item does not exist.');
+    await assertStoneInCategory(trx, input.subcategory_id, Number(detail.category_id));
 
     const existing = await trx
       .selectFrom('reports')
@@ -415,6 +416,26 @@ export function validateUpdateReportInput(body: unknown): UpdateReportInput {
 }
 
 /**
+ * The stone has to be one of the order line's category: an AGATE is not a
+ * DIAMOND JEWELLERY item. Neither Laravel nor this API checked, and the first
+ * certificate form offered every stone, so 40 certificates carry a stone from
+ * another category than their line — their fields and the card come from the
+ * wrong set.
+ */
+async function assertStoneInCategory(trx: Kysely<DB>, subcategoryId: number, categoryId: number) {
+  const stone = await trx
+    .selectFrom('subcategories')
+    .select(['name', 'category_id'])
+    .where('id', '=', subcategoryId)
+    .executeTakeFirst();
+  if (!stone) throw badRequest('That item name does not exist.');
+  if (Number(stone.category_id) !== categoryId) {
+    const line = await trx.selectFrom('categories').select('name').where('id', '=', categoryId).executeTakeFirst();
+    throw badRequest(`${stone.name} is not a ${line?.name ?? 'this category'} item. Choose one of this line's items.`);
+  }
+}
+
+/**
  * Amends an issued certificate. report_no, order_no, lab_id and user_id are
  * never touched — the number is printed on a document already in circulation,
  * and re-issuing it under a different number would orphan the original.
@@ -434,6 +455,16 @@ export async function updateReport(
     if (!report) throw badRequest('Report not found.');
 
     const patch: Record<string, unknown> = { updated_at: new Date() };
+    // Checked only when the stone changes, so an old certificate filed under
+    // another category can still have its comments corrected.
+    if (input.subcategory_id != null && String(input.subcategory_id) !== String(report.subcategory_id)) {
+      const line = await trx
+        .selectFrom('order_details')
+        .select('category_id')
+        .where('id', '=', Number(report.order_detail_id))
+        .executeTakeFirst();
+      if (line) await assertStoneInCategory(trx, input.subcategory_id, Number(line.category_id));
+    }
     if (input.subcategory_id != null) patch.subcategory_id = String(input.subcategory_id);
     // These columns are NOT NULL in the live schema.
     if (input.gross_weight !== undefined) patch.gross_weight = input.gross_weight ?? '';
