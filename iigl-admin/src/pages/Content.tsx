@@ -178,10 +178,13 @@ const FIELDS: Record<Edited, Field[]> = {
       label: 'Type',
       required: true,
       initial: 'slider',
+      // Named for where each shows: "Banner" alone read as the one for the
+      // top of the page, and an upload made as one never appeared there.
       options: [
-        ['slider', 'Slider — home page'],
-        ['banner', 'Banner'],
+        ['slider', 'Home slider — top of the home page'],
+        ['banner', 'Education section picture'],
       ],
+      hint: 'Where the picture shows on the website.',
     },
     { key: 'url', label: 'Link', hint: 'Where clicking the banner goes. Blank for nowhere.' },
     {
@@ -484,6 +487,7 @@ export default function Content() {
                   )}
                   {section === 'banners' && (
                     <>
+                      <TableCell>Image</TableCell>
                       <TableCell>Name</TableCell>
                       <TableCell>Type</TableCell>
                       <TableCell>Links to</TableCell>
@@ -534,12 +538,26 @@ export default function Content() {
                     )}
                     {section === 'banners' && (
                       <>
+                        <TableCell>
+                          {/* The banner is a picture first: which one is which
+                              is read off the image, not the name. */}
+                          {r.path ? (
+                            <Box
+                              component="img"
+                              src={fileUrl(r.path) ?? undefined}
+                              alt=""
+                              sx={{ display: 'block', width: 128, aspectRatio: '8 / 3', objectFit: 'cover', borderRadius: 1, border: 1, borderColor: 'divider' }}
+                            />
+                          ) : (
+                            '—'
+                          )}
+                        </TableCell>
                         <TableCell>{r.name || '—'}</TableCell>
                         <TableCell>
                           <Chip
                             size="small"
                             variant="outlined"
-                            label={r.img_type === 'slider' ? 'Slider' : r.img_type === 'banner' ? 'Banner' : r.img_type}
+                            label={r.img_type === 'slider' ? 'Home slider' : r.img_type === 'banner' ? 'Education' : r.img_type}
                           />
                         </TableCell>
                         <TableCell className="mono">{r.url || '—'}</TableCell>

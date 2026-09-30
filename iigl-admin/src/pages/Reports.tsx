@@ -16,7 +16,8 @@ import {
 import PrintIcon from '@mui/icons-material/PrintOutlined';
 import { useFetch, useDebounced, useUrlSearch } from '../lib/useFetch';
 import { IconAction, DEFAULT_PER_PAGE, OrderRef, Pager, Panel, RowActions, SearchField, TableFrame } from '../components/ui';
-import { useAuth } from '../lib/auth';
+import { messageOf, useAuth } from '../lib/auth';
+import { useToast } from '../components/Toast';
 import { isLab, isSuper } from '../lib/portal';
 import DateRangeField from '../components/DateRangeField';
 import type { Paged, Report } from '../lib/api';
@@ -90,16 +91,39 @@ export default function Reports() {
    * Batch printing posts a list of ids, so it cannot be a plain link. The
    * response is a PDF, which is turned into a blob URL and opened.
    */
+  // A run of 50 cards takes several seconds to render; the button says so.
+  const toast = useToast();
+  const [printing, setPrinting] = useState(false);
+
   const printBatch = async () => {
-    const res = await fetch(apiUrl(withHeader ? '/cards/smart-header' : '/cards/smart'), {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ report_ids: selected }),
-    });
-    if (!res.ok) return;
-    const url = URL.createObjectURL(await res.blob());
-    window.open(url, '_blank', 'noopener');
+    setPrinting(true);
+    /*
+      The tab is opened now, on the click, and filled when the PDF arrives: a
+      window opened after a wait of seconds is no longer a response to the
+      click, and the browser blocks it as a popup.
+    */
+    const tab = window.open('', '_blank');
+    tab?.document.write('<p style="font:16px sans-serif;padding:24px">Preparing the cards…</p>');
+    try {
+      const res = await fetch(apiUrl(withHeader ? '/cards/smart-header' : '/cards/smart'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ report_ids: selected }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message ?? 'The cards could not be prepared.');
+      }
+      const url = URL.createObjectURL(await res.blob());
+      if (tab) tab.location.href = url;
+      else window.open(url, '_blank');
+    } catch (e) {
+      tab?.close();
+      toast.error(messageOf(e));
+    } finally {
+      setPrinting(false);
+    }
   };
 
   return (
@@ -200,10 +224,12 @@ export default function Reports() {
             <Button
               variant="contained"
               startIcon={<PrintIcon />}
+              loading={printing}
+              loadingPosition="start"
               disabled={selected.length === 0 || selected.length > 50}
               onClick={printBatch}
             >
-              Print
+              {printing ? `Printing ${selected.length}…` : 'Print'}
             </Button>
           </>
         }

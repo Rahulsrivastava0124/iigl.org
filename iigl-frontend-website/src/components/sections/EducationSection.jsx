@@ -1,6 +1,7 @@
 import { ArrowRight, BookOpen, Gem, Presentation, UsersRound } from 'lucide-react';
 import educationUrl from '../../../Assets/education.png';
 import SectionLabel from '../SectionLabel.jsx';
+import { fileUrl, usePublic } from '../../lib/api.js';
 
 const educationHighlights = [
   {
@@ -26,14 +27,23 @@ const educationHighlights = [
 ];
 
 export default function EducationSection() {
+  /*
+    The picture is the panel's Website Setup › Banners of type "banner" — the
+    ones the old home page showed under IIGL EDUCATIONS. The newest active one,
+    or the built-in photograph until there is one.
+  */
+  const rows = usePublic('/banners?type=banner');
+  const live = (rows ?? []).filter((b) => b.path).sort((a, b) => Number(b.id) - Number(a.id))[0];
+  const picture = (live && fileUrl(live.path)) || educationUrl;
+
   return (
     <section id="education" className="bg-[#f8f9fb] px-4 py-10 text-[#2c3b64] sm:px-8 lg:px-12">
       <div className="mx-auto max-w-[1390px]">
         <div className="relative min-h-[560px] overflow-hidden rounded-[26px] bg-white shadow-[0_18px_50px_rgba(44,59,100,0.10)] ring-1 ring-[#e6e8ee] max-[1180px]:min-h-[640px] max-[760px]:min-h-0 max-[760px]:rounded-2xl">
           <img
             className="absolute inset-y-0 left-0 h-full w-[104%] max-w-none object-cover object-left max-[760px]:static max-[760px]:h-[240px] max-[760px]:w-full max-[760px]:object-cover max-[760px]:object-[68%_center]"
-            src={educationUrl}
-            alt=""
+            src={picture}
+            alt={live?.name ?? ''}
           />
 
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.98)_0%,rgba(255,255,255,0.96)_40%,rgba(255,255,255,0.18)_58%,rgba(255,255,255,0)_100%)] max-[1180px]:bg-[linear-gradient(90deg,rgba(255,255,255,0.98)_0%,rgba(255,255,255,0.92)_52%,rgba(255,255,255,0.34)_100%)] max-[760px]:hidden" />

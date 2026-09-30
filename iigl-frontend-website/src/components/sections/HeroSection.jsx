@@ -2,10 +2,6 @@ import { A11y, Autoplay, Keyboard, Pagination } from 'swiper/modules';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/css';
 import 'swiper/css/pagination';
-import heroUrl from '../../../Assets/Hero banner 1.png';
-import heroAltUrl from '../../../Assets/Hero banner.png';
-import hero2Url from '../../../Assets/Hero banner 3.png';
-import hero2AltUrl from '../../../Assets/Hero banner 4.png';
 import { fileUrl, usePublic } from '../../lib/api.js';
 
 
@@ -18,31 +14,23 @@ import { fileUrl, usePublic } from '../../lib/api.js';
  * things with room to say them, and the banner is stronger carrying only the
  * image.
  */
-const banners = [
-  { image: heroUrl, alt: 'Coloured gemstones being examined with a loupe' },
-  { image: heroAltUrl, alt: 'A brilliant-cut diamond beside red gemstones' },
-  { image: hero2Url, alt: 'A close-up of a blue sapphire' },
-  { image: hero2AltUrl, alt: 'A yellow diamond set in a ring' },
-];
 
 export default function HeroSection() {
   /*
     The sliders from the panel's Website Setup › Banners — type "slider",
     active — as the old home page read them, with the phone-sized picture
-    where one was uploaded. The four above until there are any.
+    where one was uploaded. None, and the section is left out rather than
+    filled with stock photographs.
   */
   const rows = usePublic('/banners?type=slider');
-  const live = (rows ?? [])
+  const slides = (rows ?? [])
     .map((b) => ({ image: fileUrl(b.path), mobile: fileUrl(b.mobile_slider), alt: b.name ?? '', url: b.url }))
     .filter((b) => b.image);
-  const slides = live.length ? live : banners;
+  if (slides.length === 0) return null;
 
   return (
     <main className="bg-white">
       <Swiper
-        // Remounted when the live slides replace the built-in ones, so the loop
-        // is rebuilt around the new set.
-        key={live.length ? 'live' : 'built-in'}
         className="hero-swiper w-full"
         modules={[A11y, Autoplay, Keyboard, Pagination]}
         loop
