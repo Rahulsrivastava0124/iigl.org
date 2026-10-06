@@ -708,12 +708,19 @@ export function TableFrame({
   error,
   empty,
   emptyText = 'Nothing here yet.',
+  maxHeight,
   children,
 }: {
   loading: boolean;
   error: string | null;
   empty: boolean;
   emptyText?: string;
+  /**
+   * Scroll the rows inside the frame instead of the page, so a `stickyHeader`
+   * stays in view. Without it the container only scrolls sideways, and a
+   * sticky header has nothing to stick to.
+   */
+  maxHeight?: string | number;
   children: ReactNode;
 }) {
   if (loading) {
@@ -737,7 +744,7 @@ export function TableFrame({
       </Typography>
     );
   }
-  return <TableContainer>{children}</TableContainer>;
+  return <TableContainer sx={maxHeight ? { maxHeight } : undefined}>{children}</TableContainer>;
 }
 
 /**

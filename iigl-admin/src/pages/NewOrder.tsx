@@ -224,7 +224,8 @@ export default function NewOrder() {
     if (when?.isValid()) setDues(when);
     setShowName(Boolean(loaded.show_name_in_card));
     setNameOnCard(loaded.show_name_input ?? '');
-    setShowImage(Boolean(loaded.show_image_in_card));
+    // Saved with both on, from before only one was allowed: the name wins.
+    setShowImage(Boolean(loaded.show_image_in_card) && !loaded.show_name_in_card);
     setImageOnCard(loaded.show_image_in_card_file ?? null);
   }, [loaded]);
 
@@ -261,7 +262,7 @@ export default function NewOrder() {
     if (c.registered) {
       setShowName(Boolean(c.show_name_in_card));
       setNameOnCard(c.show_name_input ?? '');
-      setShowImage(Boolean(c.show_image_in_card));
+      setShowImage(Boolean(c.show_image_in_card) && !c.show_name_in_card);
       setImageOnCard(c.show_image_in_card_file ?? null);
     }
   };
@@ -606,7 +607,12 @@ export default function NewOrder() {
               inline
               label="Show Name on Card"
               value={showName}
-              onChange={setShowName}
+              onChange={(on) => {
+                // One or the other on the card, never both: the header row
+                // has room for a name or a picture, not the two.
+                setShowName(on);
+                if (on) setShowImage(false);
+              }}
             >
               {/* Shown either way so the column does not jump when the answer
                   changes, and disabled until it is "Yes" — a name typed under
@@ -622,7 +628,15 @@ export default function NewOrder() {
           </Grid>
 
           <Grid size={CELL}>
-            <YesNoField inline label="Show Image on Card" value={showImage} onChange={setShowImage}>
+            <YesNoField
+              inline
+              label="Show Image on Card"
+              value={showImage}
+              onChange={(on) => {
+                setShowImage(on);
+                if (on) setShowName(false);
+              }}
+            >
               {/* Same 4:3 shape as printed, just a smaller frame so it sits
                   on the row beside the question. */}
               {showImage ? (

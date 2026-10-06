@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import {
   Avatar,
+  Box,
   Button,
   Checkbox,
-  FormControlLabel,
   MenuItem,
   Table,
   TableBody,
@@ -30,6 +30,15 @@ import HeaderCardIcon from '@mui/icons-material/BrandingWatermarkOutlined';
 /** A weight only when there is one: a zero gross or carat reads as "not
  *  recorded", which a dash says and "0.00" does not. */
 const weight = (v?: string | null) => (v && Number(v) > 0 ? v : '—');
+
+/** The three cards a batch can be printed as, by what the counter calls them. */
+const PRINT_KINDS = [
+  { id: 'smart-header', label: 'With header' },
+  { id: 'smart', label: 'Smart' },
+  { id: 'classic', label: 'Select card' },
+] as const;
+type PrintKind = (typeof PRINT_KINDS)[number]['id'];
+const PRINT_KIND_KEY = 'iigl.reports.printKind';
 
 export default function Reports() {
   // Staff see only their own certificates, so a "Created by" column that always
@@ -58,9 +67,32 @@ export default function Reports() {
   // Who wrote it, and which card the order asked for.
   const [createdBy, setCreatedBy] = useState('');
   const [card, setCard] = useState('');
-  // Whether the batch prints the headed smart card — IIGL's logo, the notes
-  // and the band on the back — rather than the plain one.
-  const [withHeader, setWithHeader] = useState(false);
+  /*
+    Which card the batch prints, and which it starts on.
+
+    Picking from the list is for the next print only: once it has printed,
+    the field goes back to the default. The tick beside an option makes it
+    the default — remembered in this browser — and selects it.
+  */
+  const [defaultKind, setDefaultKindState] = useState<PrintKind>(() => {
+    try {
+      const saved = localStorage.getItem(PRINT_KIND_KEY);
+      if (PRINT_KINDS.some((k) => k.id === saved)) return saved as PrintKind;
+    } catch {
+      // Storage blocked: Smart is the default.
+    }
+    return 'smart';
+  });
+  const [printKind, setPrintKind] = useState<PrintKind>(defaultKind);
+  const setDefaultKind = (kind: PrintKind) => {
+    setDefaultKindState(kind);
+    try {
+      localStorage.setItem(PRINT_KIND_KEY, kind);
+    } catch {
+      // Not remembered past this visit.
+    }
+  };
+
 
   const query = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (term.trim()) query.set('q', term.trim());
@@ -105,7 +137,7 @@ export default function Reports() {
     const tab = window.open('', '_blank');
     tab?.document.write('<p style="font:16px sans-serif;padding:24px">Preparing the cards…</p>');
     try {
-      const res = await fetch(apiUrl(withHeader ? '/cards/smart-header' : '/cards/smart'), {
+      const res = await fetch(apiUrl(`/cards/${printKind}`), {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -118,6 +150,8 @@ export default function Reports() {
       const url = URL.createObjectURL(await res.blob());
       if (tab) tab.location.href = url;
       else window.open(url, '_blank');
+      // A kind picked from the list was for this print only.
+      setPrintKind(defaultKind);
     } catch (e) {
       tab?.close();
       toast.error(messageOf(e));
@@ -204,7 +238,7 @@ export default function Reports() {
                 <em>All cards</em>
               </MenuItem>
               <MenuItem value="smart">Smart</MenuItem>
-              <MenuItem value="classic">Classic</MenuItem>
+              <MenuItem value="classic">Select card</MenuItem>
             </TextField>
             {/* Only the one thing worth saying: that the selection is past the
                 print cap. The plain count read as clutter, "0 selected" most of
@@ -214,13 +248,43 @@ export default function Reports() {
                 {selected.length} selected — the cap is 50 per print run
               </Typography>
             )}
-            <FormControlLabel
-              control={
-                <Checkbox size="small" checked={withHeader} onChange={(e) => setWithHeader(e.target.checked)} />
-              }
-              label="With header"
-              sx={{ mr: 0, whiteSpace: 'nowrap' }}
-            />
+            <TextField
+              select
+              size="small"
+              label="Print as"
+              value={printKind}
+              onChange={(e) => setPrintKind(e.target.value as PrintKind)}
+              sx={{ width: 170 }}
+              slotProps={{
+                // The closed field shows the name alone; the box is for the list.
+                select: { renderValue: (v) => PRINT_KINDS.find((k) => k.id === v)?.label ?? '' },
+              }}
+            >
+              {PRINT_KINDS.map((k) => (
+                <MenuItem key={k.id} value={k.id} sx={{ py: 0.25 }}>
+                  {/* The tick sets the default; it does not pick for this print. */}
+                  <Checkbox
+                    size="small"
+                    checked={defaultKind === k.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDefaultKind(k.id);
+                      setPrintKind(k.id);
+                    }}
+                    slotProps={{ input: { 'aria-label': `Make ${k.label} the default` } }}
+                    sx={{ ml: -0.75, mr: 0.5 }}
+                  />
+                  <Box component="span" sx={{ flex: 1 }}>
+                    {k.label}
+                  </Box>
+                  {defaultKind === k.id && (
+                    <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                      default
+                    </Typography>
+                  )}
+                </MenuItem>
+              ))}
+            </TextField>
             <Button
               variant="contained"
               startIcon={<PrintIcon />}
@@ -241,6 +305,9 @@ export default function Reports() {
           loading={loading}
           error={error}
           empty={rows.length === 0}
+          // The rows scroll under a fixed header: the page's own bar, the
+          // filters above and the pager below stay where they are.
+          maxHeight="calc(100vh - 260px)"
           emptyText={
             term.trim()
               ? `No certificate here matches “${term.trim()}”. A certificate belongs to the laboratory that issued it.`
@@ -355,7 +422,7 @@ export default function Reports() {
                               order asked for them, because which of the two to
                               hand over is the counter's choice. */}
                           <IconAction
-                            label="Print smart card with header"
+                            label="Print with header"
                             icon={HeaderCardIcon}
                             onClick={() => printCard(r.id, 'smart-header')}
                           />
@@ -363,7 +430,7 @@ export default function Reports() {
                       )}
                       {r.classic_card && (
                         <IconAction
-                          label="Print classic card"
+                          label="Print select card"
                           icon={ClassicIcon}
                           onClick={() => printCard(r.id, 'classic')}
                         />
