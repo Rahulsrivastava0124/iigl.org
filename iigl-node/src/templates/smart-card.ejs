@@ -118,12 +118,19 @@
   /* The customer's mark, at the size the Laravel card gave it. */
   .customer .mark { width: 65px; height: 30px; object-fit: contain; }
 
-  .body-row { display: flex; }
+  /*
+    Clear of the header row, so Report No does not sit against the logo. The
+    gap is on the row, not the table, so the QR beside it starts level with
+    Report No.
+
+    Less on the headed card: its QR, stone and signature column has to end
+    above the terms line at 192px, and 6px is all the room there is.
+  */
+  .body-row { display: flex; margin-top: 24px; }
+  .panel.headed .body-row { margin-top: 6px; }
 
   table {
     width: 2.3in;
-    /* Clear of the header row, so Report No does not sit against the logo. */
-    margin-top: 24px;
     padding-left: 5px;
     border-collapse: collapse;
   }
@@ -166,6 +173,7 @@
     margin-left: auto;
   }
   .side img { display: block; margin: 5px auto 0; }
+  .side img:first-child { margin-top: 0; }
   /* The QR and the stone held 25px in from the card's right edge, where it is
      trimmed; the signature is left where it was. */
   .side .qr, .side .item { margin-right: 25px; }
