@@ -15,12 +15,17 @@
     no rule anywhere below: printing one would put a second letterhead on top of
     the one already there.
 
-    The page is 280mm x 213mm, the size of the stock, and the two columns are
+    The page is 213mm x 280mm, the size of the stock, and the two columns are
     absolutely placed at the measurements the blade uses. Nothing here is a
     layout decision; every number is the one the card is already printed to.
   */
+  /*
+    Portrait: the stock goes into the printer upright, 213mm across and 280mm
+    down. The two columns are placed from the top-left corner exactly as before
+    — only the sheet around them turned.
+  */
   @page {
-    size: 280mm 213mm;
+    size: 213mm 280mm;
     margin: 0;
   }
 
@@ -37,8 +42,8 @@
 
   .page {
     position: relative;
-    width: 280mm;
-    height: 213mm;
+    width: 213mm;
+    height: 280mm;
     overflow: hidden;
     page-break-after: always;
   }

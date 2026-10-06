@@ -48,10 +48,10 @@ const PAGE: Record<CardKind, { width: string; height: string } | { format: 'A4' 
   'smart-header': { width: '7.2in', height: '2.5in' },
   /*
     The card stock, not a paper size. The classic certificate overprints
-    pre-printed 280mm x 213mm card, so the page has to be exactly that or the
-    data lands in the wrong places on it.
+    pre-printed 213mm x 280mm card, printed portrait, so the page has to be
+    exactly that or the data lands in the wrong places on it.
   */
-  classic: { width: '280mm', height: '213mm' },
+  classic: { width: '213mm', height: '280mm' },
 };
 
 let browserPromise: Promise<Browser> | null = null;
