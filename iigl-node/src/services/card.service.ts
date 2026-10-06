@@ -306,11 +306,13 @@ export async function cardDataFor(reportIds: number[]): Promise<CardData[]> {
       lab_address: addressByLab.get(Number(report.lab_id)) ?? null,
       qr,
       verify_url: verifyUrl,
+      // Only what was filled in: a field left blank is not printed as a label
+      // with nothing after its colon.
       smart_attributes: ordered
-        .filter((a) => a.show_in_smart_card && a.value)
+        .filter((a) => a.show_in_smart_card && String(a.value ?? '').trim())
         .map((a) => ({ name: a.attr_name ?? '', value: String(a.value) })),
       classic_attributes: ordered
-        .filter((a) => a.show_in_classic_card && a.value)
+        .filter((a) => a.show_in_classic_card && String(a.value ?? '').trim())
         .map((a) => ({
           name: a.attr_name ?? '',
           value: String(a.value),

@@ -123,7 +123,7 @@
   table {
     width: 2.3in;
     /* Clear of the header row, so Report No does not sit against the logo. */
-    margin-top: 6px;
+    margin-top: 14px;
     padding-left: 5px;
     border-collapse: collapse;
   }
@@ -161,13 +161,14 @@
   /* The one row the blade colours itself, and it is not gold. */
   .comment { color: rgb(19, 80, 19); font-weight: 700; }
 
-  /* Held in from the card's right edge, which is where it is trimmed. */
   .side {
     text-align: center;
     margin-left: auto;
-    padding-right: 8px;
   }
   .side img { display: block; margin: 5px auto 0; }
+  /* The QR and the stone held 15px in from the card's right edge, where it is
+     trimmed; the signature is left where it was. */
+  .side .qr, .side .item { margin-right: 15px; }
   /* The stone is what somebody looks at; the QR only has to scan. */
   .qr { height: 42px; width: 42px; }
   .item { height: 66px; width: 66px; object-fit: contain; }

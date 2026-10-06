@@ -261,14 +261,9 @@ export default function CertificateForm({
 
   const rows = forCards(attributes.data?.data ?? [], item);
   const graded = rows.filter((a) => draft.values[a.id]).length;
-  const missing = rows.filter((a) => a.is_required && !draft.values[a.id]);
 
   const submit = async () => {
-    // Said once, on the attempt, rather than as a standing list under the form.
-    if (missing.length) {
-      toast.error(`Choose a value for ${missing.map((a) => a.attr_name).join(', ')}.`);
-      return;
-    }
+    // Every field is optional: one left blank is simply not printed.
     setBusy(true);
     try {
       await onSubmit({
@@ -284,7 +279,7 @@ export default function CertificateForm({
         // The whole set, because an amendment replaces it: sending only what
         // changed would delete every field left alone.
         attributes: rows
-          .filter((a) => draft.values[a.id])
+          .filter((a) => draft.values[a.id]?.trim())
           .map((a) => ({
             attr_id: String(a.id),
             attr_value: draft.values[a.id],
@@ -673,11 +668,6 @@ function AttributeRow({
       </TableCell>
       <TableCell sx={{ whiteSpace: 'normal', minWidth: 160, fontWeight: 500 }}>
         {attribute.attr_name}
-        {attribute.is_required ? (
-          <Box component="span" sx={{ color: 'error.main' }}>
-            {' *'}
-          </Box>
-        ) : null}
       </TableCell>
       <TableCell sx={{ minWidth: 220 }}>
         {attribute.is_opensource ? (

@@ -15,17 +15,12 @@
     no rule anywhere below: printing one would put a second letterhead on top of
     the one already there.
 
-    The page is 213mm x 280mm, the size of the stock, and the two columns are
+    The page is 280mm x 213mm, the size of the stock, and the two columns are
     absolutely placed at the measurements the blade uses. Nothing here is a
     layout decision; every number is the one the card is already printed to.
   */
-  /*
-    Portrait: the stock goes into the printer upright, 213mm across and 280mm
-    down. The two columns are placed from the top-left corner exactly as before
-    — only the sheet around them turned.
-  */
   @page {
-    size: 213mm 280mm;
+    size: 280mm 213mm;
     margin: 0;
   }
 
@@ -42,8 +37,8 @@
 
   .page {
     position: relative;
-    width: 213mm;
-    height: 280mm;
+    width: 280mm;
+    height: 213mm;
     overflow: hidden;
     page-break-after: always;
   }
@@ -117,6 +112,11 @@
   .stone { width: 200px; height: 200px; margin-top: 3mm; object-fit: contain; }
   .qr-title { margin: 3mm 0 0; font-weight: bold; color: #31408f; }
   .qr { width: 100px; height: 100px; }
+  /*
+    The stone and the QR (with its heading), moved 20px left and 20px down to land in the stock's
+    blank area. A transform, so nothing else in the column moves with them.
+  */
+  .stone, .qr, .qr-title { transform: translate(-20px, 20px); }
   .sign { height: 40px; width: 80px; margin-top: 3mm; }
 </style>
 </head>
