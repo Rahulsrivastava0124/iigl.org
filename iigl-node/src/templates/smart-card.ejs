@@ -117,17 +117,20 @@
   .customer .name { font-size: 10px; margin: 0; }
   /* The customer's mark, at the size the Laravel card gave it. */
   .customer .mark { width: 65px; height: 30px; object-fit: contain; }
+  /* 3px lower than where the header row centres it, by request. Moved, not
+     re-laid out, so the name above it and the rows below stay put. */
+  .customer .mark { position: relative; top: 3px; }
 
   /*
     Clear of the header row, so Report No does not sit against the logo. The
     gap is on the row, not the table, so the QR beside it starts level with
     Report No.
 
-    None on the headed card: its QR, stone and signature column has to end
+    Only 2px on the headed card: its QR, stone and signature column has to end
     above the terms line at 192px.
   */
-  .body-row { display: flex; margin-top: 18px; }
-  .panel.headed .body-row { margin-top: 0; }
+  .body-row { display: flex; margin-top: 16px; }
+  .panel.headed .body-row { margin-top: 2px; }
 
   table {
     width: 2.3in;

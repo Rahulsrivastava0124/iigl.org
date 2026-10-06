@@ -34,8 +34,8 @@ const weight = (v?: string | null) => (v && Number(v) > 0 ? v : '—');
 /** The three cards a batch can be printed as, by what the counter calls them. */
 const PRINT_KINDS = [
   { id: 'smart-header', label: 'With header' },
-  { id: 'smart', label: 'Smart' },
-  { id: 'classic', label: 'Select card' },
+  { id: 'smart', label: 'Small' },
+  { id: 'classic', label: 'Big' },
 ] as const;
 type PrintKind = (typeof PRINT_KINDS)[number]['id'];
 const PRINT_KIND_KEY = 'iigl.reports.printKind';
@@ -79,7 +79,7 @@ export default function Reports() {
       const saved = localStorage.getItem(PRINT_KIND_KEY);
       if (PRINT_KINDS.some((k) => k.id === saved)) return saved as PrintKind;
     } catch {
-      // Storage blocked: Smart is the default.
+      // Storage blocked: Small is the default.
     }
     return 'smart';
   });
@@ -238,7 +238,7 @@ export default function Reports() {
                 <em>All cards</em>
               </MenuItem>
               <MenuItem value="smart">Smart</MenuItem>
-              <MenuItem value="classic">Select card</MenuItem>
+              <MenuItem value="classic">Classic</MenuItem>
             </TextField>
             {/* Only the one thing worth saying: that the selection is past the
                 print cap. The plain count read as clutter, "0 selected" most of
@@ -430,7 +430,7 @@ export default function Reports() {
                       )}
                       {r.classic_card && (
                         <IconAction
-                          label="Print select card"
+                          label="Print classic card"
                           icon={ClassicIcon}
                           onClick={() => printCard(r.id, 'classic')}
                         />
